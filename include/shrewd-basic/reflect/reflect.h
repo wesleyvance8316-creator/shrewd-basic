@@ -28,9 +28,10 @@
  *
  * Constraints (the macros fail at compile time otherwise):
  *   - members must be basic types, strings (char * / const char *),
- *     fixed arrays of those, or nested reflected structs; pointers,
- *     bit-fields, unions, flexible array members and function pointers
- *     are not described;
+ *     fixed single-dimension arrays of those, nested reflected structs,
+ *     or pointers described with SHREWD_BASIC_REFLECT_FIELD_PTR;
+ *     bit-fields, unions, flexible array members, multi-dimension arrays
+ *     and function pointers are not described;
  *   - a char buffer must use SHREWD_BASIC_REFLECT_FIELD_ARRAY(struct_type,
  *     buf, shrewd_basic_reflect_char): plain FIELD would treat it as a
  *     string pointer (arrays decay to pointers in _Generic);
@@ -42,6 +43,14 @@
  * the pointer and ownership stays with the caller. All value access is
  * raw memcpy of field->size, never a dereference of offset-derived
  * typed pointers (packed and odd alignments stay well-defined).
+ *
+ * Pointers: a FIELD_PTR member holds a pointer to its declared target
+ * type (shrewd_basic_reflect_void for opaque targets). get/set copy the
+ * pointer value - the module never allocates, frees or deep-copies.
+ * dump follows the pointer and renders the pointee ((null) for NULL,
+ * address-only for opaque targets, depth-capped for self-referential
+ * types); a followed pointee scalar is read with the pointee type's
+ * canonical width.
  */
 
 #include <stddef.h>
@@ -71,7 +80,8 @@ typedef enum shrewd_basic_reflect_kind {
     SHREWD_BASIC_REFLECT_KIND_FLOAT,
     SHREWD_BASIC_REFLECT_KIND_DOUBLE,
     SHREWD_BASIC_REFLECT_KIND_STRING, /**< char * / const char * member. */
-    SHREWD_BASIC_REFLECT_KIND_STRUCT  /**< Aggregate with field descriptors. */
+    SHREWD_BASIC_REFLECT_KIND_STRUCT, /**< Aggregate with field descriptors. */
+    SHREWD_BASIC_REFLECT_KIND_OPAQUE  /**< Unknown pointee (shrewd_basic_reflect_void). */
 } shrewd_basic_reflect_kind_t;
 
 typedef struct shrewd_basic_reflect_type shrewd_basic_reflect_type_t;
@@ -98,6 +108,9 @@ struct shrewd_basic_reflect_type {
 /** Field flag: the field is a fixed-size array of @c count elements. */
 #define SHREWD_BASIC_REFLECT_FIELD_F_ARRAY ((uint32_t)1u)
 
+/** Field flag: the field is a pointer to the field's type (or an array of them). */
+#define SHREWD_BASIC_REFLECT_FIELD_F_PTR ((uint32_t)2u)
+
 /** Primitive descriptors; pass them to FIELD_ARRAY/FIELD_STRUCT by name. */
 extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_bool;
 extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_char;
@@ -112,6 +125,7 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_uint64;
 extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_float;
 extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_double;
 extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_string;
+extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
 
 /*
  * Map a member expression to its primitive descriptor via _Generic.
@@ -170,6 +184,35 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_string;
         .count = sizeof(((struct_type *)0)->member)                            \
                 / sizeof(((struct_type *)0)->member[0]),                       \
         .flags = SHREWD_BASIC_REFLECT_FIELD_F_ARRAY                            \
+    }
+
+/*
+ * Describe a pointer member; ref is the pointee descriptor passed without
+ * '&' (shrewd_basic_reflect_void for opaque targets like void *). get/set
+ * copy the pointer value; dump follows it. A self-referential type may
+ * reference its own descriptor here (the DEFINE macro forward-declares it).
+ */
+#define SHREWD_BASIC_REFLECT_FIELD_PTR(struct_type, member, ref)               \
+    {                                                                          \
+        .name = #member,                                                       \
+        .type = &(ref),                                                        \
+        .offset = offsetof(struct_type, member),                               \
+        .size = sizeof(((struct_type *)0)->member),                            \
+        .count = (size_t)1,                                                    \
+        .flags = SHREWD_BASIC_REFLECT_FIELD_F_PTR                              \
+    }
+
+/* Describe a fixed-size array of pointers; ref is the pointee descriptor. */
+#define SHREWD_BASIC_REFLECT_FIELD_PTR_ARRAY(struct_type, member, ref)         \
+    {                                                                          \
+        .name = #member,                                                       \
+        .type = &(ref),                                                        \
+        .offset = offsetof(struct_type, member),                               \
+        .size = sizeof(((struct_type *)0)->member),                            \
+        .count = sizeof(((struct_type *)0)->member)                            \
+                / sizeof(((struct_type *)0)->member[0]),                       \
+        .flags = SHREWD_BASIC_REFLECT_FIELD_F_PTR                              \
+                | SHREWD_BASIC_REFLECT_FIELD_F_ARRAY                           \
     }
 
 /*

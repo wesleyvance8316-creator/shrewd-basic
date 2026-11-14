@@ -75,6 +75,31 @@ typedef struct {
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_wide_reflect, wide_t,
     SHREWD_BASIC_REFLECT_FIELD_ARRAY(wide_t, wide, shrewd_basic_reflect_int32));
 
+/* Self-referential type: DEFINE forward-declares the descriptor, so it
+ * can appear inside its own field table. */
+typedef struct node {
+    int32_t data;
+    struct node *next;
+} node_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_node_reflect, node_t,
+    SHREWD_BASIC_REFLECT_FIELD(node_t, data),
+    SHREWD_BASIC_REFLECT_FIELD_PTR(node_t, next, g_node_reflect));
+
+/* Pointer members of every flavor. */
+typedef struct {
+    const char **p_str;
+    void *ctx;
+    int32_t *counter;
+    point_t *team[2];
+} refs_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_refs_reflect, refs_t,
+    SHREWD_BASIC_REFLECT_FIELD_PTR(refs_t, p_str, shrewd_basic_reflect_string),
+    SHREWD_BASIC_REFLECT_FIELD_PTR(refs_t, ctx, shrewd_basic_reflect_void),
+    SHREWD_BASIC_REFLECT_FIELD_PTR(refs_t, counter, shrewd_basic_reflect_int32),
+    SHREWD_BASIC_REFLECT_FIELD_PTR_ARRAY(refs_t, team, g_point_reflect));
+
 /* find_field wrapper that reports failures as test failures. */
 static const shrewd_basic_reflect_field_t *find_or_fail(const char *test_name,
                                                         const shrewd_basic_reflect_type_t *type,
@@ -577,6 +602,85 @@ static void test_cross_tu(void)
     expect_true("cross_tu field count", 2 == shrewd_test_reflect_ext_field_count());
 }
 
+static void test_pointer_fields(void)
+{
+    /* Descriptor shape. */
+    const shrewd_basic_reflect_field_t *f =
+        find_or_fail("pointer", &g_node_reflect, "next");
+    if (NULL != f) {
+        expect_true("pointer self target", &g_node_reflect == f->type);
+        expect_true("pointer shape",
+                    ((size_t)1 == f->count) && (sizeof(node_t *) == f->size)
+                    && (SHREWD_BASIC_REFLECT_FIELD_F_PTR == f->flags));
+    }
+    f = find_or_fail("pointer", &g_refs_reflect, "p_str");
+    if (NULL != f) {
+        expect_true("pointer string target", &shrewd_basic_reflect_string == f->type);
+    }
+    f = find_or_fail("pointer", &g_refs_reflect, "ctx");
+    if (NULL != f) {
+        expect_true("pointer opaque target",
+                    (&shrewd_basic_reflect_void == f->type)
+                    && (SHREWD_BASIC_REFLECT_KIND_OPAQUE == f->type->kind));
+    }
+    f = find_or_fail("pointer", &g_refs_reflect, "team");
+    if (NULL != f) {
+        expect_true("pointer array shape",
+                    (&g_point_reflect == f->type)
+                    && ((size_t)2 == f->count)
+                    && (2 * sizeof(point_t *) == f->size)
+                    && ((SHREWD_BASIC_REFLECT_FIELD_F_PTR
+                         | SHREWD_BASIC_REFLECT_FIELD_F_ARRAY) == f->flags));
+    }
+    expect_true("pointer kind name opaque",
+                0 == strcmp(shrewd_basic_reflect_kind_name(SHREWD_BASIC_REFLECT_KIND_OPAQUE),
+                            "opaque"));
+
+    /* get/set copy the pointer value, never the pointee. */
+    refs_t refs;
+    memset(&refs, 0, sizeof(refs));
+    int32_t value = 9;
+    int32_t other = 11;
+    const shrewd_basic_reflect_field_t *counter =
+        find_or_fail("pointer", &g_refs_reflect, "counter");
+    if (NULL == counter) {
+        return;
+    }
+    int32_t *link = &value;
+    expect_eq_int("pointer set counter",
+                  shrewd_basic_reflect_field_set(&refs, counter, &link, sizeof(link)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("pointer set lands", &value == refs.counter);
+    int32_t *read = NULL;
+    expect_eq_int("pointer get counter",
+                  shrewd_basic_reflect_field_get(&refs, counter, &read, sizeof(read)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("pointer round-trip", &value == read);
+    link = &other;
+    expect_eq_int("pointer re-point",
+                  shrewd_basic_reflect_field_set(&refs, counter, &link, sizeof(link)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("pointer re-point lands", &other == refs.counter);
+    expect_eq_int("pointer size mismatch",
+                  shrewd_basic_reflect_field_set(&refs, counter, &link, (size_t)4),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+
+    /* Self-referential pointer through the shared descriptor. */
+    node_t tail;
+    memset(&tail, 0, sizeof(tail));
+    node_t head;
+    memset(&head, 0, sizeof(head));
+    const shrewd_basic_reflect_field_t *next =
+        find_or_fail("pointer", &g_node_reflect, "next");
+    if (NULL != next) {
+        node_t *link_node = &tail;
+        expect_eq_int("pointer self set",
+                      shrewd_basic_reflect_field_set(&head, next, &link_node, sizeof(link_node)),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("pointer self lands", &tail == head.next);
+    }
+}
+
 int main(void)
 {
     test_describe();
@@ -585,6 +689,7 @@ int main(void)
     test_get_set_string();
     test_nested();
     test_array();
+    test_pointer_fields();
     test_dump();
     test_logging_policy();
     test_cross_tu();

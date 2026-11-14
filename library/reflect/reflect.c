@@ -57,6 +57,9 @@ const shrewd_basic_reflect_type_t shrewd_basic_reflect_double = {
 const shrewd_basic_reflect_type_t shrewd_basic_reflect_string = {
     .kind = SHREWD_BASIC_REFLECT_KIND_STRING, .name = "string",
     .size = sizeof(const char *), .field_count = 0, .fields = NULL };
+const shrewd_basic_reflect_type_t shrewd_basic_reflect_void = {
+    .kind = SHREWD_BASIC_REFLECT_KIND_OPAQUE, .name = "void",
+    .size = 0, .field_count = 0, .fields = NULL };
 
 const char *shrewd_basic_reflect_kind_name(shrewd_basic_reflect_kind_t kind)
 {
@@ -89,6 +92,8 @@ const char *shrewd_basic_reflect_kind_name(shrewd_basic_reflect_kind_t kind)
         return "string";
     case SHREWD_BASIC_REFLECT_KIND_STRUCT:
         return "struct";
+    case SHREWD_BASIC_REFLECT_KIND_OPAQUE:
+        return "opaque";
     default:
         return "unknown";
     }
