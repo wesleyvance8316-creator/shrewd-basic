@@ -1,7 +1,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 
-#include "shrewd-basic/build.h"
+#include "shrewd-basic/config/build.h"
 #include "shrewd-basic/shrewd-basic.h"
 
 int main(void)

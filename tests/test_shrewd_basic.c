@@ -3,8 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "shrewd-basic/build.h"
-#include "shrewd-basic/config.h"
+#include "shrewd-basic/config/build.h"
+#include "shrewd-basic/config/config.h"
 #include "shrewd-basic/shrewd-basic.h"
 
 static int g_failures = 0;

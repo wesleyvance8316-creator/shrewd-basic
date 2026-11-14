@@ -30,10 +30,8 @@ endif()
 
 enable_testing()
 
-# Build information, emitted into shrewd-basic/build.h.
-include(${PROJECT_SOURCE_DIR}/cmake/BuildHeader.cmake)
-
-# Configuration options, emitted into shrewd-basic/config.h.
+# Build information and configuration options, emitted into shrewd-basic/
+# build.h and shrewd-basic/config.h.
 add_subdirectory(include)
 
 add_subdirectory(library)

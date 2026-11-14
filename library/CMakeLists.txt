@@ -26,8 +26,9 @@ install(TARGETS shrewd-basic
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-# Public headers, including the generated build.h and config.h.
-# The *.in templates are not installed.
+# Public headers, including the generated config/build.h and config/config.h.
+# The *.in templates and the config/ CMake script are not installed.
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/shrewd-basic
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-        PATTERN "*.in" EXCLUDE)
+        PATTERN "*.in" EXCLUDE
+        PATTERN "CMakeLists.txt" EXCLUDE)
