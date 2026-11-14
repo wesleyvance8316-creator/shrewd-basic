@@ -12,10 +12,10 @@
  *
  * Naming follows SHREWD_BASIC_ERR_<MODULE>_<INFO>, where the module slot
  * names the error domain (MEM = memory, ARG = arguments, KEY = keys,
- * LOG = log). Every code of the library is registered in this header so
- * shrewd_basic_error_name() can name each one: generic domains occupy
- * -1..-99 and module extension codes are allocated one hundred codes per
- * module (log = -100..-199).
+ * LOG = log, REFLECT = reflect). Every code of the library is registered
+ * in this header so shrewd_basic_error_name() can name each one: generic
+ * domains occupy -1..-99 and module extension codes are allocated one
+ * hundred codes per module (log = -100..-199, reflect = -200..-299).
  */
 
 #ifdef __cplusplus
@@ -31,7 +31,9 @@ typedef enum shrewd_basic_error {
     SHREWD_BASIC_ERR_KEY_NOTFOUND = -3, /**< Key not found or container empty. */
     SHREWD_BASIC_ERR_KEY_EXISTS = -4,   /**< Duplicate key already stored. */
     /* Log module codes: -100 .. -199. */
-    SHREWD_BASIC_ERR_LOG_FOPEN = -100   /**< Log: failed to open the output file. */
+    SHREWD_BASIC_ERR_LOG_FOPEN = -100,   /**< Log: failed to open the output file. */
+    /* Reflect module codes: -200 .. -299. */
+    SHREWD_BASIC_ERR_REFLECT_MISMATCH = -200 /**< Reflect: value size does not match the field. */
 } shrewd_basic_error_t;
 
 /**
