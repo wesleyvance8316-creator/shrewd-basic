@@ -681,6 +681,107 @@ static void test_pointer_fields(void)
     }
 }
 
+static void test_dump_pointers(void)
+{
+    shrewd_basic_log_module_t *module = NULL;
+    expect_eq_int("dump_ptr find module",
+                  shrewd_basic_log_module_find("reflect", &module),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("dump_ptr module found", NULL != module);
+    if (NULL == module) {
+        return;
+    }
+
+    /* Phase 1: followed pointers of every flavor. */
+    const char *text = "hi";
+    int32_t counter = 7;
+    point_t point;
+    memset(&point, 0, sizeof(point));
+    point.x = 1;
+    point.y = 2;
+    refs_t refs;
+    memset(&refs, 0, sizeof(refs));
+    refs.p_str = &text;
+    refs.ctx = &counter; /* any address: opaque targets show 0x... */
+    refs.counter = &counter;
+    refs.team[0] = &point;
+    refs.team[1] = NULL;
+
+    FILE *stream = tmpfile();
+    if (NULL == stream) {
+        return;
+    }
+    shrewd_basic_log_module_set_stream(module, stream);
+    expect_eq_int("dump_ptr ok",
+                  shrewd_basic_reflect_dump(&g_refs_reflect, &refs, "refs"),
+                  SHREWD_BASIC_ERR_OK);
+    char buf[8192] = {0};
+    slurp(stream, buf, sizeof(buf));
+    expect_true("dump_ptr string followed", NULL != strstr(buf, "p_str = \"hi\""));
+    expect_true("dump_ptr scalar followed", NULL != strstr(buf, "counter = 7"));
+    expect_true("dump_ptr opaque address", NULL != strstr(buf, "ctx = 0x"));
+    expect_true("dump_ptr array follows",
+                (NULL != strstr(buf, "team[0] = {"))
+                && (NULL != strstr(buf, "    x = 1"))
+                && (NULL != strstr(buf, "team[1] = (null)")));
+
+    /* NULL pointer shows (null) instead of following. */
+    refs.p_str = NULL;
+    refs.counter = NULL;
+    expect_eq_int("dump_ptr null",
+                  shrewd_basic_reflect_dump(&g_refs_reflect, &refs, "refs"),
+                  SHREWD_BASIC_ERR_OK);
+    memset(buf, 0, sizeof(buf));
+    slurp(stream, buf, sizeof(buf));
+    expect_true("dump_ptr null string", NULL != strstr(buf, "p_str = (null)"));
+    expect_true("dump_ptr null scalar", NULL != strstr(buf, "counter = (null)"));
+    fclose(stream);
+
+    /* Phase 2: self-referential chain terminates via the depth cap. */
+    node_t tail;
+    memset(&tail, 0, sizeof(tail));
+    tail.data = 2;
+    node_t head;
+    memset(&head, 0, sizeof(head));
+    head.data = 1;
+    head.next = &tail;
+    stream = tmpfile();
+    if (NULL == stream) {
+        shrewd_basic_log_module_set_stream(module, stderr);
+        return;
+    }
+    shrewd_basic_log_module_set_stream(module, stream);
+    expect_eq_int("dump_ptr chain",
+                  shrewd_basic_reflect_dump(&g_node_reflect, &head, "node"),
+                  SHREWD_BASIC_ERR_OK);
+    memset(buf, 0, sizeof(buf));
+    slurp(stream, buf, sizeof(buf));
+    expect_true("dump_ptr chain nested",
+                (NULL != strstr(buf, "  next = {"))
+                && (NULL != strstr(buf, "    data = 2"))
+                && (NULL != strstr(buf, "    next = (null)")));
+    fclose(stream);
+
+    node_t loop;
+    memset(&loop, 0, sizeof(loop));
+    loop.next = &loop;
+    stream = tmpfile();
+    if (NULL == stream) {
+        shrewd_basic_log_module_set_stream(module, stderr);
+        return;
+    }
+    shrewd_basic_log_module_set_stream(module, stream);
+    expect_eq_int("dump_ptr cycle",
+                  shrewd_basic_reflect_dump(&g_node_reflect, &loop, "node"),
+                  SHREWD_BASIC_ERR_OK);
+    memset(buf, 0, sizeof(buf));
+    slurp(stream, buf, sizeof(buf));
+    expect_true("dump_ptr cycle capped", NULL != strstr(buf, "...(max depth)"));
+
+    shrewd_basic_log_module_set_stream(module, stderr);
+    fclose(stream);
+}
+
 int main(void)
 {
     test_describe();
@@ -691,6 +792,7 @@ int main(void)
     test_array();
     test_pointer_fields();
     test_dump();
+    test_dump_pointers();
     test_logging_policy();
     test_cross_tu();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;

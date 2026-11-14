@@ -134,11 +134,16 @@ static double dump_load_f64(const unsigned char *bytes, size_t nbytes)
     return 0.0;
 }
 
+static void *dump_load_ptr(const unsigned char *bytes)
+{
+    void *pointer = NULL;
+    memcpy(&pointer, bytes, sizeof(pointer));
+    return pointer;
+}
+
 static const char *dump_load_str(const unsigned char *bytes)
 {
-    const char *text = NULL;
-    memcpy(&text, bytes, sizeof(text));
-    return text;
+    return (const char *)dump_load_ptr(bytes);
 }
 
 static void dump_string(dump_ctx_t *ctx, const char *text, size_t str_max)
@@ -226,6 +231,12 @@ static void dump_scalar(dump_ctx_t *ctx, shrewd_basic_reflect_kind_t kind,
     }
 }
 
+/*
+ * Render every field of `object`. A F_PTR slot is followed (the pointee
+ * is rendered; NULL shows "(null)", opaque targets show their address);
+ * recursion is hard-capped at DUMP_MAX_DEPTH so self-referential graphs
+ * terminate with " ...(max depth)".
+ */
 static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type,
                         const unsigned char *object, size_t depth)
 {
@@ -235,37 +246,103 @@ static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
         const shrewd_basic_reflect_field_t *field = &type->fields[i];
         const unsigned char *at = object + field->offset;
         size_t stride = field->size / field->count;
-        if (0u != (field->flags & SHREWD_BASIC_REFLECT_FIELD_F_ARRAY)) {
-            if (SHREWD_BASIC_REFLECT_KIND_STRUCT == field->type->kind) {
-                for (size_t j = 0; j < field->count; ++j) {
-                    dump_append(ctx, "%*s%s[%zu] = {", pad, "", field->name, j);
+        int is_array = (0u != (field->flags & SHREWD_BASIC_REFLECT_FIELD_F_ARRAY));
+        int is_ptr = (0u != (field->flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR));
+        int is_struct = (SHREWD_BASIC_REFLECT_KIND_STRUCT == field->type->kind);
+        int is_opaque = (SHREWD_BASIC_REFLECT_KIND_OPAQUE == field->type->kind);
+
+        if ((0 != is_array) && (0 != is_struct)) {
+            /* Array of structs or of struct pointers: one block each. */
+            for (size_t j = 0; j < field->count; ++j) {
+                const unsigned char *elem = at + (j * stride);
+                const unsigned char *target = elem;
+                if (0 != is_ptr) {
+                    void *pointer = dump_load_ptr(elem);
+                    if (NULL == pointer) {
+                        dump_append(ctx, "%*s%s[%zu] = (null)", pad, "", field->name, j);
+                        dump_emit(ctx);
+                        continue;
+                    }
+                    target = (const unsigned char *)pointer;
+                }
+                if (depth >= DUMP_MAX_DEPTH) {
+                    dump_append(ctx, "%*s%s[%zu] = ...(max depth)", pad, "", field->name, j);
                     dump_emit(ctx);
-                    dump_fields(ctx, field->type, at + (j * stride), depth + 1);
+                    continue;
+                }
+                dump_append(ctx, "%*s%s[%zu] = {", pad, "", field->name, j);
+                dump_emit(ctx);
+                dump_fields(ctx, field->type, target, depth + 1);
+                dump_append(ctx, "%*s}", pad, "");
+                dump_emit(ctx);
+            }
+        } else if (0 != is_array) {
+            /* Array of scalars/strings, possibly behind pointers. */
+            dump_append(ctx, "%*s%s = [ ", pad, "", field->name);
+            for (size_t j = 0; j < field->count; ++j) {
+                if (DUMP_ARRAY_MAX == j) {
+                    dump_append(ctx, "...(%zu more)", field->count - j);
+                    break;
+                }
+                if (0 != j) {
+                    dump_append(ctx, ", ");
+                }
+                const unsigned char *elem = at + (j * stride);
+                if (0 != is_ptr) {
+                    void *pointer = dump_load_ptr(elem);
+                    if (NULL == pointer) {
+                        dump_append(ctx, "(null)");
+                    } else if (0 != is_opaque) {
+                        dump_append(ctx, "0x%llx",
+                                    (unsigned long long)(uintptr_t)pointer);
+                    } else {
+                        dump_scalar(ctx, field->type->kind,
+                                    (const unsigned char *)pointer,
+                                    field->type->size, DUMP_STR_MAX / 8);
+                    }
+                } else {
+                    dump_scalar(ctx, field->type->kind, elem, stride, DUMP_STR_MAX / 8);
+                }
+            }
+            dump_append(ctx, " ]");
+            dump_emit(ctx);
+        } else if (0 != is_ptr) {
+            void *pointer = dump_load_ptr(at);
+            if (NULL == pointer) {
+                dump_append(ctx, "%*s%s = (null)", pad, "", field->name);
+                dump_emit(ctx);
+            } else if (0 != is_opaque) {
+                dump_append(ctx, "%*s%s = 0x%llx", pad, "", field->name,
+                            (unsigned long long)(uintptr_t)pointer);
+                dump_emit(ctx);
+            } else if (0 != is_struct) {
+                if (depth >= DUMP_MAX_DEPTH) {
+                    dump_append(ctx, "%*s%s = ...(max depth)", pad, "", field->name);
+                    dump_emit(ctx);
+                } else {
+                    dump_append(ctx, "%*s%s = {", pad, "", field->name);
+                    dump_emit(ctx);
+                    dump_fields(ctx, field->type, (const unsigned char *)pointer, depth + 1);
                     dump_append(ctx, "%*s}", pad, "");
                     dump_emit(ctx);
                 }
             } else {
-                dump_append(ctx, "%*s%s = [ ", pad, "", field->name);
-                for (size_t j = 0; j < field->count; ++j) {
-                    if (DUMP_ARRAY_MAX == j) {
-                        dump_append(ctx, "...(%zu more)", field->count - j);
-                        break;
-                    }
-                    if (0 != j) {
-                        dump_append(ctx, ", ");
-                    }
-                    dump_scalar(ctx, field->type->kind, at + (j * stride), stride,
-                                DUMP_STR_MAX / 8);
-                }
-                dump_append(ctx, " ]");
+                dump_append(ctx, "%*s%s = ", pad, "", field->name);
+                dump_scalar(ctx, field->type->kind, (const unsigned char *)pointer,
+                            field->type->size, DUMP_STR_MAX);
                 dump_emit(ctx);
             }
-        } else if (SHREWD_BASIC_REFLECT_KIND_STRUCT == field->type->kind) {
-            dump_append(ctx, "%*s%s = {", pad, "", field->name);
-            dump_emit(ctx);
-            dump_fields(ctx, field->type, at, depth + 1);
-            dump_append(ctx, "%*s}", pad, "");
-            dump_emit(ctx);
+        } else if (0 != is_struct) {
+            if (depth >= DUMP_MAX_DEPTH) {
+                dump_append(ctx, "%*s%s = ...(max depth)", pad, "", field->name);
+                dump_emit(ctx);
+            } else {
+                dump_append(ctx, "%*s%s = {", pad, "", field->name);
+                dump_emit(ctx);
+                dump_fields(ctx, field->type, at, depth + 1);
+                dump_append(ctx, "%*s}", pad, "");
+                dump_emit(ctx);
+            }
         } else {
             dump_append(ctx, "%*s%s = ", pad, "", field->name);
             dump_scalar(ctx, field->type->kind, at, field->size, DUMP_STR_MAX);
