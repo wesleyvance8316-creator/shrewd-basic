@@ -328,7 +328,23 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
   `set_stream` / `set_file` / 全局输出(见 `docs/` 外的 log.h 与 log demo);
 - **ds**:图遍历的克隆映射与访问集复用 ds 的 rbtree(跨模块复用)。
 
-## 10. 路线图
+## 10. 代码生成器(可选)
 
-- 一、二期(已交付):核心地基、指针、路径、ops 回调集、枚举、环形/共享图支持;
-- 三期(进行中):泛型比较、可选代码生成器(产出同一套宏)。JSON 等序列化属于 reflect 的应用层,不在本模块范围。
+`tools/reflect_gen.py`(纯 Python3,零依赖)解析头文件的受支持子集,
+产出与手写完全一致的宏注解,作为可选的编写辅助——**库本身永远不需要它**,
+生成物可读、可手改、可与手写混用:
+
+    python3 tools/reflect_gen.py input.h -o stub   # 生成 stub.h + stub.c
+
+- 收录:`typedef struct/enum`;标量/字符串(`FIELD_PRIMITIVE`)、嵌套结构体
+  (`FIELD_STRUCT`)、定长数组(`FIELD_ARRAY`)、指针(`FIELD_PTR`/`FIELD_PTR_ARRAY`)、
+  枚举(`FIELD_ENUM`/`ENUM_DEFINE`),引用但未定义的类型自动补 `TYPE_DECLARE`;
+- 描述符命名约定 `<类型名>_reflect`(如 `shape_t_reflect`);
+- 跳过并告警:bit-field、联合体、函数指针、多维数组、柔性数组;
+- 验证样例:`tools/reflect_gen_sample.h`(生成物经编译、dump/equal/enum 查表实测)。
+
+## 11. 路线图
+
+- 一、二期(已交付):核心地基、指针、路径、ops 回调集;
+- 三期(已交付):枚举、环形/共享图支持、泛型比较(`reflect_equal`)、代码生成器。
+- 后续按需:JSON 等序列化属于 reflect 的应用层,基于本模块自行实现。
