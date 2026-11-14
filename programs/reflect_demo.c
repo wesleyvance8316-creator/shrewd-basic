@@ -180,10 +180,10 @@ static void describe_field(const char *name)
         return;
     }
     printf("  %-10s kind=%-6s offset=%-3zu size=%-3zu count=%zu%s%s\n",
-           name, shrewd_basic_reflect_kind_name(field->type->kind),
-           field->offset, field->size, field->count,
-           (0u != (field->flags & SHREWD_BASIC_REFLECT_FIELD_F_ARRAY)) ? " ARRAY" : "",
-           (0u != (field->flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) ? " PTR" : "");
+           name, shrewd_basic_reflect_kind_name(field->sb_refl_type->sb_refl_kind),
+           field->sb_refl_offset, field->sb_refl_size, field->sb_refl_count,
+           (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_ARRAY)) ? " ARRAY" : "",
+           (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) ? " PTR" : "");
 }
 
 int main(void)
@@ -226,8 +226,8 @@ int main(void)
 
     banner("1. type description: find_field + kind_name");
     printf("  person_t has %zu fields, size %zu bytes, kind %s\n",
-           person_type.field_count, person_type.size,
-           shrewd_basic_reflect_kind_name(person_type.kind));
+           person_type.sb_refl_field_count, person_type.sb_refl_size,
+           shrewd_basic_reflect_kind_name(person_type.sb_refl_kind));
     describe_field("age");
     describe_field("name");
     describe_field("tag");
@@ -288,7 +288,7 @@ int main(void)
                  shrewd_basic_reflect_type_resolve(&person_type, "home.x",
                                                    &field, &offset, &size));
     printf("  -> field \"%s\", offset %zu, value size %zu\n",
-           field->name, offset, size);
+           field->sb_refl_name, offset, size);
     int32_t value = 77;
     print_status("path_set \"home.x\" = 77",
                  shrewd_basic_reflect_path_set(&person, &person_type, "home.x",

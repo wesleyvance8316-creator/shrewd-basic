@@ -15,7 +15,7 @@
 
 1. **宏为基座**:用户用宏注解结构体,编译期展开成 `const` 描述符;未来的代码生成器产出同一套宏,不改变使用方式。
 2. **混合式类型绑定**:基础类型经 C11 `_Generic` 自动推导;聚合(嵌套结构体、数组、指针)显式传入目标描述符。
-3. **size 不变量**:**一切数据读写走 `field->size`**(数组步长为 `size/count`),`type->size` 仅信息性。这使 `long` → int64 描述符的映射在 LLP64 平台上依然内存安全。
+3. **size 不变量**:**一切数据读写走 `field->sb_refl_size`**(数组步长为 `size/count`),`type->sb_refl_size` 仅信息性。这使 `long` → int64 描述符的映射在 LLP64 平台上依然内存安全。
 4. **零所有权**:反射默认不分配、不释放、不深拷贝;需要时由 ops 回调(见 §7)接管。
 5. **恒定错误码**:`shrewd-basic/platform/error.h` 集中注册,reflect 占 `-200..-299` 号段
    (`SHREWD_BASIC_ERR_REFLECT_MISMATCH = -200`)。
@@ -94,26 +94,26 @@ FLOAT, DOUBLE, STRING, STRUCT, OPAQUE`
 
 ```c
 typedef struct shrewd_basic_reflect_field {
-    const char *name;                        /* 成员名 */
-    const shrewd_basic_reflect_type_t *type; /* 值类型 / 数组元素类型 / 指针目标类型 */
-    size_t offset;                           /* offsetof(owner, member) */
-    size_t size;                             /* sizeof(member);数组为总字节 */
-    size_t count;                            /* 元素数,非数组为 1 */
-    uint32_t flags;                          /* F_ARRAY / F_PTR,可组合 */
-    const shrewd_basic_reflect_ops_t *ops;   /* 字段级 ops 覆盖,NULL = 用 type->ops */
+    const char *sb_refl_name;                        /* 成员名 */
+    const shrewd_basic_reflect_type_t *sb_refl_type; /* 值类型 / 数组元素类型 / 指针目标类型 */
+    size_t sb_refl_offset;                           /* offsetof(owner, member) */
+    size_t sb_refl_size;                             /* sizeof(member);数组为总字节 */
+    size_t sb_refl_count;                            /* 元素数,非数组为 1 */
+    uint32_t sb_refl_flags;                          /* F_ARRAY / F_PTR,可组合 */
+    const shrewd_basic_reflect_ops_t *sb_refl_ops;   /* 字段级 ops 覆盖,NULL = 用 type->sb_refl_ops */
 } shrewd_basic_reflect_field_t;
 
 struct shrewd_basic_reflect_type {
-    shrewd_basic_reflect_kind_t kind;
+    shrewd_basic_reflect_kind_t sb_refl_kind;
     const char *name;
-    size_t size;          /* 信息性宽度 */
-    size_t field_count;
-    const shrewd_basic_reflect_field_t *fields;
-    const shrewd_basic_reflect_ops_t *ops;  /* 类型级 ops,NULL = 纯元数据行为 */
+    size_t sb_refl_size;          /* 信息性宽度 */
+    size_t sb_refl_field_count;
+    const shrewd_basic_reflect_field_t *sb_refl_fields;
+    const shrewd_basic_reflect_ops_t *sb_refl_ops;  /* 类型级 ops,NULL = 纯元数据行为 */
 };
 ```
 
-**数组是字段形态不是 kind**:`F_ARRAY` + `count` 包装一个元素类型;指针同理是 `F_PTR`
+**数组是字段形态不是 kind**:`F_ARRAY` + `sb_refl_count` 包装一个元素类型;指针同理是 `F_PTR`
 形态,`type` 指向目标类型。两者正交(`F_PTR|F_ARRAY` = 指针数组)。
 
 ### 3.3 基础类型描述符
@@ -172,7 +172,7 @@ SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                /* 跨 TU 
 |---|---|---|
 | `kind_name(kind)` | kind 的名字 | — |
 | `type_find_field(type, name, &field)` | 扁平按名查字段 | `KEY_NOTFOUND` / `ARG_INVALID` |
-| `field_get(obj, field, out, n)` | 原始字节读字段(`n == field->size`) | `REFLECT_MISMATCH` / `ARG_INVALID` |
+| `field_get(obj, field, out, n)` | 原始字节读字段(`n == field->sb_refl_size`) | `REFLECT_MISMATCH` / `ARG_INVALID` |
 | `field_set(obj, field, in, n)` | 原始字节写字段 | 同上 |
 | `dump(type, obj, label)` | 递归打印(type 需为 STRUCT) | `ARG_INVALID` |
 | `type_resolve(type, path, &field, &offset, &size)` | 路径→字段+偏移+值尺寸(纯元数据) | `KEY_NOTFOUND` / `ARG_INVALID` |
@@ -186,7 +186,7 @@ SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                /* 跨 TU 
 
 ### 5.1 get/set 的尺寸规则
 
-`value_size` 必须等于目标的字节宽度(`field->size` 或 `ops->value_size`),否则
+`value_size` 必须等于目标的字节宽度(`field->sb_refl_size` 或 `ops->value_size`),否则
 `REFLECT_MISMATCH`;数组整体读写时 `n` 为总字节,路径以索引结尾时为单元素宽度
 (`resolve` 的 `out_size` 明确给出,无需猜测)。
 
@@ -257,7 +257,7 @@ struct shrewd_basic_reflect_ops {
 };
 ```
 
-- **两级挂载**:`field->ops` 优先,缺省回落 `type->ops`;
+- **两级挂载**:`field->sb_refl_ops` 优先,缺省回落 `type->sb_refl_ops`;
 - **逐回调解退**:缺哪个回调就用哪个元数据默认(只写 `check` 也能复用通用拷贝);
 - `get/set/check` 对值和指针目标同样适用;`copy/destroy` 是**对象语义**(指针目标与
   `copy/destroy` 的根对象)。
@@ -299,14 +299,13 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
 
 ## 8. 约束与陷阱
 
-1. **宏参数名不得与描述符成员名重合**(参数会替换 designated initializer 的设计器,
-   如参数 `type` 会毁掉 `.type =`)。参数固定为 `var / struct_type / member / ref / ops_ref`。
+1. **描述符成员统一带 `sb_refl_` 前缀**(`sb_refl_name` / `sb_refl_type` / `sb_refl_size` ...):C 宏替换会改写 designated initializer 的设计器(未加前缀时,参数 `type` 会毁掉 `.type =`),项目缩写 + `refl_` 双重前缀使设计器与 `type`/`name`/`var`/`size` 等常见标识符彻底隔离——这些词如今可安全用作宏参数或用户包装宏的参数;宏参数仅需避开 `sb_refl_*` 本身。
 2. **`char buf[N]` 必须用 `FIELD_ARRAY(t, buf, shrewd_basic_reflect_char)`**:
    `FIELD_PRIMITIVE` 会因数组退化把 `char[N]` 当 `char *` 误判为字符串(编译器抓不到)。
 3. **多维数组不支持**(元素类型模型是单层),bit-field / 联合体 / 柔性数组成员 /
    函数指针 / 匿名成员不支持。
 4. **`long` → int64 在 LLP64 上 kind 与真实宽度不符**:安全靠 size 不变量,但 dump 的
-   指针目标标量按 `type->size` 规范宽度读——`long *` 这类目标建议自供 ops。
+   指针目标标量按 `type->sb_refl_size` 规范宽度读——`long *` 这类目标建议自供 ops。
 5. **宏需要 C11(`_Generic`)且展开为声明**,必须放文件作用域;类型至少 1 个字段。
 6. **destroy 契约**(§7.3):别对栈上目标的图调用 `destroy`。
 

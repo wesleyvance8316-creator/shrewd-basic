@@ -27,5 +27,5 @@ int shrewd_test_reflect_ext_set_x(void *point, int32_t value)
 
 int shrewd_test_reflect_ext_field_count(void)
 {
-    return (int)g_point_reflect.field_count;
+    return (int)g_point_reflect.sb_refl_field_count;
 }

@@ -264,57 +264,57 @@ static const shrewd_basic_reflect_field_t *find_or_fail(const char *test_name,
 
 static void test_describe(void)
 {
-    expect_true("describe type name", 0 == strcmp(g_person_reflect.name, "person_t"));
+    expect_true("describe type name", 0 == strcmp(g_person_reflect.sb_refl_name, "person_t"));
     expect_true("describe type kind",
-                SHREWD_BASIC_REFLECT_KIND_STRUCT == g_person_reflect.kind);
-    expect_true("describe type size", sizeof(person_t) == g_person_reflect.size);
-    expect_true("describe field count", (size_t)12 == g_person_reflect.field_count);
-    expect_true("describe fields table", NULL != g_person_reflect.fields);
+                SHREWD_BASIC_REFLECT_KIND_STRUCT == g_person_reflect.sb_refl_kind);
+    expect_true("describe type size", sizeof(person_t) == g_person_reflect.sb_refl_size);
+    expect_true("describe field count", (size_t)12 == g_person_reflect.sb_refl_field_count);
+    expect_true("describe fields table", NULL != g_person_reflect.sb_refl_fields);
     expect_true("describe primitive has no fields",
-                (0 == shrewd_basic_reflect_int32.field_count)
-                && (NULL == shrewd_basic_reflect_int32.fields));
+                (0 == shrewd_basic_reflect_int32.sb_refl_field_count)
+                && (NULL == shrewd_basic_reflect_int32.sb_refl_fields));
 
     const shrewd_basic_reflect_field_t *f = find_or_fail("describe", &g_person_reflect, "age");
     if (NULL != f) {
-        expect_true("describe age type", &shrewd_basic_reflect_int32 == f->type);
-        expect_true("describe age offset", offsetof(person_t, age) == f->offset);
-        expect_true("describe age size", sizeof(int32_t) == f->size);
-        expect_true("describe age count", (size_t)1 == f->count);
-        expect_true("describe age flags", (uint32_t)0 == f->flags);
+        expect_true("describe age type", &shrewd_basic_reflect_int32 == f->sb_refl_type);
+        expect_true("describe age offset", offsetof(person_t, age) == f->sb_refl_offset);
+        expect_true("describe age size", sizeof(int32_t) == f->sb_refl_size);
+        expect_true("describe age count", (size_t)1 == f->sb_refl_count);
+        expect_true("describe age flags", (uint32_t)0 == f->sb_refl_flags);
     }
     f = find_or_fail("describe", &g_person_reflect, "name");
     if (NULL != f) {
-        expect_true("describe name type", &shrewd_basic_reflect_string == f->type);
-        expect_true("describe name size", sizeof(const char *) == f->size);
+        expect_true("describe name type", &shrewd_basic_reflect_string == f->sb_refl_type);
+        expect_true("describe name size", sizeof(const char *) == f->sb_refl_size);
     }
     f = find_or_fail("describe", &g_person_reflect, "tag");
     if (NULL != f) {
-        expect_true("describe tag type", &shrewd_basic_reflect_char == f->type);
+        expect_true("describe tag type", &shrewd_basic_reflect_char == f->sb_refl_type);
         expect_true("describe tag array shape",
-                    ((size_t)4 == f->count) && ((size_t)4 == f->size)
-                    && (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY == f->flags));
+                    ((size_t)4 == f->sb_refl_count) && ((size_t)4 == f->sb_refl_size)
+                    && (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY == f->sb_refl_flags));
     }
     f = find_or_fail("describe", &g_person_reflect, "scores");
     if (NULL != f) {
-        expect_true("describe scores type", &shrewd_basic_reflect_int32 == f->type);
+        expect_true("describe scores type", &shrewd_basic_reflect_int32 == f->sb_refl_type);
         expect_true("describe scores array shape",
-                    ((size_t)3 == f->count)
-                    && (3 * sizeof(int32_t) == f->size)
-                    && (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY == f->flags));
+                    ((size_t)3 == f->sb_refl_count)
+                    && (3 * sizeof(int32_t) == f->sb_refl_size)
+                    && (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY == f->sb_refl_flags));
     }
     f = find_or_fail("describe", &g_person_reflect, "home");
     if (NULL != f) {
-        expect_true("describe home type", &g_point_reflect == f->type);
+        expect_true("describe home type", &g_point_reflect == f->sb_refl_type);
         expect_true("describe home shape",
-                    ((size_t)1 == f->count) && ((uint32_t)0 == f->flags));
+                    ((size_t)1 == f->sb_refl_count) && ((uint32_t)0 == f->sb_refl_flags));
     }
     f = find_or_fail("describe", &g_person_reflect, "active");
     if (NULL != f) {
-        expect_true("describe active type", &shrewd_basic_reflect_bool == f->type);
+        expect_true("describe active type", &shrewd_basic_reflect_bool == f->sb_refl_type);
     }
     f = find_or_fail("describe", &g_person_reflect, "big");
     if (NULL != f) {
-        expect_true("describe big type", &shrewd_basic_reflect_uint64 == f->type);
+        expect_true("describe big type", &shrewd_basic_reflect_uint64 == f->sb_refl_type);
     }
 
     expect_true("describe kind name int32",
@@ -334,7 +334,7 @@ static void test_find_field(void)
     expect_eq_int("find_field hit",
                   shrewd_basic_reflect_type_find_field(&g_person_reflect, "age", &field),
                   SHREWD_BASIC_ERR_OK);
-    expect_true("find_field hit pointer", field == &g_person_reflect.fields[3]);
+    expect_true("find_field hit pointer", field == &g_person_reflect.sb_refl_fields[3]);
     expect_eq_int("find_field miss",
                   shrewd_basic_reflect_type_find_field(&g_person_reflect, "nope", &field),
                   SHREWD_BASIC_ERR_KEY_NOTFOUND);
@@ -472,7 +472,7 @@ static void test_nested(void)
     if (NULL == home) {
         return;
     }
-    expect_true("nested type", &g_point_reflect == home->type);
+    expect_true("nested type", &g_point_reflect == home->sb_refl_type);
 
     /* Nested values are addressed through the nested type's descriptors. */
     const shrewd_basic_reflect_field_t *x = find_or_fail("nested", &g_point_reflect, "x");
@@ -754,29 +754,29 @@ static void test_pointer_fields(void)
     const shrewd_basic_reflect_field_t *f =
         find_or_fail("pointer", &g_node_reflect, "next");
     if (NULL != f) {
-        expect_true("pointer self target", &g_node_reflect == f->type);
+        expect_true("pointer self target", &g_node_reflect == f->sb_refl_type);
         expect_true("pointer shape",
-                    ((size_t)1 == f->count) && (sizeof(node_t *) == f->size)
-                    && (SHREWD_BASIC_REFLECT_FIELD_F_PTR == f->flags));
+                    ((size_t)1 == f->sb_refl_count) && (sizeof(node_t *) == f->sb_refl_size)
+                    && (SHREWD_BASIC_REFLECT_FIELD_F_PTR == f->sb_refl_flags));
     }
     f = find_or_fail("pointer", &g_refs_reflect, "p_str");
     if (NULL != f) {
-        expect_true("pointer string target", &shrewd_basic_reflect_string == f->type);
+        expect_true("pointer string target", &shrewd_basic_reflect_string == f->sb_refl_type);
     }
     f = find_or_fail("pointer", &g_refs_reflect, "ctx");
     if (NULL != f) {
         expect_true("pointer opaque target",
-                    (&shrewd_basic_reflect_void == f->type)
-                    && (SHREWD_BASIC_REFLECT_KIND_OPAQUE == f->type->kind));
+                    (&shrewd_basic_reflect_void == f->sb_refl_type)
+                    && (SHREWD_BASIC_REFLECT_KIND_OPAQUE == f->sb_refl_type->sb_refl_kind));
     }
     f = find_or_fail("pointer", &g_refs_reflect, "team");
     if (NULL != f) {
         expect_true("pointer array shape",
-                    (&g_point_reflect == f->type)
-                    && ((size_t)2 == f->count)
-                    && (2 * sizeof(point_t *) == f->size)
+                    (&g_point_reflect == f->sb_refl_type)
+                    && ((size_t)2 == f->sb_refl_count)
+                    && (2 * sizeof(point_t *) == f->sb_refl_size)
                     && ((SHREWD_BASIC_REFLECT_FIELD_F_PTR
-                         | SHREWD_BASIC_REFLECT_FIELD_F_ARRAY) == f->flags));
+                         | SHREWD_BASIC_REFLECT_FIELD_F_ARRAY) == f->sb_refl_flags));
     }
     expect_true("pointer kind name opaque",
                 0 == strcmp(shrewd_basic_reflect_kind_name(SHREWD_BASIC_REFLECT_KIND_OPAQUE),
@@ -940,7 +940,7 @@ static void test_paths(void)
                                                     &field, &offset, &size),
                   SHREWD_BASIC_ERR_OK);
     expect_true("resolve home.x shape",
-                (0 == strcmp(field->name, "x"))
+                (0 == strcmp(field->sb_refl_name, "x"))
                 && (offsetof(person_t, home) + offsetof(point_t, x) == offset)
                 && (sizeof(int32_t) == size));
     expect_eq_int("resolve pair[1].y",
@@ -1105,7 +1105,7 @@ static void test_paths(void)
 static void test_ops(void)
 {
     /* Attachment shapes. */
-    expect_true("ops type attach", &g_point_ops == g_point_ops_reflect.ops);
+    expect_true("ops type attach", &g_point_ops == g_point_ops_reflect.sb_refl_ops);
     const shrewd_basic_reflect_field_t *type_field =
         find_or_fail("ops", &g_ops_refs_reflect, "type_ops_slot");
     const shrewd_basic_reflect_field_t *field_field =
@@ -1116,9 +1116,9 @@ static void test_ops(void)
         return;
     }
     expect_true("ops field falls back to type",
-                (NULL == type_field->ops) && (&g_handle_reflect == type_field->type));
-    expect_true("ops field override wins", &g_override_ops == field_field->ops);
-    expect_true("ops opaque target", &g_type_ops == g_handle_reflect.ops);
+                (NULL == type_field->sb_refl_ops) && (&g_handle_reflect == type_field->sb_refl_type));
+    expect_true("ops field override wins", &g_override_ops == field_field->sb_refl_ops);
+    expect_true("ops opaque target", &g_type_ops == g_handle_reflect.sb_refl_ops);
 
     /* value_get/set through the type-level ops. */
     ops_refs_t refs;

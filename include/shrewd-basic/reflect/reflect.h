@@ -21,8 +21,8 @@
  * exactly once in one .c of a module and import it in sibling .c files
  * with SHREWD_BASIC_REFLECT_TYPE_DECLARE().
  *
- * Size invariant: all data access goes through field->size (with
- * field->size / field->count as the array stride); type->size is
+ * Size invariant: all data access goes through field->sb_refl_size (with
+ * field->sb_refl_size / field->sb_refl_count as the array stride); type->sb_refl_size is
  * informational only. This keeps access safe when a basic type maps to
  * a descriptor of a different width (e.g. long to int64 on LLP64).
  *
@@ -41,7 +41,7 @@
  *
  * Strings: the field bytes hold the char pointer itself; get/set copy
  * the pointer and ownership stays with the caller. All value access is
- * raw memcpy of field->size, never a dereference of offset-derived
+ * raw memcpy of field->sb_refl_size, never a dereference of offset-derived
  * typed pointers (packed and odd alignments stay well-defined).
  *
  * Pointers: a FIELD_PTR member holds a pointer to its declared target
@@ -124,25 +124,30 @@ struct shrewd_basic_reflect_ops {
     void (*destroy)(void *pointee);
 };
 
-/** One reflected member of a struct type. */
+/**
+ * One reflected member of a struct type. Every descriptor member carries
+ * the sb_refl_ prefix so common names like type/name/size stay free for
+ * macro parameters and user code - un-prefixed designators would be
+ * rewritten by such parameter names during macro expansion.
+ */
 typedef struct shrewd_basic_reflect_field {
-    const char *name;                        /**< Member name, C string literal. */
-    const shrewd_basic_reflect_type_t *type; /**< Value type, or array element type. */
-    size_t offset;                           /**< offsetof(owner struct, member). */
-    size_t size;                             /**< sizeof(member); arrays: total bytes. */
-    size_t count;                            /**< Elements; 1 unless fixed array. */
-    uint32_t flags;                          /**< SHREWD_BASIC_REFLECT_FIELD_F_*. */
-    const shrewd_basic_reflect_ops_t *ops;   /**< Field-level override; NULL = type ops. */
+    const char *sb_refl_name;                        /**< Member name, C string literal. */
+    const shrewd_basic_reflect_type_t *sb_refl_type; /**< Value type, or array element type. */
+    size_t sb_refl_offset;                           /**< offsetof(owner struct, member). */
+    size_t sb_refl_size;                             /**< sizeof(member); arrays: total bytes. */
+    size_t sb_refl_count;                            /**< Elements; 1 unless fixed array. */
+    uint32_t sb_refl_flags;                          /**< SHREWD_BASIC_REFLECT_FIELD_F_*. */
+    const shrewd_basic_reflect_ops_t *sb_refl_ops;   /**< Field-level override; NULL = type ops. */
 } shrewd_basic_reflect_field_t;
 
 /** A described type: a struct layout, or one primitive/string kind. */
 struct shrewd_basic_reflect_type {
-    shrewd_basic_reflect_kind_t kind;             /**< STRUCT for aggregates. */
-    const char *name;                             /**< "person_t" or "int32". */
-    size_t size;                                  /**< Informational width. */
-    size_t field_count;                           /**< 0 for primitives. */
-    const shrewd_basic_reflect_field_t *fields;    /**< NULL for primitives. */
-    const shrewd_basic_reflect_ops_t *ops;         /**< Type-level ops; NULL = defaults. */
+    shrewd_basic_reflect_kind_t sb_refl_kind;             /**< STRUCT for aggregates. */
+    const char *sb_refl_name;                             /**< "person_t" or "int32". */
+    size_t sb_refl_size;                                  /**< Informational width. */
+    size_t sb_refl_field_count;                           /**< 0 for primitives. */
+    const shrewd_basic_reflect_field_t *sb_refl_fields;    /**< NULL for primitives. */
+    const shrewd_basic_reflect_ops_t *sb_refl_ops;         /**< Type-level ops; NULL = defaults. */
 };
 
 /** Field flag: the field is a fixed-size array of @c count elements. */
@@ -195,35 +200,35 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
 /* Describe a primitive member (scalar or string); type deduced automatically. */
 #define SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(struct_type, member)                        \
     {                                                                          \
-        .name = #member,                                                       \
-        .type = SHREWD_BASIC_REFLECT_PRIM_TYPE(((struct_type *)0)->member),    \
-        .offset = offsetof(struct_type, member),                               \
-        .size = sizeof(((struct_type *)0)->member),                            \
-        .count = (size_t)1,                                                    \
-        .flags = (uint32_t)0                                                   \
+        .sb_refl_name = #member,                                                       \
+        .sb_refl_type = SHREWD_BASIC_REFLECT_PRIM_TYPE(((struct_type *)0)->member),    \
+        .sb_refl_offset = offsetof(struct_type, member),                               \
+        .sb_refl_size = sizeof(((struct_type *)0)->member),                            \
+        .sb_refl_count = (size_t)1,                                                    \
+        .sb_refl_flags = (uint32_t)0                                                   \
     }
 
 /* Describe a nested struct member; ref is its descriptor without '&'. */
 #define SHREWD_BASIC_REFLECT_FIELD_STRUCT(struct_type, member, ref)            \
     {                                                                          \
-        .name = #member,                                                       \
-        .type = &(ref),                                                        \
-        .offset = offsetof(struct_type, member),                               \
-        .size = sizeof(((struct_type *)0)->member),                            \
-        .count = (size_t)1,                                                    \
-        .flags = (uint32_t)0                                                   \
+        .sb_refl_name = #member,                                                       \
+        .sb_refl_type = &(ref),                                                        \
+        .sb_refl_offset = offsetof(struct_type, member),                               \
+        .sb_refl_size = sizeof(((struct_type *)0)->member),                            \
+        .sb_refl_count = (size_t)1,                                                    \
+        .sb_refl_flags = (uint32_t)0                                                   \
     }
 
 /* Describe a fixed-size array member; ref is the element descriptor. */
 #define SHREWD_BASIC_REFLECT_FIELD_ARRAY(struct_type, member, ref)             \
     {                                                                          \
-        .name = #member,                                                       \
-        .type = &(ref),                                                        \
-        .offset = offsetof(struct_type, member),                               \
-        .size = sizeof(((struct_type *)0)->member),                            \
-        .count = sizeof(((struct_type *)0)->member)                            \
+        .sb_refl_name = #member,                                                       \
+        .sb_refl_type = &(ref),                                                        \
+        .sb_refl_offset = offsetof(struct_type, member),                               \
+        .sb_refl_size = sizeof(((struct_type *)0)->member),                            \
+        .sb_refl_count = sizeof(((struct_type *)0)->member)                            \
                 / sizeof(((struct_type *)0)->member[0]),                       \
-        .flags = SHREWD_BASIC_REFLECT_FIELD_F_ARRAY                            \
+        .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_ARRAY                            \
     }
 
 /*
@@ -234,24 +239,24 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
  */
 #define SHREWD_BASIC_REFLECT_FIELD_PTR(struct_type, member, ref)               \
     {                                                                          \
-        .name = #member,                                                       \
-        .type = &(ref),                                                        \
-        .offset = offsetof(struct_type, member),                               \
-        .size = sizeof(((struct_type *)0)->member),                            \
-        .count = (size_t)1,                                                    \
-        .flags = SHREWD_BASIC_REFLECT_FIELD_F_PTR                              \
+        .sb_refl_name = #member,                                                       \
+        .sb_refl_type = &(ref),                                                        \
+        .sb_refl_offset = offsetof(struct_type, member),                               \
+        .sb_refl_size = sizeof(((struct_type *)0)->member),                            \
+        .sb_refl_count = (size_t)1,                                                    \
+        .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_PTR                              \
     }
 
 /* Describe a fixed-size array of pointers; ref is the pointee descriptor. */
 #define SHREWD_BASIC_REFLECT_FIELD_PTR_ARRAY(struct_type, member, ref)         \
     {                                                                          \
-        .name = #member,                                                       \
-        .type = &(ref),                                                        \
-        .offset = offsetof(struct_type, member),                               \
-        .size = sizeof(((struct_type *)0)->member),                            \
-        .count = sizeof(((struct_type *)0)->member)                            \
+        .sb_refl_name = #member,                                                       \
+        .sb_refl_type = &(ref),                                                        \
+        .sb_refl_offset = offsetof(struct_type, member),                               \
+        .sb_refl_size = sizeof(((struct_type *)0)->member),                            \
+        .sb_refl_count = sizeof(((struct_type *)0)->member)                            \
                 / sizeof(((struct_type *)0)->member[0]),                       \
-        .flags = SHREWD_BASIC_REFLECT_FIELD_F_PTR                              \
+        .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_PTR                              \
                 | SHREWD_BASIC_REFLECT_FIELD_F_ARRAY                           \
     }
 
@@ -262,18 +267,18 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
  * external linkage so &var is an address constant usable inside other
  * descriptors (nested and, later, self-referential types); the field
  * table `var##_fields` stays file-local. The trailing ';' belongs to the
- * call, like the log module macros. Macro arguments must not collide
- * with descriptor member names (hence var/struct_type/member/ref).
+ * call, like the log module macros. Descriptor members carry the sb_refl_ prefix, so common parameter names
+ * like type or name are safe.
  */
 #define SHREWD_BASIC_REFLECT_TYPE_DEFINE(var, struct_type, ...)                \
     extern const shrewd_basic_reflect_type_t var;                              \
     static const shrewd_basic_reflect_field_t var##_fields[] = { __VA_ARGS__ };\
     const shrewd_basic_reflect_type_t var = {                                  \
-        .kind = SHREWD_BASIC_REFLECT_KIND_STRUCT,                              \
-        .name = #struct_type,                                                  \
-        .size = sizeof(struct_type),                                           \
-        .field_count = sizeof(var##_fields) / sizeof(var##_fields[0]),         \
-        .fields = var##_fields                                                 \
+        .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_STRUCT,                              \
+        .sb_refl_name = #struct_type,                                                  \
+        .sb_refl_size = sizeof(struct_type),                                           \
+        .sb_refl_field_count = sizeof(var##_fields) / sizeof(var##_fields[0]),         \
+        .sb_refl_fields = var##_fields                                                 \
     }
 
 /** Import a type defined by SHREWD_BASIC_REFLECT_TYPE_DEFINE() elsewhere. */
@@ -282,19 +287,19 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
 
 /*
  * SHREWD_BASIC_REFLECT_TYPE_DEFINE with a type-level ops vtable; the ops
- * object is referenced without '&'. Macro arguments must not collide with
- * descriptor member names (hence var/struct_type/member/ref/ops_ref).
+ * object is referenced without '&'. Descriptor members carry the sb_refl_ prefix, so common parameter names
+ * like type or name are safe.
  */
 #define SHREWD_BASIC_REFLECT_TYPE_DEFINE_OPS(var, struct_type, ops_ref, ...)   \
     extern const shrewd_basic_reflect_type_t var;                              \
     static const shrewd_basic_reflect_field_t var##_fields[] = { __VA_ARGS__ };\
     const shrewd_basic_reflect_type_t var = {                                  \
-        .kind = SHREWD_BASIC_REFLECT_KIND_STRUCT,                              \
-        .name = #struct_type,                                                  \
-        .size = sizeof(struct_type),                                           \
-        .field_count = sizeof(var##_fields) / sizeof(var##_fields[0]),         \
-        .fields = var##_fields,                                                \
-        .ops = &(ops_ref)                                                      \
+        .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_STRUCT,                              \
+        .sb_refl_name = #struct_type,                                                  \
+        .sb_refl_size = sizeof(struct_type),                                           \
+        .sb_refl_field_count = sizeof(var##_fields) / sizeof(var##_fields[0]),         \
+        .sb_refl_fields = var##_fields,                                                \
+        .sb_refl_ops = &(ops_ref)                                                      \
     }
 
 /*
@@ -305,50 +310,50 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
 #define SHREWD_BASIC_REFLECT_OPAQUE_DEFINE(var, type_name, ops_ref)            \
     extern const shrewd_basic_reflect_type_t var;                              \
     const shrewd_basic_reflect_type_t var = {                                  \
-        .kind = SHREWD_BASIC_REFLECT_KIND_OPAQUE,                              \
-        .name = (type_name),                                                   \
-        .size = 0,                                                             \
-        .field_count = 0,                                                      \
-        .fields = NULL,                                                        \
-        .ops = &(ops_ref)                                                      \
+        .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_OPAQUE,                              \
+        .sb_refl_name = (type_name),                                                   \
+        .sb_refl_size = 0,                                                             \
+        .sb_refl_field_count = 0,                                                      \
+        .sb_refl_fields = NULL,                                                        \
+        .sb_refl_ops = &(ops_ref)                                                      \
     }
 
 /* FIELD_STRUCT with a field-level ops override (takes precedence over type ops). */
 #define SHREWD_BASIC_REFLECT_FIELD_STRUCT_OPS(struct_type, member, ref, ops_ref) \
     {                                                                          \
-        .name = #member,                                                       \
-        .type = &(ref),                                                        \
-        .offset = offsetof(struct_type, member),                               \
-        .size = sizeof(((struct_type *)0)->member),                            \
-        .count = (size_t)1,                                                    \
-        .flags = (uint32_t)0,                                                  \
-        .ops = &(ops_ref)                                                      \
+        .sb_refl_name = #member,                                                       \
+        .sb_refl_type = &(ref),                                                        \
+        .sb_refl_offset = offsetof(struct_type, member),                               \
+        .sb_refl_size = sizeof(((struct_type *)0)->member),                            \
+        .sb_refl_count = (size_t)1,                                                    \
+        .sb_refl_flags = (uint32_t)0,                                                  \
+        .sb_refl_ops = &(ops_ref)                                                      \
     }
 
 /* FIELD_PTR with a field-level ops override. */
 #define SHREWD_BASIC_REFLECT_FIELD_PTR_OPS(struct_type, member, ref, ops_ref)  \
     {                                                                          \
-        .name = #member,                                                       \
-        .type = &(ref),                                                        \
-        .offset = offsetof(struct_type, member),                               \
-        .size = sizeof(((struct_type *)0)->member),                            \
-        .count = (size_t)1,                                                    \
-        .flags = SHREWD_BASIC_REFLECT_FIELD_F_PTR,                             \
-        .ops = &(ops_ref)                                                      \
+        .sb_refl_name = #member,                                                       \
+        .sb_refl_type = &(ref),                                                        \
+        .sb_refl_offset = offsetof(struct_type, member),                               \
+        .sb_refl_size = sizeof(((struct_type *)0)->member),                            \
+        .sb_refl_count = (size_t)1,                                                    \
+        .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_PTR,                             \
+        .sb_refl_ops = &(ops_ref)                                                      \
     }
 
 /* FIELD_PTR_ARRAY with a field-level ops override. */
 #define SHREWD_BASIC_REFLECT_FIELD_PTR_ARRAY_OPS(struct_type, member, ref, ops_ref) \
     {                                                                          \
-        .name = #member,                                                       \
-        .type = &(ref),                                                        \
-        .offset = offsetof(struct_type, member),                               \
-        .size = sizeof(((struct_type *)0)->member),                            \
-        .count = sizeof(((struct_type *)0)->member)                            \
+        .sb_refl_name = #member,                                                       \
+        .sb_refl_type = &(ref),                                                        \
+        .sb_refl_offset = offsetof(struct_type, member),                               \
+        .sb_refl_size = sizeof(((struct_type *)0)->member),                            \
+        .sb_refl_count = sizeof(((struct_type *)0)->member)                            \
                 / sizeof(((struct_type *)0)->member[0]),                       \
-        .flags = SHREWD_BASIC_REFLECT_FIELD_F_PTR                              \
+        .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_PTR                              \
                 | SHREWD_BASIC_REFLECT_FIELD_F_ARRAY,                          \
-        .ops = &(ops_ref)                                                      \
+        .sb_refl_ops = &(ops_ref)                                                      \
     }
 
 /** Name of a kind, e.g. "int32"; unknown values map to "unknown". */
@@ -356,7 +361,7 @@ const char *shrewd_basic_reflect_kind_name(shrewd_basic_reflect_kind_t kind);
 
 /**
  * Find a field by name (flat, single level).
- * Returns SHREWD_BASIC_ERR_OK and stores a pointer into type->fields
+ * Returns SHREWD_BASIC_ERR_OK and stores a pointer into type->sb_refl_fields
  * (static storage) into @p *out, SHREWD_BASIC_ERR_KEY_NOTFOUND when no
  * field matches, SHREWD_BASIC_ERR_ARG_INVALID for NULL arguments.
  */
@@ -366,7 +371,7 @@ int shrewd_basic_reflect_type_find_field(const shrewd_basic_reflect_type_t *type
 
 /**
  * Copy the field's raw bytes out of @p object into @p out_value.
- * @p value_size must equal field->size or the call fails with
+ * @p value_size must equal field->sb_refl_size or the call fails with
  * SHREWD_BASIC_ERR_REFLECT_MISMATCH. For string fields the bytes are the
  * char pointer itself. @p object must be an instance of the struct that
  * declared @p field.
@@ -440,8 +445,8 @@ int shrewd_basic_reflect_path_set(void *object,
                                   const char *path, const void *value, size_t value_size);
 
 /*
- * Operations: the effective vtable of a field is field->ops when set,
- * else field->type->ops. get/set/check run for values and pointees
+ * Operations: the effective vtable of a field is field->sb_refl_ops when set,
+ * else field->sb_refl_type->sb_refl_ops. get/set/check run for values and pointees
  * alike; copy/destroy handle objects (pointer targets and the root of
  * copy/destroy) - see the file header for the ownership contract.
  */
