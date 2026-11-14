@@ -158,11 +158,11 @@ int shrewd_basic_log_hex_write(shrewd_basic_log_level_t level,
  */
 #define shrewd_basic_log(level, module, label, ...)                            \
     do {                                                                       \
-        shrewd_basic_log_module_t *const sb_log_module_ = (module);            \
-        shrewd_basic_log_level_t const sb_log_level_ = (level);                \
-        if ((NULL != sb_log_module_) && (0u != (sb_log_module_->level_mask     \
-                & (uint32_t)sb_log_level_))) {                                 \
-            (void)shrewd_basic_log_write(sb_log_level_, sb_log_module_,        \
+        shrewd_basic_log_module_t *const _log_module = (module);               \
+        shrewd_basic_log_level_t const _log_level = (level);                   \
+        if ((NULL != _log_module) && (0u != (_log_module->level_mask           \
+                & (uint32_t)_log_level))) {                                    \
+            (void)shrewd_basic_log_write(_log_level, _log_module,              \
                                          (label), __FILE__, __LINE__,          \
                                          __func__, __VA_ARGS__);               \
         }                                                                      \
@@ -182,11 +182,11 @@ int shrewd_basic_log_hex_write(shrewd_basic_log_level_t level,
  */
 #define shrewd_basic_log_hex(level, module, label, msg, data_ptr, data_size)   \
     do {                                                                       \
-        shrewd_basic_log_module_t *const sb_log_module_ = (module);            \
-        shrewd_basic_log_level_t const sb_log_level_ = (level);                \
-        if ((NULL != sb_log_module_) && (0u != (sb_log_module_->level_mask     \
-                & (uint32_t)sb_log_level_))) {                                 \
-            (void)shrewd_basic_log_hex_write(sb_log_level_, sb_log_module_,    \
+        shrewd_basic_log_module_t *const _log_module = (module);               \
+        shrewd_basic_log_level_t const _log_level = (level);                   \
+        if ((NULL != _log_module) && (0u != (_log_module->level_mask           \
+                & (uint32_t)_log_level))) {                                    \
+            (void)shrewd_basic_log_hex_write(_log_level, _log_module,          \
                                              (label), (msg), (data_ptr),       \
                                              (data_size), __FILE__, __LINE__,  \
                                              __func__);                        \
