@@ -11,11 +11,11 @@
  *
  *   typedef struct { int32_t x; int32_t y; } point_t;
  *   SHREWD_BASIC_REFLECT_TYPE_DEFINE(point_type, point_t,
- *       SHREWD_BASIC_REFLECT_FIELD(point_t, x),
- *       SHREWD_BASIC_REFLECT_FIELD(point_t, y));
+ *       SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, x),
+ *       SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, y));
  *
  * Scalar and string members bind automatically through _Generic
- * (SHREWD_BASIC_REFLECT_FIELD); aggregates bind explicitly:
+ * (SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE); aggregates bind explicitly:
  * SHREWD_BASIC_REFLECT_FIELD_STRUCT for nested structs and
  * SHREWD_BASIC_REFLECT_FIELD_ARRAY for fixed arrays. Define each type
  * exactly once in one .c of a module and import it in sibling .c files
@@ -33,7 +33,7 @@
  *     bit-fields, unions, flexible array members, multi-dimension arrays
  *     and function pointers are not described;
  *   - a char buffer must use SHREWD_BASIC_REFLECT_FIELD_ARRAY(struct_type,
- *     buf, shrewd_basic_reflect_char): plain FIELD would treat it as a
+ *     buf, shrewd_basic_reflect_char): plain FIELD_PRIMITIVE would treat it as a
  *     string pointer (arrays decay to pointers in _Generic);
  *   - a type needs at least one field;
  *   - the macros require C11 (_Generic) and expand to declarations, so
@@ -192,8 +192,8 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
         char *: &shrewd_basic_reflect_string,                                  \
         const char *: &shrewd_basic_reflect_string)
 
-/* Describe a scalar or string member; its type is deduced automatically. */
-#define SHREWD_BASIC_REFLECT_FIELD(struct_type, member)                        \
+/* Describe a primitive member (scalar or string); type deduced automatically. */
+#define SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(struct_type, member)                        \
     {                                                                          \
         .name = #member,                                                       \
         .type = SHREWD_BASIC_REFLECT_PRIM_TYPE(((struct_type *)0)->member),    \

@@ -37,12 +37,12 @@ typedef struct {
 
 /* 每个类型只 DEFINE 一次(一个 .c);其他 .c 用 TYPE_DECLARE 引入 */
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(point_type, point_t,
-    SHREWD_BASIC_REFLECT_FIELD(point_t, x),
-    SHREWD_BASIC_REFLECT_FIELD(point_t, y));
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, x),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, y));
 
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(person_type, person_t,
-    SHREWD_BASIC_REFLECT_FIELD(person_t, name),          /* 字符串:自动 */
-    SHREWD_BASIC_REFLECT_FIELD(person_t, age),           /* 标量:自动 */
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, name),          /* 字符串:自动 */
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, age),           /* 标量:自动 */
     SHREWD_BASIC_REFLECT_FIELD_ARRAY(person_t, scores, shrewd_basic_reflect_float),
     SHREWD_BASIC_REFLECT_FIELD_STRUCT(person_t, home, point_type));
 
@@ -135,7 +135,7 @@ shrewd_basic_reflect_void     /* 不透明目标(OPAQUE),size = 0 */
 
 | 宏 | 用途 |
 |---|---|
-| `FIELD(struct_type, member)` | 标量 / 字符串,`_Generic` 自动推导类型 |
+| `FIELD_PRIMITIVE(struct_type, member)` | 标量 / 字符串,`_Generic` 自动推导类型 |
 | `FIELD_STRUCT(struct_type, member, ref)` | 嵌套结构体值成员 |
 | `FIELD_ARRAY(struct_type, member, ref)` | 定长数组,`ref` 为元素描述符 |
 | `FIELD_PTR(struct_type, member, ref)` | 指针成员,`ref` 为目标描述符 |
@@ -302,7 +302,7 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
 1. **宏参数名不得与描述符成员名重合**(参数会替换 designated initializer 的设计器,
    如参数 `type` 会毁掉 `.type =`)。参数固定为 `var / struct_type / member / ref / ops_ref`。
 2. **`char buf[N]` 必须用 `FIELD_ARRAY(t, buf, shrewd_basic_reflect_char)`**:
-   `FIELD` 会因数组退化把 `char[N]` 当 `char *` 误判为字符串(编译器抓不到)。
+   `FIELD_PRIMITIVE` 会因数组退化把 `char[N]` 当 `char *` 误判为字符串(编译器抓不到)。
 3. **多维数组不支持**(元素类型模型是单层),bit-field / 联合体 / 柔性数组成员 /
    函数指针 / 匿名成员不支持。
 4. **`long` → int64 在 LLP64 上 kind 与真实宽度不符**:安全靠 size 不变量,但 dump 的

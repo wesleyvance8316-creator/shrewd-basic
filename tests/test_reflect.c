@@ -51,18 +51,18 @@ typedef struct {
 } person_t;
 
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_point_reflect, point_t,
-    SHREWD_BASIC_REFLECT_FIELD(point_t, x),
-    SHREWD_BASIC_REFLECT_FIELD(point_t, y));
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, x),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, y));
 
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_person_reflect, person_t,
-    SHREWD_BASIC_REFLECT_FIELD(person_t, active),
-    SHREWD_BASIC_REFLECT_FIELD(person_t, grade),
-    SHREWD_BASIC_REFLECT_FIELD(person_t, small),
-    SHREWD_BASIC_REFLECT_FIELD(person_t, age),
-    SHREWD_BASIC_REFLECT_FIELD(person_t, big),
-    SHREWD_BASIC_REFLECT_FIELD(person_t, ratio),
-    SHREWD_BASIC_REFLECT_FIELD(person_t, precise),
-    SHREWD_BASIC_REFLECT_FIELD(person_t, name),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, active),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, grade),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, small),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, age),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, big),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, ratio),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, precise),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, name),
     SHREWD_BASIC_REFLECT_FIELD_ARRAY(person_t, tag, shrewd_basic_reflect_char),
     SHREWD_BASIC_REFLECT_FIELD_ARRAY(person_t, scores, shrewd_basic_reflect_int32),
     SHREWD_BASIC_REFLECT_FIELD_STRUCT(person_t, home, g_point_reflect),
@@ -84,7 +84,7 @@ typedef struct node {
 } node_t;
 
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_node_reflect, node_t,
-    SHREWD_BASIC_REFLECT_FIELD(node_t, data),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(node_t, data),
     SHREWD_BASIC_REFLECT_FIELD_PTR(node_t, next, g_node_reflect));
 
 /* Pointer members of every flavor. */
@@ -193,8 +193,8 @@ static const shrewd_basic_reflect_ops_t g_point_ops = {
     .destroy = NULL };
 
 SHREWD_BASIC_REFLECT_TYPE_DEFINE_OPS(g_point_ops_reflect, point_t, g_point_ops,
-    SHREWD_BASIC_REFLECT_FIELD(point_t, x),
-    SHREWD_BASIC_REFLECT_FIELD(point_t, y));
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, x),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, y));
 
 /* --- graph ops fixtures ---------------------------------------------- */
 

@@ -44,8 +44,8 @@ typedef struct {
 } point_t;
 
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(point_type, point_t,
-    SHREWD_BASIC_REFLECT_FIELD(point_t, x),
-    SHREWD_BASIC_REFLECT_FIELD(point_t, y));
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, x),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, y));
 
 /* Self-referential type (linked list). */
 typedef struct node {
@@ -54,7 +54,7 @@ typedef struct node {
 } node_t;
 
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(node_type, node_t,
-    SHREWD_BASIC_REFLECT_FIELD(node_t, data),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(node_t, data),
     SHREWD_BASIC_REFLECT_FIELD_PTR(node_t, next, node_type));
 
 /* --- ops fixtures ----------------------------------------------------- */
@@ -154,13 +154,13 @@ typedef struct {
 } person_t;
 
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(person_type, person_t,
-    SHREWD_BASIC_REFLECT_FIELD(person_t, name),
-    SHREWD_BASIC_REFLECT_FIELD(person_t, grade),
-    SHREWD_BASIC_REFLECT_FIELD(person_t, small),
-    SHREWD_BASIC_REFLECT_FIELD(person_t, age),
-    SHREWD_BASIC_REFLECT_FIELD(person_t, big),
-    SHREWD_BASIC_REFLECT_FIELD(person_t, ratio),
-    SHREWD_BASIC_REFLECT_FIELD(person_t, precise),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, name),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, grade),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, small),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, age),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, big),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, ratio),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, precise),
     SHREWD_BASIC_REFLECT_FIELD_ARRAY(person_t, tag, shrewd_basic_reflect_char),
     SHREWD_BASIC_REFLECT_FIELD_ARRAY(person_t, scores, shrewd_basic_reflect_int32),
     SHREWD_BASIC_REFLECT_FIELD_STRUCT(person_t, home, point_type),
