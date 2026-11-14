@@ -3,10 +3,13 @@
 #
 # The build block stamps build.h with the version and host/toolchain; declare an
 # option in the config block and reference it from the template in config.h.in.
-# Templates sit next to the headers they generate, which are included as
-# <shrewd-basic/config/build.h> and <shrewd-basic/config/config.h>.
-# configure_file calls below run at configure time and write build.h and
-# config.h next to their templates.
+# The templates sit in the source tree; configure_file runs at configure time
+# and writes build.h and config.h into the matching directory of the build
+# tree (<build>/include/shrewd-basic/config/), so the source tree stays
+# untouched. Both headers are included as <shrewd-basic/config/build.h> and
+# <shrewd-basic/config/config.h> via the build-tree include directory.
+
+set(SHREWD_BASIC_CONFIG_GEN_DIR "${PROJECT_BINARY_DIR}/include/shrewd-basic/config")
 
 # --- Build information, emitted into build.h. ---
 
@@ -38,7 +41,7 @@ set(BUILD_ENV_STRING "${_host_os} ${_host_platform} ${_host_name} / ${_toolchain
 
 configure_file(
         ${CMAKE_CURRENT_SOURCE_DIR}/build.h.in
-        ${CMAKE_CURRENT_SOURCE_DIR}/build.h
+        ${SHREWD_BASIC_CONFIG_GEN_DIR}/build.h
         @ONLY)
 
 # --- Compile-time configuration options, emitted into config.h. ---
@@ -51,5 +54,5 @@ set_property(CACHE SHREWD_BASIC_LOG_LEVEL PROPERTY STRINGS 0 1 2 3 4)
 
 configure_file(
         ${CMAKE_CURRENT_SOURCE_DIR}/config.h.in
-        ${CMAKE_CURRENT_SOURCE_DIR}/config.h
+        ${SHREWD_BASIC_CONFIG_GEN_DIR}/config.h
         @ONLY)

@@ -19,6 +19,7 @@ function(shrewd_basic_setup_library target)
     target_include_directories(${target}
         PUBLIC
             $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+            $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
             $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
         PRIVATE
             ${PROJECT_SOURCE_DIR}/include/shrewd-basic-internal)
@@ -27,10 +28,12 @@ function(shrewd_basic_setup_library target)
             VERSION ${PROJECT_VERSION}
             SOVERSION ${PROJECT_VERSION_MAJOR}
             WINDOWS_EXPORT_ALL_SYMBOLS ON)
-    install(TARGETS ${target}
-            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    if(SHREWD_BASIC_INSTALL)
+        install(TARGETS ${target}
+                ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+                LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+                RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    endif()
 endfunction()
 
 if(SHREWD_BASIC_BUILD_STATIC)
@@ -62,4 +65,18 @@ if(SHREWD_BASIC_BUILD_STATIC)
 else()
     add_library(shrewd-basic ALIAS shrewd-basic-shared)
     add_library(shrewd-basic::shrewd-basic ALIAS shrewd-basic-shared)
+endif()
+
+# Public headers: the shrewd-basic/ tree (templates and the config/ CMake
+# script excluded) plus the generated config/build.h and config/config.h
+# emitted into the build tree by include/shrewd-basic/config/CMakeLists.txt.
+if(SHREWD_BASIC_INSTALL)
+    install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/shrewd-basic
+            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+            PATTERN "*.in" EXCLUDE
+            PATTERN "CMakeLists.txt" EXCLUDE)
+    install(FILES
+            ${PROJECT_BINARY_DIR}/include/shrewd-basic/config/build.h
+            ${PROJECT_BINARY_DIR}/include/shrewd-basic/config/config.h
+            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/shrewd-basic/config)
 endif()

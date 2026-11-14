@@ -10,14 +10,25 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+# Support being built as a subproject of a larger build (add_subdirectory /
+# FetchContent): everything that belongs to a standalone build - the build
+# type default, tests, programs and install rules - stays out of the parent
+# project's way. As a subproject only the library targets are built.
+if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
+    set(SHREWD_BASIC_IS_TOP_LEVEL ON)
+else()
+    set(SHREWD_BASIC_IS_TOP_LEVEL OFF)
+endif()
+
+if(SHREWD_BASIC_IS_TOP_LEVEL AND NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
             Debug Release RelWithDebInfo MinSizeRel)
 endif()
 
-option(SHREWD_BASIC_BUILD_PROGRAMS "Build the command-line programs" ON)
-option(SHREWD_BASIC_BUILD_TESTS "Build the tests" ON)
+option(SHREWD_BASIC_BUILD_PROGRAMS "Build the command-line programs" ${SHREWD_BASIC_IS_TOP_LEVEL})
+option(SHREWD_BASIC_BUILD_TESTS "Build the tests" ${SHREWD_BASIC_IS_TOP_LEVEL})
+option(SHREWD_BASIC_INSTALL "Generate install rules" ${SHREWD_BASIC_IS_TOP_LEVEL})
 option(SHREWD_BASIC_BUILD_STATIC "Build the static library (libshrewd-basic.a)" ON)
 option(SHREWD_BASIC_BUILD_SHARED "Build the shared library (libshrewd-basic.so)" OFF)
 
