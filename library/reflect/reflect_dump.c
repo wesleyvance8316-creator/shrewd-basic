@@ -5,56 +5,90 @@
 #include <string.h>
 
 #include "shrewd-basic/log/log.h"
+#include "shrewd-basic/platform/memory.h"
 
 /* Shared reflect log module, defined in library/reflect/reflect.c. */
 SHREWD_BASIC_LOG_MODULE_DECLARE(shrewd_basic_reflect_log);
 
-#define DUMP_INDENT 2      /* spaces per nesting level */
-#define DUMP_MAX_DEPTH 16  /* indentation clamp (defensive) */
-#define DUMP_LINE_MAX 1536 /* one output line */
-#define DUMP_STR_MAX 256   /* raw string bytes before truncation */
-#define DUMP_ARRAY_MAX 32  /* elements rendered per array line */
+#define DUMP_INDENT 2     /* spaces per nesting level */
+#define DUMP_MAX_DEPTH 16 /* indentation clamp (defensive) */
+#define DUMP_STR_MAX 256  /* raw string bytes before truncation */
+#define DUMP_ARRAY_MAX 32 /* elements rendered per array line */
+#define DUMP_BODY_MIN 1024 /* initial body buffer */
 
 /*
- * One shared line buffer per dump() call: a line is always completed and
- * emitted before the next one is built (also across recursion), so the
- * buffer is reused rather than stacked per depth.
+ * The whole dump is one log record: the body is accumulated in a growable
+ * buffer and written through a single shrewd_basic_log() call, so only the
+ * first line carries the log prefix and the dump itself starts on the next
+ * line (unprefixed). The buffer is shared across recursion - a line is
+ * always completed before the next is built - and grows on demand; when it
+ * cannot grow further the output is truncated with a marker.
  */
 typedef struct dump_ctx {
-    char buf[DUMP_LINE_MAX];
+    char *buf;
+    size_t cap;
     size_t pos;
+    int truncated;
 } dump_ctx_t;
 
-static void dump_begin(dump_ctx_t *ctx)
+static int dump_init(dump_ctx_t *ctx)
 {
+    void *block = NULL;
+    ctx->buf = NULL;
+    ctx->cap = 0;
     ctx->pos = 0;
+    ctx->truncated = 0;
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_alloc(&block, DUMP_BODY_MIN)) {
+        return SHREWD_BASIC_ERR_MEM_NOMEM;
+    }
+    ctx->buf = block;
+    ctx->cap = DUMP_BODY_MIN;
     ctx->buf[0] = '\0';
+    return SHREWD_BASIC_ERR_OK;
 }
 
 static void dump_append(dump_ctx_t *ctx, const char *fmt, ...)
 {
-    if (ctx->pos >= sizeof(ctx->buf)) {
+    if (0 != ctx->truncated) {
         return;
     }
     va_list ap;
+    va_list copy;
     va_start(ap, fmt);
-    int written = vsnprintf(ctx->buf + ctx->pos, sizeof(ctx->buf) - ctx->pos, fmt, ap);
+    va_copy(copy, ap);
+    int needed = vsnprintf(NULL, 0, fmt, ap);
     va_end(ap);
-    if (0 > written) {
+    if (0 > needed) {
+        va_end(copy);
         return;
     }
-    if ((size_t)written >= sizeof(ctx->buf) - ctx->pos) {
-        ctx->pos = sizeof(ctx->buf); /* truncated: block further appends */
-    } else {
-        ctx->pos += (size_t)written;
+    size_t want = ctx->pos + (size_t)needed + 1;
+    if (want > ctx->cap) {
+        size_t cap = (ctx->cap * 2 > want) ? (ctx->cap * 2) : want;
+        void *block = NULL;
+        if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_realloc(&block, ctx->buf, cap)) {
+            /* Out of room: mark what fits and stop building. */
+            static const char marker[] = " ...(dump truncated)";
+            size_t slack = ctx->cap - ctx->pos;
+            if (slack > sizeof(marker)) {
+                memcpy(ctx->buf + ctx->pos, marker, sizeof(marker));
+                ctx->pos += sizeof(marker) - 1;
+            }
+            ctx->truncated = 1;
+            va_end(copy);
+            return;
+        }
+        ctx->buf = block;
+        ctx->cap = cap;
     }
+    (void)vsnprintf(ctx->buf + ctx->pos, ctx->cap - ctx->pos, fmt, copy);
+    va_end(copy);
+    ctx->pos += (size_t)needed;
 }
 
 static void dump_emit(dump_ctx_t *ctx)
 {
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_INFO, shrewd_basic_reflect_log, "dump",
-                     "%s\n", ctx->buf);
-    dump_begin(ctx);
+    dump_append(ctx, "\n");
 }
 
 /*
@@ -351,21 +385,26 @@ static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
     }
 }
 
-int shrewd_basic_reflect_dump(const shrewd_basic_reflect_type_t *type,
-                              const void *object, const char *label)
+int shrewd_basic_reflect_dump_write(const shrewd_basic_reflect_type_t *type,
+                              const void *object, const char *label,
+                              const char *file, int line, const char *func)
 {
     if ((NULL == type) || (NULL == object)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
-                         "dump", "dump: type or object is NULL\n");
+        shrewd_basic_log_write(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "dump", file, line, func, "dump: type or object is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
-                         "dump", "dump: type \"%s\" is not a struct\n", type->sb_refl_name);
+        shrewd_basic_log_write(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "dump", file, line, func, "dump: type \"%s\" is not a struct\n", type->sb_refl_name);
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     dump_ctx_t ctx;
-    dump_begin(&ctx);
+    if (SHREWD_BASIC_ERR_OK != dump_init(&ctx)) {
+        shrewd_basic_log_write(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_reflect_log,
+                         "dump", file, line, func, "dump: allocation failed\n");
+        return SHREWD_BASIC_ERR_MEM_NOMEM;
+    }
     if (NULL != label) {
         dump_append(&ctx, "%s (%s) {", label, type->sb_refl_name);
     } else {
@@ -375,5 +414,12 @@ int shrewd_basic_reflect_dump(const shrewd_basic_reflect_type_t *type,
     dump_fields(&ctx, type, (const unsigned char *)object, 1);
     dump_append(&ctx, "}");
     dump_emit(&ctx);
-    return SHREWD_BASIC_ERR_OK;
+    /* One log record: the prefix line, then the dump body from the next
+       line on - unprefixed. */
+    shrewd_basic_log_write(SHREWD_BASIC_LOG_LEVEL_INFO, shrewd_basic_reflect_log,
+                     "dump", file, line, func, "\n%s", ctx.buf);
+    int status = (0 != ctx.truncated) ? SHREWD_BASIC_ERR_MEM_NOMEM
+                                      : SHREWD_BASIC_ERR_OK;
+    (void)shrewd_basic_platform_free((void **)&ctx.buf);
+    return status;
 }

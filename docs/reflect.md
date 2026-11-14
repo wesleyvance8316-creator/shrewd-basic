@@ -174,7 +174,7 @@ SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                /* 跨 TU 
 | `type_find_field(type, name, &field)` | 扁平按名查字段 | `KEY_NOTFOUND` / `ARG_INVALID` |
 | `field_get(obj, field, out, n)` | 原始字节读字段(`n == field->sb_refl_size`) | `REFLECT_MISMATCH` / `ARG_INVALID` |
 | `field_set(obj, field, in, n)` | 原始字节写字段 | 同上 |
-| `dump(type, obj, label)` | 递归打印(type 需为 STRUCT) | `ARG_INVALID` |
+| `dump(type, obj, label)` 宏 | 递归打印(type 需为 STRUCT):单条 log 记录、记录调用位置 | `ARG_INVALID` / `MEM_NOMEM` |
 | `type_resolve(type, path, &field, &offset, &size)` | 路径→字段+偏移+值尺寸(纯元数据) | `KEY_NOTFOUND` / `ARG_INVALID` |
 | `path_get(obj, type, path, out, n)` | 沿路径读(自动解引用指针段) | `REFLECT_MISMATCH` / `KEY_NOTFOUND` / `ARG_INVALID` |
 | `path_set(obj, type, path, in, n)` | 沿路径写 | 同上 |
@@ -225,9 +225,11 @@ person (person_t) {
 }
 ```
 
-经共享 `"reflect"` log 模块输出(INFO 级、每行一条),因此**彩色前缀、输出重定向
-(`set_file`/全局输出)全部免费获得**;捕获测试用
-`shrewd_basic_log_module_find("reflect", &m)` + `set_stream(tmpfile())`。
+经共享 `"reflect"` log 模块输出:**一次 dump 一条记录**——仅首行带日志前缀,正文从下一行
+开始独立、无前缀。`shrewd_basic_reflect_dump` 是宏,`__FILE__/__LINE__/__func__` 注入调用
+位置,前缀显示的是 dump 的**发起处**(而非 reflect_dump.c 内部)。彩色前缀、输出重定向
+(`set_file`/全局输出)全部免费获得;捕获测试用 `shrewd_basic_log_module_find("reflect", &m)`
+ + `set_stream(tmpfile())`。
 
 ---
 

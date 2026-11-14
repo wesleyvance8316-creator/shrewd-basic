@@ -390,12 +390,24 @@ int shrewd_basic_reflect_field_set(void *object,
 
 /**
  * Pretty-print @p object according to @p type through the "reflect" log
- * module (one log line per output line, level INFO). @p label may be NULL.
+ * module as a single log record (one prefix line, then the unprefixed
+ * dump body from the next line on; level INFO). @p label may be NULL.
  * @p type must describe a struct (SHREWD_BASIC_REFLECT_KIND_STRUCT); the
- * nested fields are rendered recursively with indentation.
+ * nested fields are rendered recursively with indentation. Use the
+ * shrewd_basic_reflect_dump() macro to record the call site.
  */
-int shrewd_basic_reflect_dump(const shrewd_basic_reflect_type_t *type,
-                              const void *object, const char *label);
+int shrewd_basic_reflect_dump_write(const shrewd_basic_reflect_type_t *type,
+                                    const void *object, const char *label,
+                                    const char *file, int line, const char *func);
+
+/**
+ * Pretty-print through shrewd_basic_reflect_dump_write() with the call site
+ * captured, so the log record's prefix shows where the dump was requested
+ * (same pattern as the shrewd_basic_log() macro).
+ */
+#define shrewd_basic_reflect_dump(type, object, label)                         \
+    shrewd_basic_reflect_dump_write((type), (object), (label),                 \
+                                    __FILE__, __LINE__, __func__)
 
 /*
  * Path syntax shared by the three functions below:

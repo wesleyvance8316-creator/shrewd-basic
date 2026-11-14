@@ -653,9 +653,14 @@ static void test_dump(void)
                 && (NULL != strstr(buf, "  pair[1] = {"))
                 && (NULL != strstr(buf, "    x = 8"))
                 && (NULL != strstr(buf, "    y = 9")));
-    /* Every payload line is a full log line: match per line, not across. */
-    expect_true("dump nested close", NULL != strstr(buf, "[dump]   }\n"));
-    expect_true("dump top close", NULL != strstr(buf, "[dump] }\n"));
+    /* One log record: only the first line carries the prefix, the body
+       starts on the next line, and the prefix points at the dump call
+       site (the macro) rather than reflect_dump.c. */
+    expect_true("dump single record",
+                NULL != strstr(buf, "[dump] \nperson (person_t) {"));
+    expect_true("dump call site", NULL != strstr(buf, "test_reflect.c:"));
+    expect_true("dump nested close", NULL != strstr(buf, "    y = 5\n  }\n"));
+    expect_true("dump top close", NULL != strstr(buf, "  }\n}\n"));
     fclose(stream);
 
     /* Phase 2: escapes and the label-free header. */
