@@ -927,7 +927,22 @@ static void test_dump_pointers(void)
                   SHREWD_BASIC_ERR_OK);
     memset(buf, 0, sizeof(buf));
     slurp(stream, buf, sizeof(buf));
-    expect_true("dump_ptr cycle capped", NULL != strstr(buf, "...(max depth)"));
+    expect_true("dump_ptr cycle detected", NULL != strstr(buf, "...(cyclic)"));
+    expect_true("dump_ptr cycle no spam", NULL == strstr(buf, "...(max depth)"));
+
+    /* A deep but finite chain still hits the depth cap. */
+    node_t chain[20];
+    memset(chain, 0, sizeof(chain));
+    for (size_t i = 0; i + 1 < 20; ++i) {
+        chain[i].data = (int32_t)i;
+        chain[i].next = &chain[i + 1];
+    }
+    expect_eq_int("dump_ptr deep chain",
+                  shrewd_basic_reflect_dump(&g_node_reflect, &chain[0], "node"),
+                  SHREWD_BASIC_ERR_OK);
+    memset(buf, 0, sizeof(buf));
+    slurp(stream, buf, sizeof(buf));
+    expect_true("dump_ptr deep chain capped", NULL != strstr(buf, "...(max depth)"));
 
     shrewd_basic_log_module_set_stream(module, stderr);
     fclose(stream);
@@ -1367,17 +1382,63 @@ static void test_graph_ops(void)
                   shrewd_basic_reflect_copy(&bad, &refs, &g_refs_reflect),
                   SHREWD_BASIC_ERR_ARG_INVALID);
 
-    /* Cyclic graphs are aliased past the depth cap (tree-only contract). */
+    /* Cyclic and shared graphs: the clone map and the visited set make
+       copy and destroy sound - the clone keeps the cycle, shared sources
+       stay shared, and every clone is freed exactly once. */
     node_t loop;
     memset(&loop, 0, sizeof(loop));
     loop.next = &loop;
     void *loop_clone = NULL;
-    expect_eq_int("copy cycle capped",
+    expect_eq_int("copy cycle",
                   shrewd_basic_reflect_copy(&loop_clone, &loop, &g_node_reflect),
                   SHREWD_BASIC_ERR_OK);
-    expect_true("copy cycle cloned", NULL != loop_clone);
-    expect_eq_int("destroy cycle capped",
+    node_t *cycle = loop_clone;
+    expect_true("copy cycle shape",
+                (NULL != cycle) && (cycle != &loop) && (cycle->next == cycle));
+    expect_eq_int("check cycle",
+                  shrewd_basic_reflect_check(loop_clone, &g_node_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("destroy cycle",
                   shrewd_basic_reflect_destroy(loop_clone, &g_node_reflect),
+                  SHREWD_BASIC_ERR_OK);
+
+    node_t ring_a;
+    node_t ring_b;
+    memset(&ring_a, 0, sizeof(ring_a));
+    memset(&ring_b, 0, sizeof(ring_b));
+    ring_a.next = &ring_b;
+    ring_b.next = &ring_a;
+    void *ring_clone = NULL;
+    expect_eq_int("copy ring",
+                  shrewd_basic_reflect_copy(&ring_clone, &ring_a, &g_node_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    node_t *ring_head = ring_clone;
+    expect_true("copy ring shape",
+                (NULL != ring_head) && (ring_head != &ring_a)
+                && (ring_head->next != &ring_b)
+                && (ring_head->next->next == ring_head));
+    expect_eq_int("destroy ring",
+                  shrewd_basic_reflect_destroy(ring_clone, &g_node_reflect),
+                  SHREWD_BASIC_ERR_OK);
+
+    /* Diamond: two references to one object stay one shared clone. */
+    point_t shared;
+    memset(&shared, 0, sizeof(shared));
+    shared.x = 7;
+    refs_t diamond;
+    memset(&diamond, 0, sizeof(diamond));
+    diamond.team[0] = &shared;
+    diamond.team[1] = &shared;
+    void *diamond_clone = NULL;
+    expect_eq_int("copy diamond",
+                  shrewd_basic_reflect_copy(&diamond_clone, &diamond, &g_refs_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    refs_t *d = diamond_clone;
+    expect_true("copy diamond shared",
+                (NULL != d->team[0]) && (d->team[0] == d->team[1])
+                && (d->team[0] != &shared) && (7 == d->team[0]->x));
+    expect_eq_int("destroy diamond",
+                  shrewd_basic_reflect_destroy(diamond_clone, &g_refs_reflect),
                   SHREWD_BASIC_ERR_OK);
 
     expect_eq_int("copy NULL out",

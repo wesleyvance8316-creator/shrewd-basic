@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "shrewd-basic/log/log.h"
+#include "shrewd-basic/ds/rbtree.h"
 #include "shrewd-basic/platform/memory.h"
 
 /*
@@ -436,7 +437,7 @@ static const shrewd_basic_reflect_ops_t *reflect_field_ops(
     return (NULL != field->sb_refl_ops) ? field->sb_refl_ops : field->sb_refl_type->sb_refl_ops;
 }
 
-/* Defensive recursion cap for the graph walkers (tree-only contract). */
+/* Defensive recursion cap for the graph walkers. */
 #define REFLECT_MAX_DEPTH 16
 
 /* Target address of a single-value field (deref one pointer level). */
@@ -545,8 +546,121 @@ int shrewd_basic_reflect_value_set(void *object,
 
 /* --- graph walkers: check / copy / destroy ---------------------------- */
 
+/*
+ * Graph tracking (rbtree-backed, address-ordered): a visited set records
+ * pointer targets already processed so cycles and shared nodes are
+ * handled exactly once, and a clone map records src -> clone so shared
+ * sources stay shared and back-edges find their clone. Value nesting is
+ * statically finite and needs no tracking.
+ */
+typedef struct reflect_pair {
+    const void *src;
+    void *dst;
+    const shrewd_basic_reflect_ops_t *ops; /* set for ops->copy clones */
+} reflect_pair_t;
+
+static int reflect_cmp_addr(const void *a, const void *b, void *ctx)
+{
+    uintptr_t x = (uintptr_t)a;
+    uintptr_t y = (uintptr_t)b;
+    (void)ctx;
+    return (x < y) ? -1 : ((x > y) ? 1 : 0);
+}
+
+static int reflect_cmp_pair(const void *a, const void *b, void *ctx)
+{
+    uintptr_t x = (uintptr_t)((const reflect_pair_t *)a)->src;
+    uintptr_t y = (uintptr_t)((const reflect_pair_t *)b)->src;
+    (void)ctx;
+    return (x < y) ? -1 : ((x > y) ? 1 : 0);
+}
+
+/* 1 in *out_seen when @p pointer was visited before; records it otherwise. */
+static int reflect_visited_check(shrewd_basic_rbtree_t *visited,
+                                 const void *pointer, int *out_seen)
+{
+    void *found = NULL;
+    if (SHREWD_BASIC_ERR_OK == shrewd_basic_rbtree_search(visited, pointer, &found)) {
+        *out_seen = 1;
+        return SHREWD_BASIC_ERR_OK;
+    }
+    *out_seen = 0;
+    return shrewd_basic_rbtree_insert(visited, (void *)(uintptr_t)pointer);
+}
+
+/* 1 in *out_found with *out_dst when @p src already has a clone. */
+static int reflect_map_lookup(shrewd_basic_rbtree_t *map, const void *src,
+                              void **out_dst, int *out_found)
+{
+    reflect_pair_t probe;
+    void *found = NULL;
+    probe.src = src;
+    probe.dst = NULL;
+    if (SHREWD_BASIC_ERR_OK == shrewd_basic_rbtree_search(map, &probe, &found)) {
+        *out_dst = ((const reflect_pair_t *)found)->dst;
+        *out_found = 1;
+    } else {
+        *out_found = 0;
+    }
+    return SHREWD_BASIC_ERR_OK;
+}
+
+static int reflect_map_insert(shrewd_basic_rbtree_t *map, const void *src, void *dst,
+                              const shrewd_basic_reflect_ops_t *ops)
+{
+    reflect_pair_t *pair = NULL;
+    void *block = NULL;
+    int status = shrewd_basic_platform_alloc(&block, sizeof(*pair));
+    if (SHREWD_BASIC_ERR_OK != status) {
+        return status;
+    }
+    pair = block;
+    pair->src = src;
+    pair->dst = dst;
+    pair->ops = ops;
+    status = shrewd_basic_rbtree_insert(map, pair);
+    if (SHREWD_BASIC_ERR_OK != status) {
+        (void)shrewd_basic_platform_free(&block);
+    }
+    return status;
+}
+
+/*
+ * Release the map: with @p free_dst every recorded clone is destroyed as
+ * well (ops clones through ops->destroy) - the cleanup path of a failed
+ * copy, where the map is the authoritative list of what was created.
+ */
+static void reflect_map_release(shrewd_basic_rbtree_t *map, int free_dst)
+{
+    if (NULL == map) {
+        return;
+    }
+    for (;;) {
+        void *data = NULL;
+        reflect_pair_t *pair = NULL;
+        if (SHREWD_BASIC_ERR_OK != shrewd_basic_rbtree_min(map, &data)) {
+            break;
+        }
+        pair = data;
+        if (0 != free_dst) {
+            if (NULL != pair->ops) {
+                if (NULL != pair->ops->destroy) {
+                    pair->ops->destroy(pair->dst);
+                }
+            } else {
+                (void)shrewd_basic_platform_free(&pair->dst);
+            }
+        }
+        void *removed = NULL;
+        (void)shrewd_basic_rbtree_remove(map, pair, &removed);
+        (void)shrewd_basic_platform_free((void **)&pair);
+    }
+    (void)shrewd_basic_rbtree_destroy(map);
+}
+
 static int reflect_check_node(const shrewd_basic_reflect_type_t *type, const void *value,
-                              const shrewd_basic_reflect_ops_t *ops, size_t depth)
+                              const shrewd_basic_reflect_ops_t *ops,
+                              shrewd_basic_rbtree_t *visited, size_t depth)
 {
     if (REFLECT_MAX_DEPTH <= depth) {
         return SHREWD_BASIC_ERR_OK;
@@ -568,13 +682,22 @@ static int reflect_check_node(const shrewd_basic_reflect_type_t *type, const voi
             const void *target = elem;
             if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
                 void *pointer = NULL;
+                int seen = 0;
                 memcpy(&pointer, elem, sizeof(pointer));
                 if (NULL == pointer) {
                     continue;
                 }
+                int status = reflect_visited_check(visited, pointer, &seen);
+                if (SHREWD_BASIC_ERR_OK != status) {
+                    return status;
+                }
+                if (0 != seen) {
+                    continue;
+                }
                 target = pointer;
             }
-            int status = reflect_check_node(field->sb_refl_type, target, field_ops, depth + 1);
+            int status = reflect_check_node(field->sb_refl_type, target, field_ops,
+                                            visited, depth + 1);
             if (SHREWD_BASIC_ERR_OK != status) {
                 return status;
             }
@@ -591,7 +714,19 @@ int shrewd_basic_reflect_check(const void *object,
                          "field", "check: object or type is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
-    int status = reflect_check_node(type, object, type->sb_refl_ops, 0);
+    shrewd_basic_rbtree_t *visited = NULL;
+    int status = shrewd_basic_rbtree_create(reflect_cmp_addr, NULL, &visited);
+    if (SHREWD_BASIC_ERR_OK != status) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_reflect_log,
+                         "field", "check: allocation failed\n");
+        return status;
+    }
+    int seen = 0;
+    status = reflect_visited_check(visited, object, &seen);
+    if (SHREWD_BASIC_ERR_OK == status) {
+        status = reflect_check_node(type, object, type->sb_refl_ops, visited, 0);
+    }
+    (void)shrewd_basic_rbtree_destroy(visited);
     if (SHREWD_BASIC_ERR_OK == status) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
                          "field", "check ok (%s)\n", type->sb_refl_name);
@@ -604,43 +739,41 @@ int shrewd_basic_reflect_check(const void *object,
 }
 
 static int reflect_destroy_value(const shrewd_basic_reflect_type_t *type, void *value,
-                                 size_t depth);
+                                 shrewd_basic_rbtree_t *visited, size_t depth);
 static int reflect_copy_value(const shrewd_basic_reflect_type_t *type,
                               const unsigned char *src, unsigned char *dst,
-                              size_t depth);
+                              shrewd_basic_rbtree_t *map, size_t depth);
 
 /*
  * Clone an object (a pointee, or the root of copy): ops->copy handles
- * opaque/complex targets, struct targets are cloned recursively, scalar
- * targets at their canonical width, string targets stay borrowed
- * (aliased) and past the depth cap pointers are aliased defensively.
+ * opaque/complex targets, struct and scalar targets are cloned (shared
+ * sources map to shared clones, so cycles and diamonds stay sound),
+ * string targets stay borrowed (aliased) and past the depth cap pointers
+ * are aliased defensively.
  */
 static int reflect_clone_target(const shrewd_basic_reflect_type_t *type, const void *src,
                                 const shrewd_basic_reflect_ops_t *ops,
-                                void **out, size_t depth)
+                                void **out, shrewd_basic_rbtree_t *map, size_t depth)
 {
+    int found = 0;
+    void *existing = NULL;
+    int status = reflect_map_lookup(map, src, &existing, &found);
+    if (SHREWD_BASIC_ERR_OK != status) {
+        return status;
+    }
+    if (0 != found) {
+        *out = existing;
+        return SHREWD_BASIC_ERR_OK;
+    }
     if ((NULL != ops) && (NULL != ops->copy)) {
-        return ops->copy(out, src);
-    }
-    if (REFLECT_MAX_DEPTH <= depth) {
-        *out = (void *)(uintptr_t)src;
-        return SHREWD_BASIC_ERR_OK;
-    }
-    if (SHREWD_BASIC_REFLECT_KIND_STRUCT == type->sb_refl_kind) {
-        void *block = NULL;
-        int status = shrewd_basic_platform_calloc(&block, 1, type->sb_refl_size);
-        if (SHREWD_BASIC_ERR_OK != status) {
-            return status;
+        status = ops->copy(out, src);
+        if (SHREWD_BASIC_ERR_OK == status) {
+            /* Tracked so failure cleanup can call ops->destroy; the
+               insert is best-effort (a lost record would only leak the
+               clone of a copy that is being discarded anyway). */
+            (void)reflect_map_insert(map, src, *out, ops);
         }
-        status = reflect_copy_value(type, (const unsigned char *)src,
-                                    (unsigned char *)block, depth);
-        if (SHREWD_BASIC_ERR_OK != status) {
-            (void)reflect_destroy_value(type, block, depth);
-            (void)shrewd_basic_platform_free(&block);
-            return status;
-        }
-        *out = block;
-        return SHREWD_BASIC_ERR_OK;
+        return status;
     }
     if (SHREWD_BASIC_REFLECT_KIND_STRING == type->sb_refl_kind) {
         *out = (void *)(uintptr_t)src;
@@ -649,19 +782,52 @@ static int reflect_clone_target(const shrewd_basic_reflect_type_t *type, const v
     if (SHREWD_BASIC_REFLECT_KIND_OPAQUE == type->sb_refl_kind) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
+    if (REFLECT_MAX_DEPTH <= depth) {
+        /* Defensive: past the cap the pointer is aliased. Such aliases
+           sit beyond the destroy walker's cap as well, so they are never
+           freed - the clone graph and its destruction stay consistent. */
+        *out = (void *)(uintptr_t)src;
+        return SHREWD_BASIC_ERR_OK;
+    }
+    if (SHREWD_BASIC_REFLECT_KIND_STRUCT == type->sb_refl_kind) {
+        void *block = NULL;
+        status = shrewd_basic_platform_calloc(&block, 1, type->sb_refl_size);
+        if (SHREWD_BASIC_ERR_OK != status) {
+            return status;
+        }
+        /* Register before recursing so back-edges find the clone; after
+           registration the map owns cleanup on failure. */
+        status = reflect_map_insert(map, src, block, NULL);
+        if (SHREWD_BASIC_ERR_OK != status) {
+            (void)shrewd_basic_platform_free(&block);
+            return status;
+        }
+        status = reflect_copy_value(type, (const unsigned char *)src,
+                                    (unsigned char *)block, map, depth);
+        if (SHREWD_BASIC_ERR_OK == status) {
+            *out = block;
+        }
+        return status;
+    }
     void *block = NULL;
-    int status = shrewd_basic_platform_alloc(&block, type->sb_refl_size);
+    status = shrewd_basic_platform_alloc(&block, type->sb_refl_size);
     if (SHREWD_BASIC_ERR_OK != status) {
         return status;
     }
     memcpy(block, src, type->sb_refl_size);
+    status = reflect_map_insert(map, src, block, NULL);
+    if (SHREWD_BASIC_ERR_OK != status) {
+        (void)shrewd_basic_platform_free(&block);
+        return status;
+    }
     *out = block;
     return SHREWD_BASIC_ERR_OK;
 }
 
 /* Copy a value's contents into existing dst storage (zero-initialized). */
 static int reflect_copy_value(const shrewd_basic_reflect_type_t *type,
-                              const unsigned char *src, unsigned char *dst, size_t depth)
+                              const unsigned char *src, unsigned char *dst,
+                              shrewd_basic_rbtree_t *map, size_t depth)
 {
     if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
         memcpy(dst, src, type->sb_refl_size);
@@ -684,13 +850,13 @@ static int reflect_copy_value(const shrewd_basic_reflect_type_t *type,
                 void *clone = NULL;
                 int status = reflect_clone_target(field->sb_refl_type, pointer,
                                                   reflect_field_ops(field),
-                                                  &clone, depth + 1);
+                                                  &clone, map, depth + 1);
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
                 }
                 memcpy(dst_elem, &clone, sizeof(clone));
             } else if (SHREWD_BASIC_REFLECT_KIND_STRUCT == field->sb_refl_type->sb_refl_kind) {
-                int status = reflect_copy_value(field->sb_refl_type, src_elem, dst_elem, depth + 1);
+                int status = reflect_copy_value(field->sb_refl_type, src_elem, dst_elem, map, depth + 1);
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
                 }
@@ -710,8 +876,16 @@ int shrewd_basic_reflect_copy(void **out, const void *object,
                          "field", "copy: out, object or type is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
+    shrewd_basic_rbtree_t *map = NULL;
+    int status = shrewd_basic_rbtree_create(reflect_cmp_pair, NULL, &map);
+    if (SHREWD_BASIC_ERR_OK != status) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_reflect_log,
+                         "field", "copy: allocation failed\n");
+        return status;
+    }
     if ((NULL != type->sb_refl_ops) && (NULL != type->sb_refl_ops->copy)) {
-        int status = type->sb_refl_ops->copy(out, object);
+        status = type->sb_refl_ops->copy(out, object);
+        reflect_map_release(map, (SHREWD_BASIC_ERR_OK != status) ? 1 : 0);
         if (SHREWD_BASIC_ERR_OK == status) {
             shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
                              "field", "copy ok (%s)\n", type->sb_refl_name);
@@ -721,25 +895,32 @@ int shrewd_basic_reflect_copy(void **out, const void *object,
     if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
                          "field", "copy: type \"%s\" needs ops->copy\n", type->sb_refl_name);
+        (void)shrewd_basic_rbtree_destroy(map);
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     void *block = NULL;
-    int status = shrewd_basic_platform_calloc(&block, 1, type->sb_refl_size);
+    status = shrewd_basic_platform_calloc(&block, 1, type->sb_refl_size);
     if (SHREWD_BASIC_ERR_OK != status) {
+        (void)shrewd_basic_rbtree_destroy(map);
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_reflect_log,
                          "field", "copy: allocation failed\n");
         return status;
     }
-    status = reflect_copy_value(type, (const unsigned char *)object,
-                                (unsigned char *)block, 0);
+    status = reflect_map_insert(map, object, block, NULL);
+    if (SHREWD_BASIC_ERR_OK == status) {
+        status = reflect_copy_value(type, (const unsigned char *)object,
+                                    (unsigned char *)block, map, 0);
+    }
     if (SHREWD_BASIC_ERR_OK != status) {
-        (void)reflect_destroy_value(type, block, 0);
-        (void)shrewd_basic_platform_free(&block);
+        /* The map is the authoritative record of every clone made;
+           releasing it frees the partial graph (ops clones included). */
+        reflect_map_release(map, 1);
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
                          "field", "copy: failed (%s)\n",
                          shrewd_basic_error_name(status));
         return status;
     }
+    reflect_map_release(map, 0);
     *out = block;
     shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
                      "field", "copy ok (%s)\n", type->sb_refl_name);
@@ -754,17 +935,26 @@ int shrewd_basic_reflect_copy(void **out, const void *object,
  * released.
  */
 static int reflect_destroy_target(const shrewd_basic_reflect_type_t *type, void *pointee,
-                                  const shrewd_basic_reflect_ops_t *ops, size_t depth)
+                                  const shrewd_basic_reflect_ops_t *ops,
+                                  shrewd_basic_rbtree_t *visited, size_t depth)
 {
+    if (REFLECT_MAX_DEPTH <= depth) {
+        return SHREWD_BASIC_ERR_OK;
+    }
+    int seen = 0;
+    int status = reflect_visited_check(visited, pointee, &seen);
+    if (SHREWD_BASIC_ERR_OK != status) {
+        return status;
+    }
+    if (0 != seen) {
+        return SHREWD_BASIC_ERR_OK;
+    }
     if ((NULL != ops) && (NULL != ops->destroy)) {
         ops->destroy(pointee);
         return SHREWD_BASIC_ERR_OK;
     }
-    if (REFLECT_MAX_DEPTH <= depth) {
-        return SHREWD_BASIC_ERR_OK;
-    }
     if (SHREWD_BASIC_REFLECT_KIND_STRUCT == type->sb_refl_kind) {
-        int status = reflect_destroy_value(type, pointee, depth);
+        status = reflect_destroy_value(type, pointee, visited, depth);
         if (SHREWD_BASIC_ERR_OK != status) {
             return status;
         }
@@ -781,7 +971,7 @@ static int reflect_destroy_target(const shrewd_basic_reflect_type_t *type, void 
 
 /* Release the pointer targets of a value; the value storage is untouched. */
 static int reflect_destroy_value(const shrewd_basic_reflect_type_t *type, void *value,
-                                 size_t depth)
+                                 shrewd_basic_rbtree_t *visited, size_t depth)
 {
     if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
         return SHREWD_BASIC_ERR_OK;
@@ -801,12 +991,13 @@ static int reflect_destroy_value(const shrewd_basic_reflect_type_t *type, void *
                     continue;
                 }
                 int status = reflect_destroy_target(field->sb_refl_type, pointer,
-                                                    field_ops, depth + 1);
+                                                    field_ops, visited, depth + 1);
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
                 }
             } else if (SHREWD_BASIC_REFLECT_KIND_STRUCT == field->sb_refl_type->sb_refl_kind) {
-                int status = reflect_destroy_value(field->sb_refl_type, elem, depth + 1);
+                int status = reflect_destroy_value(field->sb_refl_type, elem,
+                                                   visited, depth + 1);
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
                 }
@@ -836,10 +1027,23 @@ int shrewd_basic_reflect_destroy(void *object,
                          type->sb_refl_name);
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
-    int status = reflect_destroy_value(type, object, 0);
+    shrewd_basic_rbtree_t *visited = NULL;
+    int status = shrewd_basic_rbtree_create(reflect_cmp_addr, NULL, &visited);
+    if (SHREWD_BASIC_ERR_OK != status) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_reflect_log,
+                         "field", "destroy: allocation failed\n");
+        return status;
+    }
+    /* Mark the root first: cycles back to it must not free it twice. */
+    int seen = 0;
+    status = reflect_visited_check(visited, object, &seen);
+    if (SHREWD_BASIC_ERR_OK == status) {
+        status = reflect_destroy_value(type, object, visited, 0);
+    }
     if (SHREWD_BASIC_ERR_OK == status) {
         status = shrewd_basic_platform_free(&object);
     }
+    (void)shrewd_basic_rbtree_destroy(visited);
     if (SHREWD_BASIC_ERR_OK == status) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
                          "field", "destroy ok (%s)\n", type->sb_refl_name);

@@ -29,6 +29,7 @@ typedef struct dump_ctx {
     size_t cap;
     size_t pos;
     int truncated;
+    const void *path[DUMP_MAX_DEPTH]; /* objects on the render stack */
 } dump_ctx_t;
 
 static int dump_init(dump_ctx_t *ctx)
@@ -285,14 +286,27 @@ static void dump_scalar(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
 
 /*
  * Render every field of `object`. A F_PTR slot is followed (the pointee
- * is rendered; NULL shows "(null)", opaque targets show their address);
- * recursion is hard-capped at DUMP_MAX_DEPTH so self-referential graphs
- * terminate with " ...(max depth)".
+ * is rendered; NULL shows "(null)", opaque targets show their address).
+ * Re-entering an object already on the render stack - a cycle in the
+ * object graph - stops with " ...(cyclic)"; the recursion is also
+ * hard-capped at DUMP_MAX_DEPTH (" ...(max depth)") as a last resort.
  */
+static int dump_target_seen(const dump_ctx_t *ctx, size_t depth,
+                            const void *target)
+{
+    for (size_t i = 0; i < depth; ++i) {
+        if (ctx->path[i] == target) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type,
                         const unsigned char *object, size_t depth)
 {
     size_t level = (depth < DUMP_MAX_DEPTH) ? depth : DUMP_MAX_DEPTH;
+    ctx->path[depth - 1] = object;
     int pad = (int)(level * DUMP_INDENT);
     for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
         const shrewd_basic_reflect_field_t *field = &type->sb_refl_fields[i];
@@ -316,6 +330,12 @@ static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
                         continue;
                     }
                     target = (const unsigned char *)pointer;
+                }
+                if (0 != dump_target_seen(ctx, depth, target)) {
+                    dump_append(ctx, "%*s%s[%zu] = ...(cyclic)", pad, "",
+                                field->sb_refl_name, j);
+                    dump_emit(ctx);
+                    continue;
                 }
                 if (depth >= DUMP_MAX_DEPTH) {
                     dump_append(ctx, "%*s%s[%zu] = ...(max depth)", pad, "", field->sb_refl_name, j);
@@ -368,7 +388,10 @@ static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
                             (unsigned long long)(uintptr_t)pointer);
                 dump_emit(ctx);
             } else if (0 != is_struct) {
-                if (depth >= DUMP_MAX_DEPTH) {
+                if (0 != dump_target_seen(ctx, depth, pointer)) {
+                    dump_append(ctx, "%*s%s = ...(cyclic)", pad, "", field->sb_refl_name);
+                    dump_emit(ctx);
+                } else if (depth >= DUMP_MAX_DEPTH) {
                     dump_append(ctx, "%*s%s = ...(max depth)", pad, "", field->sb_refl_name);
                     dump_emit(ctx);
                 } else {
@@ -385,7 +408,10 @@ static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
                 dump_emit(ctx);
             }
         } else if (0 != is_struct) {
-            if (depth >= DUMP_MAX_DEPTH) {
+            if (0 != dump_target_seen(ctx, depth, at)) {
+                dump_append(ctx, "%*s%s = ...(cyclic)", pad, "", field->sb_refl_name);
+                dump_emit(ctx);
+            } else if (depth >= DUMP_MAX_DEPTH) {
                 dump_append(ctx, "%*s%s = ...(max depth)", pad, "", field->sb_refl_name);
                 dump_emit(ctx);
             } else {
