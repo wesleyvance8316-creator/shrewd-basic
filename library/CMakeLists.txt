@@ -1,10 +1,19 @@
 include(GNUInstallDirs)
 
-# Library sources. Internal headers live in include/shrewd-basic-internal and
-# are only visible to this target; public headers are in include/shrewd-basic.
+# Library sources: core code in src/, data-structure components in ds/,
+# platform wrappers in platform/.
+# Internal headers live in include/shrewd-basic-internal and are only visible
+# to this target; public headers are in include/shrewd-basic.
 add_library(shrewd-basic
         src/shrewd-basic.c
-        src/shrewd-basic-internal.c)
+        src/shrewd-basic-internal.c
+        platform/memory.c
+        ds/slist.c
+        ds/dlist.c
+        ds/queue.c
+        ds/stack.c
+        ds/btree.c
+        ds/rbtree.c)
 
 add_library(shrewd-basic::shrewd-basic ALIAS shrewd-basic)
 

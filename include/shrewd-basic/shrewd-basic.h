@@ -6,12 +6,17 @@
  * @brief Public API of the shrewd-basic library.
  */
 
+#include "shrewd-basic/platform/error.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/** Library version string, e.g. "0.1.0". */
-const char *shrewd_basic_version(void);
+/**
+ * Store the library version string, e.g. "0.1.0", into @p *out.
+ * Returns SHREWD_BASIC_ERR_OK or SHREWD_BASIC_ERR_ARG_INVALID.
+ */
+int shrewd_basic_version(const char **out);
 
 /**
  * Return @p value clamped into the inclusive range [@p low, @p high].
