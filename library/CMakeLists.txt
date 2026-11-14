@@ -16,7 +16,9 @@ add_library(shrewd-basic
         ds/queue.c
         ds/stack.c
         ds/btree.c
-        ds/rbtree.c)
+        ds/rbtree.c
+        ds/trie.c
+        ds/radix.c)
 
 add_library(shrewd-basic::shrewd-basic ALIAS shrewd-basic)
 

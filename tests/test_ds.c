@@ -1,13 +1,16 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "shrewd-basic/ds/btree.h"
 #include "shrewd-basic/ds/dlist.h"
 #include "shrewd-basic/ds/queue.h"
+#include "shrewd-basic/ds/radix.h"
 #include "shrewd-basic/ds/rbtree.h"
 #include "shrewd-basic/ds/slist.h"
 #include "shrewd-basic/ds/stack.h"
+#include "shrewd-basic/ds/trie.h"
 
 static int g_failures = 0;
 
@@ -527,6 +530,278 @@ static void test_rbtree(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
+/* Key collector for trie/radix foreach. */
+struct key_ctx {
+    char keys[32][32];
+    size_t n;
+    int stop_after;
+};
+
+static int collect_key(const char *key, void *value, void *ctx)
+{
+    (void)value;
+    struct key_ctx *c = ctx;
+    if (c->n < sizeof(c->keys) / sizeof(c->keys[0])) {
+        snprintf(c->keys[c->n], sizeof(c->keys[0]), "%s", key);
+        ++c->n;
+    }
+    if ((0 != c->stop_after) && (c->n >= (size_t)c->stop_after)) {
+        return SHREWD_BASIC_ERR_KEY_EXISTS;
+    }
+    return SHREWD_BASIC_ERR_OK;
+}
+
+static int keys_match(const struct key_ctx *c, const char *const *want, size_t n)
+{
+    if (c->n != n) {
+        return 0;
+    }
+    for (size_t i = 0; i < n; ++i) {
+        if (0 != strcmp(c->keys[i], want[i])) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static void test_trie(void)
+{
+    shrewd_basic_trie_t *trie = NULL;
+    expect_eq_int("trie create", shrewd_basic_trie_create(&trie), SHREWD_BASIC_ERR_OK);
+    expect_true("trie create out", NULL != trie);
+    expect_true("trie empty", shrewd_basic_trie_empty(trie));
+    expect_eq_int("trie create NULL out", shrewd_basic_trie_create(NULL),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+
+    expect_eq_int("trie insert app", shrewd_basic_trie_insert(trie, "app", iv(1)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("trie insert apple", shrewd_basic_trie_insert(trie, "apple", iv(2)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("trie insert ape", shrewd_basic_trie_insert(trie, "ape", iv(3)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("trie insert bat", shrewd_basic_trie_insert(trie, "bat", iv(4)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("trie insert empty key", shrewd_basic_trie_insert(trie, "", iv(5)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("trie insert duplicate",
+                  shrewd_basic_trie_insert(trie, "app", iv(9)),
+                  SHREWD_BASIC_ERR_KEY_EXISTS);
+
+    size_t size = 0;
+    expect_eq_int("trie size", shrewd_basic_trie_size(trie, &size), SHREWD_BASIC_ERR_OK);
+    expect_true("trie size is 5", 5 == size);
+
+    void *out = NULL;
+    expect_eq_int("trie search app", shrewd_basic_trie_search(trie, "app", &out),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("trie search app value", 1 == pv(out));
+    expect_eq_int("trie search empty key", shrewd_basic_trie_search(trie, "", &out),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("trie search empty value", 5 == pv(out));
+    expect_eq_int("trie search prefix miss", shrewd_basic_trie_search(trie, "ap", &out),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("trie search miss", shrewd_basic_trie_search(trie, "zap", &out),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+
+    /* Lexicographic order: "", "ape", "app", "apple", "bat". */
+    static const char *const sorted[] = {"", "ape", "app", "apple", "bat"};
+    struct key_ctx kc = {0};
+    expect_eq_int("trie foreach", shrewd_basic_trie_foreach(trie, collect_key, &kc),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("trie foreach order", keys_match(&kc, sorted, 5));
+
+    static const char *const under_app[] = {"app", "apple"};
+    struct key_ctx kp = {0};
+    expect_eq_int("trie foreach_prefix app",
+                  shrewd_basic_trie_foreach_prefix(trie, "app", collect_key, &kp),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("trie prefix app keys", keys_match(&kp, under_app, 2));
+
+    struct key_ctx kz = {0};
+    expect_eq_int("trie foreach_prefix miss",
+                  shrewd_basic_trie_foreach_prefix(trie, "zz", collect_key, &kz),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("trie prefix miss visits nothing", 0 == kz.n);
+
+    struct key_ctx ka = {.stop_after = 2};
+    expect_eq_int("trie foreach abort",
+                  shrewd_basic_trie_foreach(trie, collect_key, &ka),
+                  SHREWD_BASIC_ERR_KEY_EXISTS);
+    expect_true("trie foreach abort count", 2 == ka.n);
+
+    out = NULL;
+    expect_eq_int("trie remove app", shrewd_basic_trie_remove(trie, "app", &out),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("trie remove value", 1 == pv(out));
+    expect_eq_int("trie remove again", shrewd_basic_trie_remove(trie, "app", &out),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("trie search after remove",
+                  shrewd_basic_trie_search(trie, "apple", &out), SHREWD_BASIC_ERR_OK);
+    expect_true("trie apple survives", 2 == pv(out));
+    expect_eq_int("trie remove apple", shrewd_basic_trie_remove(trie, "apple", NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("trie size after removes", shrewd_basic_trie_size(trie, &size),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("trie size is 3", 3 == size);
+
+    expect_eq_int("trie insert NULL key", shrewd_basic_trie_insert(trie, NULL, iv(0)),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("trie search NULL out", shrewd_basic_trie_search(trie, "app", NULL),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+
+    expect_eq_int("trie destroy", shrewd_basic_trie_destroy(trie), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("trie destroy NULL", shrewd_basic_trie_destroy(NULL),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+}
+
+static void test_radix(void)
+{
+    shrewd_basic_radix_t *tree = NULL;
+    expect_eq_int("radix create", shrewd_basic_radix_create(&tree), SHREWD_BASIC_ERR_OK);
+    expect_true("radix create out", NULL != tree);
+    expect_true("radix empty", shrewd_basic_radix_empty(tree));
+
+    /* Prefix-heavy words exercise edge splits on nearly every insert. */
+    expect_eq_int("radix insert romane",
+                  shrewd_basic_radix_insert(tree, "romane", iv(1)), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("radix insert romanus",
+                  shrewd_basic_radix_insert(tree, "romanus", iv(2)), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("radix insert romulus",
+                  shrewd_basic_radix_insert(tree, "romulus", iv(3)), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("radix insert rubens",
+                  shrewd_basic_radix_insert(tree, "rubens", iv(4)), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("radix insert ruber",
+                  shrewd_basic_radix_insert(tree, "ruber", iv(5)), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("radix insert rubicon",
+                  shrewd_basic_radix_insert(tree, "rubicon", iv(6)), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("radix insert rom",
+                  shrewd_basic_radix_insert(tree, "rom", iv(7)), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("radix insert duplicate",
+                  shrewd_basic_radix_insert(tree, "romane", iv(9)),
+                  SHREWD_BASIC_ERR_KEY_EXISTS);
+
+    size_t size = 0;
+    expect_eq_int("radix size", shrewd_basic_radix_size(tree, &size), SHREWD_BASIC_ERR_OK);
+    expect_true("radix size is 7", 7 == size);
+
+    void *out = NULL;
+    expect_eq_int("radix search romane",
+                  shrewd_basic_radix_search(tree, "romane", &out), SHREWD_BASIC_ERR_OK);
+    expect_true("radix search romane value", 1 == pv(out));
+    expect_eq_int("radix search rom", shrewd_basic_radix_search(tree, "rom", &out),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("radix search rom value", 7 == pv(out));
+    expect_eq_int("radix search node without value",
+                  shrewd_basic_radix_search(tree, "roman", &out),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("radix search mid-edge miss",
+                  shrewd_basic_radix_search(tree, "roma", &out),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("radix search miss", shrewd_basic_radix_search(tree, "zip", &out),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+
+    /* Byte order is lexicographic order. */
+    static const char *const sorted[] = {"rom", "romane", "romanus", "romulus",
+                                         "rubens", "ruber", "rubicon"};
+    struct key_ctx kc = {0};
+    expect_eq_int("radix foreach", shrewd_basic_radix_foreach(tree, collect_key, &kc),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("radix foreach order", keys_match(&kc, sorted, 7));
+
+    static const char *const under_rom[] = {"rom", "romane", "romanus", "romulus"};
+    struct key_ctx kp = {0};
+    expect_eq_int("radix foreach_prefix rom",
+                  shrewd_basic_radix_foreach_prefix(tree, "rom", collect_key, &kp),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("radix prefix rom keys", keys_match(&kp, under_rom, 4));
+
+    /* "roma" ends inside an edge label: the whole subtree matches. */
+    static const char *const under_roma[] = {"romane", "romanus"};
+    struct key_ctx km = {0};
+    expect_eq_int("radix foreach_prefix roma",
+                  shrewd_basic_radix_foreach_prefix(tree, "roma", collect_key, &km),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("radix prefix roma keys", keys_match(&km, under_roma, 2));
+
+    /* "romae" diverges inside an edge label: nothing matches. */
+    struct key_ctx kd = {0};
+    expect_eq_int("radix foreach_prefix diverge",
+                  shrewd_basic_radix_foreach_prefix(tree, "romae", collect_key, &kd),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("radix prefix diverge visits nothing", 0 == kd.n);
+
+    static const char *const under_rub[] = {"rubens", "ruber", "rubicon"};
+    struct key_ctx kr = {0};
+    expect_eq_int("radix foreach_prefix rub",
+                  shrewd_basic_radix_foreach_prefix(tree, "rub", collect_key, &kr),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("radix prefix rub keys", keys_match(&kr, under_rub, 3));
+
+    /* Leaf removal re-compresses the path; siblings must survive. */
+    out = NULL;
+    expect_eq_int("radix remove romane",
+                  shrewd_basic_radix_remove(tree, "romane", &out), SHREWD_BASIC_ERR_OK);
+    expect_true("radix remove value", 1 == pv(out));
+    expect_eq_int("radix search removed romane",
+                  shrewd_basic_radix_search(tree, "romane", &out),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("radix search romanus survives",
+                  shrewd_basic_radix_search(tree, "romanus", &out), SHREWD_BASIC_ERR_OK);
+    expect_true("radix romanus value", 2 == pv(out));
+
+    /* Value on a branching node: removing it keeps the children. */
+    expect_eq_int("radix remove rom", shrewd_basic_radix_remove(tree, "rom", NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("radix search romulus after rom removed",
+                  shrewd_basic_radix_search(tree, "romulus", &out), SHREWD_BASIC_ERR_OK);
+    expect_true("radix romulus value", 3 == pv(out));
+    expect_eq_int("radix remove rom again",
+                  shrewd_basic_radix_remove(tree, "rom", NULL),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("radix size after removes", shrewd_basic_radix_size(tree, &size),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("radix size is 5", 5 == size);
+
+    /* Drain the tree; every removal must succeed and end at empty. */
+    expect_eq_int("radix remove romanus",
+                  shrewd_basic_radix_remove(tree, "romanus", NULL), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("radix remove romulus",
+                  shrewd_basic_radix_remove(tree, "romulus", NULL), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("radix remove rubens",
+                  shrewd_basic_radix_remove(tree, "rubens", NULL), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("radix remove ruber",
+                  shrewd_basic_radix_remove(tree, "ruber", NULL), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("radix remove rubicon",
+                  shrewd_basic_radix_remove(tree, "rubicon", NULL), SHREWD_BASIC_ERR_OK);
+    expect_true("radix empty after drain", shrewd_basic_radix_empty(tree));
+    struct key_ctx ke = {0};
+    expect_eq_int("radix foreach when empty",
+                  shrewd_basic_radix_foreach(tree, collect_key, &ke), SHREWD_BASIC_ERR_OK);
+    expect_true("radix foreach empty visits nothing", 0 == ke.n);
+
+    /* A key that is a prefix of another key. */
+    expect_eq_int("radix insert a", shrewd_basic_radix_insert(tree, "a", iv(8)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("radix insert ab", shrewd_basic_radix_insert(tree, "ab", iv(9)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("radix remove ab", shrewd_basic_radix_remove(tree, "ab", NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("radix search a survives",
+                  shrewd_basic_radix_search(tree, "a", &out), SHREWD_BASIC_ERR_OK);
+    expect_true("radix a value", 8 == pv(out));
+
+    expect_eq_int("radix insert NULL key",
+                  shrewd_basic_radix_insert(tree, NULL, iv(0)),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("radix search NULL out",
+                  shrewd_basic_radix_search(tree, "a", NULL),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+
+    expect_eq_int("radix destroy", shrewd_basic_radix_destroy(tree), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("radix destroy NULL", shrewd_basic_radix_destroy(NULL),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+}
+
 int main(void)
 {
     test_slist();
@@ -535,5 +810,7 @@ int main(void)
     test_stack();
     test_btree();
     test_rbtree();
+    test_trie();
+    test_radix();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
