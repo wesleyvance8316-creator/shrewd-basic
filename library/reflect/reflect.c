@@ -95,9 +95,64 @@ const char *shrewd_basic_reflect_kind_name(shrewd_basic_reflect_kind_t kind)
         return "struct";
     case SHREWD_BASIC_REFLECT_KIND_OPAQUE:
         return "opaque";
+    case SHREWD_BASIC_REFLECT_KIND_ENUM:
+        return "enum";
     default:
         return "unknown";
     }
+}
+
+int shrewd_basic_reflect_enum_find_name(const shrewd_basic_reflect_type_t *type,
+                                        int64_t value, const char **out_name)
+{
+    if ((NULL == type) || (NULL == out_name)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "field", "enum_find_name: type or out_name is NULL\n");
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    if ((SHREWD_BASIC_REFLECT_KIND_ENUM != type->sb_refl_kind)
+            || (NULL == type->sb_refl_enum)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "field", "enum_find_name: type \"%s\" is not an enum\n",
+                         type->sb_refl_name);
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    for (size_t i = 0; i < type->sb_refl_enum_count; ++i) {
+        if (type->sb_refl_enum[i].sb_refl_value == value) {
+            *out_name = type->sb_refl_enum[i].sb_refl_name;
+            return SHREWD_BASIC_ERR_OK;
+        }
+    }
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
+                     "field", "enum_find_name: no constant for %lld\n",
+                     (long long)value);
+    return SHREWD_BASIC_ERR_KEY_NOTFOUND;
+}
+
+int shrewd_basic_reflect_enum_find_value(const shrewd_basic_reflect_type_t *type,
+                                         const char *name, int64_t *out_value)
+{
+    if ((NULL == type) || (NULL == name) || (NULL == out_value)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "field", "enum_find_value: type, name or out_value is NULL\n");
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    if ((SHREWD_BASIC_REFLECT_KIND_ENUM != type->sb_refl_kind)
+            || (NULL == type->sb_refl_enum)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "field", "enum_find_value: type \"%s\" is not an enum\n",
+                         type->sb_refl_name);
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    for (size_t i = 0; i < type->sb_refl_enum_count; ++i) {
+        if (0 == strcmp(type->sb_refl_enum[i].sb_refl_name, name)) {
+            *out_value = type->sb_refl_enum[i].sb_refl_value;
+            return SHREWD_BASIC_ERR_OK;
+        }
+    }
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
+                     "field", "enum_find_value: no constant \"%s\"\n", name);
+    return SHREWD_BASIC_ERR_KEY_NOTFOUND;
 }
 
 int shrewd_basic_reflect_type_find_field(const shrewd_basic_reflect_type_t *type,

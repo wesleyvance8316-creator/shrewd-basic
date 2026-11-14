@@ -1107,6 +1107,118 @@ static void test_paths(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
+/* --- enum fixtures --------------------------------------------------- */
+
+typedef enum {
+    MODE_OFF = 0,
+    MODE_ON = 1,
+    MODE_AUTO = 2
+} mode_t;
+
+SHREWD_BASIC_REFLECT_ENUM_DEFINE(g_mode_reflect, mode_t,
+    SHREWD_BASIC_REFLECT_ENUM_VALUE(MODE_OFF),
+    SHREWD_BASIC_REFLECT_ENUM_VALUE(MODE_ON),
+    SHREWD_BASIC_REFLECT_ENUM_VALUE(MODE_AUTO));
+
+typedef struct {
+    mode_t mode;
+    mode_t *mode_ptr;
+} config_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_config_reflect, config_t,
+    SHREWD_BASIC_REFLECT_FIELD_ENUM(config_t, mode, g_mode_reflect),
+    SHREWD_BASIC_REFLECT_FIELD_PTR(config_t, mode_ptr, g_mode_reflect));
+
+static void test_enum(void)
+{
+    /* Descriptor shape. */
+    expect_true("enum kind", SHREWD_BASIC_REFLECT_KIND_ENUM == g_mode_reflect.sb_refl_kind);
+    expect_true("enum name", 0 == strcmp(g_mode_reflect.sb_refl_name, "mode_t"));
+    expect_true("enum size", sizeof(mode_t) == g_mode_reflect.sb_refl_size);
+    expect_true("enum entries", (size_t)3 == g_mode_reflect.sb_refl_enum_count);
+    expect_true("enum kind name",
+                0 == strcmp(shrewd_basic_reflect_kind_name(SHREWD_BASIC_REFLECT_KIND_ENUM),
+                            "enum"));
+
+    /* name/value lookup. */
+    const char *name = NULL;
+    expect_eq_int("enum find name",
+                  shrewd_basic_reflect_enum_find_name(&g_mode_reflect, 1, &name),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("enum find name value", 0 == strcmp(name, "MODE_ON"));
+    expect_eq_int("enum find name unknown",
+                  shrewd_basic_reflect_enum_find_name(&g_mode_reflect, 99, &name),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    int64_t value = 0;
+    expect_eq_int("enum find value",
+                  shrewd_basic_reflect_enum_find_value(&g_mode_reflect, "MODE_AUTO", &value),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("enum find value found", 2 == value);
+    expect_eq_int("enum find value unknown",
+                  shrewd_basic_reflect_enum_find_value(&g_mode_reflect, "MODE_X", &value),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("enum find on non-enum",
+                  shrewd_basic_reflect_enum_find_name(&shrewd_basic_reflect_int32, 1, &name),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("enum find NULL args",
+                  shrewd_basic_reflect_enum_find_value(NULL, "MODE_ON", &value),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+
+    /* Field binding plus raw and path access. */
+    config_t config;
+    memset(&config, 0, sizeof(config));
+    config.mode = MODE_ON;
+    const shrewd_basic_reflect_field_t *field =
+        find_or_fail("enum", &g_config_reflect, "mode");
+    if (NULL == field) {
+        return;
+    }
+    expect_true("enum field type", &g_mode_reflect == field->sb_refl_type);
+    mode_t back = MODE_OFF;
+    expect_eq_int("enum field get",
+                  shrewd_basic_reflect_field_get(&config, field, &back, sizeof(back)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("enum field get value", MODE_ON == back);
+    back = MODE_AUTO;
+    expect_eq_int("enum field set",
+                  shrewd_basic_reflect_field_set(&config, field, &back, sizeof(back)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("enum field set lands", MODE_AUTO == config.mode);
+    back = MODE_OFF;
+    expect_eq_int("enum path get",
+                  shrewd_basic_reflect_path_get(&config, &g_config_reflect,
+                                                "mode", &back, sizeof(back)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("enum path get value", MODE_AUTO == back);
+
+    /* dump renders constants by name; unknown values show their number. */
+    config.mode_ptr = &config.mode;
+    shrewd_basic_log_module_t *module = NULL;
+    expect_eq_int("enum find module",
+                  shrewd_basic_log_module_find("reflect", &module),
+                  SHREWD_BASIC_ERR_OK);
+    FILE *stream = tmpfile();
+    expect_true("enum tmpfile", NULL != stream);
+    if (NULL == stream) {
+        return;
+    }
+    shrewd_basic_log_module_set_stream(module, stream);
+    expect_eq_int("enum dump",
+                  shrewd_basic_reflect_dump(&g_config_reflect, &config, "config"),
+                  SHREWD_BASIC_ERR_OK);
+    config.mode = (mode_t)99;
+    expect_eq_int("enum dump unknown",
+                  shrewd_basic_reflect_dump(&g_config_reflect, &config, "config"),
+                  SHREWD_BASIC_ERR_OK);
+    char buf[4096] = {0};
+    slurp(stream, buf, sizeof(buf));
+    expect_true("enum dump name", NULL != strstr(buf, "mode = MODE_AUTO"));
+    expect_true("enum dump followed", NULL != strstr(buf, "mode_ptr = MODE_AUTO"));
+    expect_true("enum dump unknown value", NULL != strstr(buf, "mode = 99"));
+    shrewd_basic_log_module_set_stream(module, stderr);
+    fclose(stream);
+}
+
 static void test_ops(void)
 {
     /* Attachment shapes. */
@@ -1288,6 +1400,7 @@ int main(void)
     test_nested();
     test_array();
     test_pointer_fields();
+    test_enum();
     test_ops();
     test_dump();
     test_dump_pointers();

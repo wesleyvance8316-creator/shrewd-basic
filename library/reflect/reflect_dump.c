@@ -223,10 +223,10 @@ static void dump_string(dump_ctx_t *ctx, const char *text, size_t str_max)
 }
 
 /* Render one scalar value; str_max bounds string elements inside arrays. */
-static void dump_scalar(dump_ctx_t *ctx, shrewd_basic_reflect_kind_t kind,
+static void dump_scalar(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type,
                         const unsigned char *bytes, size_t nbytes, size_t str_max)
 {
-    switch (kind) {
+    switch (type->sb_refl_kind) {
     case SHREWD_BASIC_REFLECT_KIND_BOOL:
         dump_append(ctx, "%s", (0 != dump_load_u64(bytes, nbytes)) ? "true" : "false");
         break;
@@ -259,8 +259,26 @@ static void dump_scalar(dump_ctx_t *ctx, shrewd_basic_reflect_kind_t kind,
     case SHREWD_BASIC_REFLECT_KIND_STRING:
         dump_string(ctx, dump_load_str(bytes), str_max);
         break;
+    case SHREWD_BASIC_REFLECT_KIND_ENUM: {
+        /* Render by constant name (inline lookup: no log noise while
+           printing); unknown values show their number. */
+        int64_t value = dump_load_i64(bytes, nbytes);
+        const char *name = NULL;
+        for (size_t i = 0; i < type->sb_refl_enum_count; ++i) {
+            if (type->sb_refl_enum[i].sb_refl_value == value) {
+                name = type->sb_refl_enum[i].sb_refl_name;
+                break;
+            }
+        }
+        if (NULL != name) {
+            dump_append(ctx, "%s", name);
+        } else {
+            dump_append(ctx, "%lld", (long long)value);
+        }
+        break;
+    }
     default:
-        dump_append(ctx, "<kind %d>", (int)kind);
+        dump_append(ctx, "<kind %d>", (int)type->sb_refl_kind);
         break;
     }
 }
@@ -330,12 +348,12 @@ static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
                         dump_append(ctx, "0x%llx",
                                     (unsigned long long)(uintptr_t)pointer);
                     } else {
-                        dump_scalar(ctx, field->sb_refl_type->sb_refl_kind,
+                        dump_scalar(ctx, field->sb_refl_type,
                                     (const unsigned char *)pointer,
                                     field->sb_refl_type->sb_refl_size, DUMP_STR_MAX / 8);
                     }
                 } else {
-                    dump_scalar(ctx, field->sb_refl_type->sb_refl_kind, elem, stride, DUMP_STR_MAX / 8);
+                    dump_scalar(ctx, field->sb_refl_type, elem, stride, DUMP_STR_MAX / 8);
                 }
             }
             dump_append(ctx, " ]");
@@ -362,7 +380,7 @@ static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
                 }
             } else {
                 dump_append(ctx, "%*s%s = ", pad, "", field->sb_refl_name);
-                dump_scalar(ctx, field->sb_refl_type->sb_refl_kind, (const unsigned char *)pointer,
+                dump_scalar(ctx, field->sb_refl_type, (const unsigned char *)pointer,
                             field->sb_refl_type->sb_refl_size, DUMP_STR_MAX);
                 dump_emit(ctx);
             }
@@ -379,7 +397,7 @@ static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
             }
         } else {
             dump_append(ctx, "%*s%s = ", pad, "", field->sb_refl_name);
-            dump_scalar(ctx, field->sb_refl_type->sb_refl_kind, at, field->sb_refl_size, DUMP_STR_MAX);
+            dump_scalar(ctx, field->sb_refl_type, at, field->sb_refl_size, DUMP_STR_MAX);
             dump_emit(ctx);
         }
     }

@@ -98,7 +98,8 @@ typedef enum shrewd_basic_reflect_kind {
     SHREWD_BASIC_REFLECT_KIND_DOUBLE,
     SHREWD_BASIC_REFLECT_KIND_STRING, /**< char * / const char * member. */
     SHREWD_BASIC_REFLECT_KIND_STRUCT, /**< Aggregate with field descriptors. */
-    SHREWD_BASIC_REFLECT_KIND_OPAQUE  /**< Unknown pointee (shrewd_basic_reflect_void). */
+    SHREWD_BASIC_REFLECT_KIND_OPAQUE, /**< Unknown pointee (shrewd_basic_reflect_void). */
+    SHREWD_BASIC_REFLECT_KIND_ENUM    /**< Enumerated value (name/value table). */
 } shrewd_basic_reflect_kind_t;
 
 typedef struct shrewd_basic_reflect_type shrewd_basic_reflect_type_t;
@@ -140,13 +141,21 @@ typedef struct shrewd_basic_reflect_field {
     const shrewd_basic_reflect_ops_t *sb_refl_ops;   /**< Field-level override; NULL = type ops. */
 } shrewd_basic_reflect_field_t;
 
-/** A described type: a struct layout, or one primitive/string kind. */
+/** One name/value pair of a reflected enum. */
+typedef struct shrewd_basic_reflect_enum_entry {
+    const char *sb_refl_name;  /**< Enum constant name, C string literal. */
+    int64_t sb_refl_value;     /**< The constant's value. */
+} shrewd_basic_reflect_enum_entry_t;
+
+/** A described type: a struct layout, a primitive/string kind, or an enum. */
 struct shrewd_basic_reflect_type {
     shrewd_basic_reflect_kind_t sb_refl_kind;             /**< STRUCT for aggregates. */
     const char *sb_refl_name;                             /**< "person_t" or "int32". */
     size_t sb_refl_size;                                  /**< Informational width. */
     size_t sb_refl_field_count;                           /**< 0 for primitives. */
     const shrewd_basic_reflect_field_t *sb_refl_fields;    /**< NULL for primitives. */
+    const shrewd_basic_reflect_enum_entry_t *sb_refl_enum; /**< NULL unless ENUM. */
+    size_t sb_refl_enum_count;                            /**< 0 unless ENUM. */
     const shrewd_basic_reflect_ops_t *sb_refl_ops;         /**< Type-level ops; NULL = defaults. */
 };
 
@@ -318,6 +327,50 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
         .sb_refl_ops = &(ops_ref)                                                      \
     }
 
+/*
+ * One enum constant; the name is the stringified constant and the value
+ * is the constant itself. Combine into SHREWD_BASIC_REFLECT_ENUM_DEFINE.
+ */
+#define SHREWD_BASIC_REFLECT_ENUM_VALUE(value)                                 \
+    {                                                                          \
+        .sb_refl_name = #value,                                                \
+        .sb_refl_value = (int64_t)(value)                                      \
+    }
+
+/*
+ * Compile-time enum registration: define `var` exactly once per module,
+ * share it with TYPE_DECLARE. Every constant takes one ENUM_VALUE entry
+ * (at least one).
+ */
+#define SHREWD_BASIC_REFLECT_ENUM_DEFINE(var, enum_type, ...)                  \
+    extern const shrewd_basic_reflect_type_t var;                              \
+    static const shrewd_basic_reflect_enum_entry_t var##_entries[] = {         \
+        __VA_ARGS__                                                            \
+    };                                                                         \
+    const shrewd_basic_reflect_type_t var = {                                  \
+        .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_ENUM,                        \
+        .sb_refl_name = #enum_type,                                            \
+        .sb_refl_size = sizeof(enum_type),                                     \
+        .sb_refl_field_count = 0,                                              \
+        .sb_refl_fields = NULL,                                                \
+        .sb_refl_enum = var##_entries,                                         \
+        .sb_refl_enum_count = sizeof(var##_entries)                            \
+                / sizeof(var##_entries[0]),                                    \
+        .sb_refl_ops = NULL                                                    \
+    }
+
+/* Describe an enum member; ref is its ENUM_DEFINE descriptor without '&'. */
+#define SHREWD_BASIC_REFLECT_FIELD_ENUM(struct_type, member, ref)              \
+    {                                                                          \
+        .sb_refl_name = #member,                                               \
+        .sb_refl_type = &(ref),                                                \
+        .sb_refl_offset = offsetof(struct_type, member),                       \
+        .sb_refl_size = sizeof(((struct_type *)0)->member),                    \
+        .sb_refl_count = (size_t)1,                                            \
+        .sb_refl_flags = (uint32_t)0,                                          \
+        .sb_refl_ops = NULL                                                    \
+    }
+
 /* FIELD_STRUCT with a field-level ops override (takes precedence over type ops). */
 #define SHREWD_BASIC_REFLECT_FIELD_STRUCT_OPS(struct_type, member, ref, ops_ref) \
     {                                                                          \
@@ -358,6 +411,22 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
 
 /** Name of a kind, e.g. "int32"; unknown values map to "unknown". */
 const char *shrewd_basic_reflect_kind_name(shrewd_basic_reflect_kind_t kind);
+
+/**
+ * Name of an enum @p value in the ENUM descriptor @p type.
+ * Returns SHREWD_BASIC_ERR_KEY_NOTFOUND when the value has no constant,
+ * SHREWD_BASIC_ERR_ARG_INVALID for NULL arguments or a non-enum type.
+ */
+int shrewd_basic_reflect_enum_find_name(const shrewd_basic_reflect_type_t *type,
+                                        int64_t value, const char **out_name);
+
+/**
+ * Value of the enum constant @p name in the ENUM descriptor @p type.
+ * Returns SHREWD_BASIC_ERR_KEY_NOTFOUND when no constant matches,
+ * SHREWD_BASIC_ERR_ARG_INVALID for NULL arguments or a non-enum type.
+ */
+int shrewd_basic_reflect_enum_find_value(const shrewd_basic_reflect_type_t *type,
+                                         const char *name, int64_t *out_value);
 
 /**
  * Find a field by name (flat, single level).

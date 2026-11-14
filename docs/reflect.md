@@ -81,12 +81,13 @@ person (person_t) {
 ### 3.1 kind(`shrewd_basic_reflect_kind_t`)
 
 `BOOL, CHAR, INT8, UINT8, INT16, UINT16, INT32, UINT32, INT64, UINT64,
-FLOAT, DOUBLE, STRING, STRUCT, OPAQUE`
+FLOAT, DOUBLE, STRING, STRUCT, OPAQUE, ENUM`
 
 - `STRING`:`char *` / `const char *` 成员,指针即值;
 - `STRUCT`:有字段表的聚合;
 - `OPAQUE`:不可描述的目标(`shrewd_basic_reflect_void` 或应用自定义),只能打地址/走 ops;
-- 枚举可扩展(未来 ENUM/POINTER),所有 switch 都有 `default` 兜底为 `unknown`。
+- `ENUM`:枚举值,`ENUM_DEFINE` 注册名/值表,dump 按常量名渲染,`enum_find_name/enum_find_value` 双向查表;
+- 枚举可扩展(POINTER 等留待未来),所有 switch 都有 `default` 兜底为 `unknown`。
 
 `shrewd_basic_reflect_kind_name()` 返回小写名(`"int32"`、`"struct"` …)。
 
@@ -140,6 +141,7 @@ shrewd_basic_reflect_void     /* 不透明目标(OPAQUE),size = 0 */
 | `FIELD_ARRAY(struct_type, member, ref)` | 定长数组,`ref` 为元素描述符 |
 | `FIELD_PTR(struct_type, member, ref)` | 指针成员,`ref` 为目标描述符 |
 | `FIELD_PTR_ARRAY(struct_type, member, ref)` | 定长指针数组 |
+| `FIELD_ENUM(struct_type, member, ref)` | 枚举成员 |
 | `FIELD_STRUCT_OPS` / `FIELD_PTR_OPS` / `FIELD_PTR_ARRAY_OPS` | 同上 + 字段级 ops 覆盖 |
 
 `ref`/`ops_ref` 参数**不带 `&`**(宏内部补 `&` 以保持地址常量)。
@@ -171,6 +173,8 @@ SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                /* 跨 TU 
 | 接口 | 语义 | 错误码 |
 |---|---|---|
 | `kind_name(kind)` | kind 的名字 | — |
+| `enum_find_name(type, value, &name)` | 枚举值→常量名 | `KEY_NOTFOUND` / `ARG_INVALID` |
+| `enum_find_value(type, name, &value)` | 常量名→枚举值 | `KEY_NOTFOUND` / `ARG_INVALID` |
 | `type_find_field(type, name, &field)` | 扁平按名查字段 | `KEY_NOTFOUND` / `ARG_INVALID` |
 | `field_get(obj, field, out, n)` | 原始字节读字段(`n == field->sb_refl_size`) | `REFLECT_MISMATCH` / `ARG_INVALID` |
 | `field_set(obj, field, in, n)` | 原始字节写字段 | 同上 |
