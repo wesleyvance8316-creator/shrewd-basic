@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "shrewd-basic/log/log.h"
+#include "shrewd-basic/platform/memory.h"
 #include "shrewd-basic/reflect/reflect.h"
 
 #include "test_reflect_ext.h"
@@ -174,9 +175,12 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_ops_refs_reflect, ops_refs_t,
     SHREWD_BASIC_REFLECT_FIELD_PTR_ARRAY_OPS(ops_refs_t, many, g_handle_reflect,
                                              g_override_ops));
 
+static int g_check_calls = 0;
+
 static int ops_check(const void *pointee)
 {
     (void)pointee;
+    ++g_check_calls;
     return SHREWD_BASIC_ERR_OK;
 }
 
@@ -191,6 +195,56 @@ static const shrewd_basic_reflect_ops_t g_point_ops = {
 SHREWD_BASIC_REFLECT_TYPE_DEFINE_OPS(g_point_ops_reflect, point_t, g_point_ops,
     SHREWD_BASIC_REFLECT_FIELD(point_t, x),
     SHREWD_BASIC_REFLECT_FIELD(point_t, y));
+
+/* --- graph ops fixtures ---------------------------------------------- */
+
+static int ops_handle_check(const void *pointee)
+{
+    int32_t value = 0;
+    ++g_check_calls;
+    memcpy(&value, pointee, sizeof(value));
+    return (0 > value) ? SHREWD_BASIC_ERR_KEY_EXISTS : SHREWD_BASIC_ERR_OK;
+}
+
+static int ops_handle_copy(void **out, const void *pointee)
+{
+    void *block = NULL;
+    int status = shrewd_basic_platform_alloc(&block, sizeof(int32_t));
+    if (SHREWD_BASIC_ERR_OK != status) {
+        return status;
+    }
+    memcpy(block, pointee, sizeof(int32_t));
+    *out = block;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+static void ops_handle_destroy(void *pointee)
+{
+    (void)shrewd_basic_platform_free(&pointee);
+}
+
+static const shrewd_basic_reflect_ops_t g_handle_ops = {
+    .value_size = sizeof(int32_t),
+    .get = NULL,
+    .set = NULL,
+    .check = ops_handle_check,
+    .copy = ops_handle_copy,
+    .destroy = ops_handle_destroy };
+
+SHREWD_BASIC_REFLECT_OPAQUE_DEFINE(g_full_handle_reflect, "handle", g_handle_ops);
+
+typedef struct {
+    point_t *home;
+    int32_t *counter;
+    const char **p_str;
+    int32_t *handle;
+} graph_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_graph_reflect, graph_t,
+    SHREWD_BASIC_REFLECT_FIELD_PTR(graph_t, home, g_point_reflect),
+    SHREWD_BASIC_REFLECT_FIELD_PTR(graph_t, counter, shrewd_basic_reflect_int32),
+    SHREWD_BASIC_REFLECT_FIELD_PTR(graph_t, p_str, shrewd_basic_reflect_string),
+    SHREWD_BASIC_REFLECT_FIELD_PTR(graph_t, handle, g_full_handle_reflect));
 
 /* find_field wrapper that reports failures as test failures. */
 static const shrewd_basic_reflect_field_t *find_or_fail(const char *test_name,
@@ -609,7 +663,7 @@ static void test_dump(void)
     memset(&weird, 0, sizeof(weird));
     weird.name = "a\"b\nc";
     stream = tmpfile();
-    if (NULL != stream) {
+    if (NULL == stream) {
         shrewd_basic_log_module_set_stream(module, stderr);
         return;
     }
@@ -626,7 +680,7 @@ static void test_dump(void)
     /* Phase 3: NULL string and long-string truncation. */
     weird.name = NULL;
     stream = tmpfile();
-    if (NULL != stream) {
+    if (NULL == stream) {
         shrewd_basic_log_module_set_stream(module, stderr);
         return;
     }
@@ -652,7 +706,7 @@ static void test_dump(void)
     memset(&wide, 0, sizeof(wide));
     wide.wide[39] = 9;
     stream = tmpfile();
-    if (NULL != stream) {
+    if (NULL == stream) {
         shrewd_basic_log_module_set_stream(module, stderr);
         return;
     }
@@ -1124,6 +1178,102 @@ static void test_ops(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
+static void test_graph_ops(void)
+{
+    point_t home;
+    memset(&home, 0, sizeof(home));
+    home.x = 1;
+    home.y = 2;
+    int32_t counter = 3;
+    const char *text = "hi";
+    int32_t handle = 4;
+    graph_t graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.home = &home;
+    graph.counter = &counter;
+    graph.p_str = &text;
+    graph.handle = &handle;
+
+    /* check: ops->check invariants, NULL targets skipped. */
+    g_check_calls = 0;
+    expect_eq_int("check ok", shrewd_basic_reflect_check(&graph, &g_graph_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("check ops ran", 1 == g_check_calls);
+    handle = -1;
+    expect_eq_int("check invariant",
+                  shrewd_basic_reflect_check(&graph, &g_graph_reflect),
+                  SHREWD_BASIC_ERR_KEY_EXISTS);
+    handle = 4;
+    graph.home = NULL;
+    expect_eq_int("check skips NULL",
+                  shrewd_basic_reflect_check(&graph, &g_graph_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    graph.home = &home;
+    expect_eq_int("check NULL object",
+                  shrewd_basic_reflect_check(NULL, &g_graph_reflect),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+
+    /* copy: generic struct/scalar clones, ops clone, string aliasing. */
+    void *raw = NULL;
+    expect_eq_int("copy ok", shrewd_basic_reflect_copy(&raw, &graph, &g_graph_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    graph_t *clone = raw;
+    expect_true("copy struct cloned",
+                (NULL != clone->home) && (clone->home != &home)
+                && (1 == clone->home->x) && (2 == clone->home->y));
+    expect_true("copy scalar cloned",
+                (NULL != clone->counter) && (clone->counter != &counter)
+                && (3 == *clone->counter));
+    expect_true("copy handle via ops",
+                (NULL != clone->handle) && (clone->handle != &handle)
+                && (4 == *clone->handle));
+    expect_true("copy string aliased", &text == clone->p_str);
+    home.x = 99;
+    counter = 99;
+    handle = 99;
+    expect_true("copy independent",
+                (1 == clone->home->x) && (3 == *clone->counter)
+                && (4 == *clone->handle));
+    expect_eq_int("check clone", shrewd_basic_reflect_check(clone, &g_graph_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("destroy clone",
+                  shrewd_basic_reflect_destroy(clone, &g_graph_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("destroy left borrowed string", 0 == strcmp(text, "hi"));
+
+    /* Opaque targets without ops cannot be cloned. */
+    refs_t refs;
+    memset(&refs, 0, sizeof(refs));
+    refs.ctx = &counter;
+    void *bad = NULL;
+    expect_eq_int("copy opaque without ops",
+                  shrewd_basic_reflect_copy(&bad, &refs, &g_refs_reflect),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+
+    /* Cyclic graphs are aliased past the depth cap (tree-only contract). */
+    node_t loop;
+    memset(&loop, 0, sizeof(loop));
+    loop.next = &loop;
+    void *loop_clone = NULL;
+    expect_eq_int("copy cycle capped",
+                  shrewd_basic_reflect_copy(&loop_clone, &loop, &g_node_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("copy cycle cloned", NULL != loop_clone);
+    expect_eq_int("destroy cycle capped",
+                  shrewd_basic_reflect_destroy(loop_clone, &g_node_reflect),
+                  SHREWD_BASIC_ERR_OK);
+
+    expect_eq_int("copy NULL out",
+                  shrewd_basic_reflect_copy(NULL, &graph, &g_graph_reflect),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("destroy NULL",
+                  shrewd_basic_reflect_destroy(NULL, &g_graph_reflect),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("destroy primitive root",
+                  shrewd_basic_reflect_destroy(&counter, &shrewd_basic_reflect_int32),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+}
+
 int main(void)
 {
     test_describe();
@@ -1137,6 +1287,7 @@ int main(void)
     test_dump();
     test_dump_pointers();
     test_paths();
+    test_graph_ops();
     test_logging_policy();
     test_cross_tu();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;
