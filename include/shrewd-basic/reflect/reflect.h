@@ -1,0 +1,243 @@
+#ifndef SHREWD_BASIC_REFLECT_REFLECT_H
+#define SHREWD_BASIC_REFLECT_REFLECT_H
+
+/**
+ * @file reflect.h
+ * @brief Compile-time reflection: const type metadata for C structs.
+ *
+ * Structures are annotated with macros that expand to const descriptors,
+ * so generic code can enumerate fields, read and write values, and
+ * pretty-print objects without knowing the concrete type:
+ *
+ *   typedef struct { int32_t x; int32_t y; } point_t;
+ *   SHREWD_BASIC_REFLECT_TYPE_DEFINE(point_type, point_t,
+ *       SHREWD_BASIC_REFLECT_FIELD(point_t, x),
+ *       SHREWD_BASIC_REFLECT_FIELD(point_t, y));
+ *
+ * Scalar and string members bind automatically through _Generic
+ * (SHREWD_BASIC_REFLECT_FIELD); aggregates bind explicitly:
+ * SHREWD_BASIC_REFLECT_FIELD_STRUCT for nested structs and
+ * SHREWD_BASIC_REFLECT_FIELD_ARRAY for fixed arrays. Define each type
+ * exactly once in one .c of a module and import it in sibling .c files
+ * with SHREWD_BASIC_REFLECT_TYPE_DECLARE().
+ *
+ * Size invariant: all data access goes through field->size (with
+ * field->size / field->count as the array stride); type->size is
+ * informational only. This keeps access safe when a basic type maps to
+ * a descriptor of a different width (e.g. long to int64 on LLP64).
+ *
+ * Constraints (the macros fail at compile time otherwise):
+ *   - members must be basic types, strings (char * / const char *),
+ *     fixed arrays of those, or nested reflected structs; pointers,
+ *     bit-fields, unions, flexible array members and function pointers
+ *     are not described;
+ *   - a char buffer must use SHREWD_BASIC_REFLECT_FIELD_ARRAY(struct_type,
+ *     buf, shrewd_basic_reflect_char): plain FIELD would treat it as a
+ *     string pointer (arrays decay to pointers in _Generic);
+ *   - a type needs at least one field;
+ *   - the macros require C11 (_Generic) and expand to declarations, so
+ *     they belong at file scope. The C API itself is C++-friendly.
+ *
+ * Strings: the field bytes hold the char pointer itself; get/set copy
+ * the pointer and ownership stays with the caller. All value access is
+ * raw memcpy of field->size, never a dereference of offset-derived
+ * typed pointers (packed and odd alignments stay well-defined).
+ */
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include "shrewd-basic/platform/error.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/**
+ * Value kinds. New members (enum, pointer, ...) may be appended later;
+ * every switch on kind falls back to a neutral "unknown" rendering.
+ */
+typedef enum shrewd_basic_reflect_kind {
+    SHREWD_BASIC_REFLECT_KIND_BOOL = 0,
+    SHREWD_BASIC_REFLECT_KIND_CHAR,
+    SHREWD_BASIC_REFLECT_KIND_INT8,
+    SHREWD_BASIC_REFLECT_KIND_UINT8,
+    SHREWD_BASIC_REFLECT_KIND_INT16,
+    SHREWD_BASIC_REFLECT_KIND_UINT16,
+    SHREWD_BASIC_REFLECT_KIND_INT32,
+    SHREWD_BASIC_REFLECT_KIND_UINT32,
+    SHREWD_BASIC_REFLECT_KIND_INT64,
+    SHREWD_BASIC_REFLECT_KIND_UINT64,
+    SHREWD_BASIC_REFLECT_KIND_FLOAT,
+    SHREWD_BASIC_REFLECT_KIND_DOUBLE,
+    SHREWD_BASIC_REFLECT_KIND_STRING, /**< char * / const char * member. */
+    SHREWD_BASIC_REFLECT_KIND_STRUCT  /**< Aggregate with field descriptors. */
+} shrewd_basic_reflect_kind_t;
+
+typedef struct shrewd_basic_reflect_type shrewd_basic_reflect_type_t;
+
+/** One reflected member of a struct type. */
+typedef struct shrewd_basic_reflect_field {
+    const char *name;                        /**< Member name, C string literal. */
+    const shrewd_basic_reflect_type_t *type; /**< Value type, or array element type. */
+    size_t offset;                           /**< offsetof(owner struct, member). */
+    size_t size;                             /**< sizeof(member); arrays: total bytes. */
+    size_t count;                            /**< Elements; 1 unless fixed array. */
+    uint32_t flags;                          /**< SHREWD_BASIC_REFLECT_FIELD_F_*. */
+} shrewd_basic_reflect_field_t;
+
+/** A described type: a struct layout, or one primitive/string kind. */
+struct shrewd_basic_reflect_type {
+    shrewd_basic_reflect_kind_t kind;             /**< STRUCT for aggregates. */
+    const char *name;                             /**< "person_t" or "int32". */
+    size_t size;                                  /**< Informational width. */
+    size_t field_count;                           /**< 0 for primitives. */
+    const shrewd_basic_reflect_field_t *fields;    /**< NULL for primitives. */
+};
+
+/** Field flag: the field is a fixed-size array of @c count elements. */
+#define SHREWD_BASIC_REFLECT_FIELD_F_ARRAY ((uint32_t)1u)
+
+/** Primitive descriptors; pass them to FIELD_ARRAY/FIELD_STRUCT by name. */
+extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_bool;
+extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_char;
+extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_int8;
+extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_uint8;
+extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_int16;
+extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_uint16;
+extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_int32;
+extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_uint32;
+extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_int64;
+extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_uint64;
+extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_float;
+extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_double;
+extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_string;
+
+/*
+ * Map a member expression to its primitive descriptor via _Generic.
+ * Only basic types are listed (never stdint aliases - they would collide
+ * with the basic types they stand for) and there is no default branch:
+ * an unsupported member type is a compile error by design.
+ */
+#define SHREWD_BASIC_REFLECT_PRIM_TYPE(expr)                                   \
+    _Generic((expr),                                                           \
+        _Bool: &shrewd_basic_reflect_bool,                                     \
+        char: &shrewd_basic_reflect_char,                                      \
+        signed char: &shrewd_basic_reflect_int8,                               \
+        unsigned char: &shrewd_basic_reflect_uint8,                            \
+        short: &shrewd_basic_reflect_int16,                                    \
+        unsigned short: &shrewd_basic_reflect_uint16,                          \
+        int: &shrewd_basic_reflect_int32,                                      \
+        unsigned int: &shrewd_basic_reflect_uint32,                            \
+        long: &shrewd_basic_reflect_int64,                                     \
+        unsigned long: &shrewd_basic_reflect_uint64,                           \
+        long long: &shrewd_basic_reflect_int64,                                \
+        unsigned long long: &shrewd_basic_reflect_uint64,                      \
+        float: &shrewd_basic_reflect_float,                                    \
+        double: &shrewd_basic_reflect_double,                                  \
+        char *: &shrewd_basic_reflect_string,                                  \
+        const char *: &shrewd_basic_reflect_string)
+
+/* Describe a scalar or string member; its type is deduced automatically. */
+#define SHREWD_BASIC_REFLECT_FIELD(struct_type, member)                        \
+    {                                                                          \
+        .name = #member,                                                       \
+        .type = SHREWD_BASIC_REFLECT_PRIM_TYPE(((struct_type *)0)->member),    \
+        .offset = offsetof(struct_type, member),                               \
+        .size = sizeof(((struct_type *)0)->member),                            \
+        .count = (size_t)1,                                                    \
+        .flags = (uint32_t)0                                                   \
+    }
+
+/* Describe a nested struct member; ref is its descriptor without '&'. */
+#define SHREWD_BASIC_REFLECT_FIELD_STRUCT(struct_type, member, ref)            \
+    {                                                                          \
+        .name = #member,                                                       \
+        .type = &(ref),                                                        \
+        .offset = offsetof(struct_type, member),                               \
+        .size = sizeof(((struct_type *)0)->member),                            \
+        .count = (size_t)1,                                                    \
+        .flags = (uint32_t)0                                                   \
+    }
+
+/* Describe a fixed-size array member; ref is the element descriptor. */
+#define SHREWD_BASIC_REFLECT_FIELD_ARRAY(struct_type, member, ref)             \
+    {                                                                          \
+        .name = #member,                                                       \
+        .type = &(ref),                                                        \
+        .offset = offsetof(struct_type, member),                               \
+        .size = sizeof(((struct_type *)0)->member),                            \
+        .count = sizeof(((struct_type *)0)->member)                            \
+                / sizeof(((struct_type *)0)->member[0]),                       \
+        .flags = SHREWD_BASIC_REFLECT_FIELD_F_ARRAY                            \
+    }
+
+/*
+ * Compile-time type registration: define `var` exactly once, in a single
+ * .c of the module; sibling translation units import it with
+ * SHREWD_BASIC_REFLECT_TYPE_DECLARE(var). The descriptor object gets
+ * external linkage so &var is an address constant usable inside other
+ * descriptors (nested and, later, self-referential types); the field
+ * table `var##_fields` stays file-local. The trailing ';' belongs to the
+ * call, like the log module macros. Macro arguments must not collide
+ * with descriptor member names (hence var/struct_type/member/ref).
+ */
+#define SHREWD_BASIC_REFLECT_TYPE_DEFINE(var, struct_type, ...)                \
+    extern const shrewd_basic_reflect_type_t var;                              \
+    static const shrewd_basic_reflect_field_t var##_fields[] = { __VA_ARGS__ };\
+    const shrewd_basic_reflect_type_t var = {                                  \
+        .kind = SHREWD_BASIC_REFLECT_KIND_STRUCT,                              \
+        .name = #struct_type,                                                  \
+        .size = sizeof(struct_type),                                           \
+        .field_count = sizeof(var##_fields) / sizeof(var##_fields[0]),         \
+        .fields = var##_fields                                                 \
+    }
+
+/** Import a type defined by SHREWD_BASIC_REFLECT_TYPE_DEFINE() elsewhere. */
+#define SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                 \
+    extern const shrewd_basic_reflect_type_t var
+
+/** Name of a kind, e.g. "int32"; unknown values map to "unknown". */
+const char *shrewd_basic_reflect_kind_name(shrewd_basic_reflect_kind_t kind);
+
+/**
+ * Find a field by name (flat, single level).
+ * Returns SHREWD_BASIC_ERR_OK and stores a pointer into type->fields
+ * (static storage) into @p *out, SHREWD_BASIC_ERR_KEY_NOTFOUND when no
+ * field matches, SHREWD_BASIC_ERR_ARG_INVALID for NULL arguments.
+ */
+int shrewd_basic_reflect_type_find_field(const shrewd_basic_reflect_type_t *type,
+                                         const char *name,
+                                         const shrewd_basic_reflect_field_t **out);
+
+/**
+ * Copy the field's raw bytes out of @p object into @p out_value.
+ * @p value_size must equal field->size or the call fails with
+ * SHREWD_BASIC_ERR_REFLECT_MISMATCH. For string fields the bytes are the
+ * char pointer itself. @p object must be an instance of the struct that
+ * declared @p field.
+ */
+int shrewd_basic_reflect_field_get(const void *object,
+                                   const shrewd_basic_reflect_field_t *field,
+                                   void *out_value, size_t value_size);
+
+/**
+ * Write @p value into the field (raw bytes, same size rule and errors as
+ * shrewd_basic_reflect_field_get()).
+ */
+int shrewd_basic_reflect_field_set(void *object,
+                                   const shrewd_basic_reflect_field_t *field,
+                                   const void *value, size_t value_size);
+
+/**
+ * Pretty-print @p object according to @p type through the "reflect" log
+ * module (one log line per output line, level INFO). @p label may be NULL.
+ */
+int shrewd_basic_reflect_dump(const shrewd_basic_reflect_type_t *type,
+                              const void *object, const char *label);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* SHREWD_BASIC_REFLECT_REFLECT_H */
