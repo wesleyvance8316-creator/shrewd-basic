@@ -244,11 +244,11 @@ person (person_t) {
 | 场景 | 行为 |
 |---|---|
 | `field_get/set` / 路径终点 | **浅层**拷贝指针值 |
-| dump | **跟随**解引用(`(null)` / 地址 / 值 / 块,深度钳制防环) |
+| dump | **跟随**解引用(`(null)` / 地址 / 值 / 块,环输出 `...(cyclic)`,深链钳制) |
 | `path_get/set` | 解引用**寻址**;中途 NULL → `KEY_NOTFOUND`,绝不半途写入 |
 | `check/copy/destroy` | 见下 |
 
-自引用(`struct node *next`)合法且递归打印安全(16 层深度钳制输出 `...(max depth)`)。
+自引用(`struct node *next`)、环形与共享图均安全:环渲染 `...(cyclic)`,深链钳制 `...(max depth)`;`copy`/`destroy`/`check` 经克隆映射与访问集对每个目标只处理一次(clone 保环、共享保持共享)。
 
 ### 7.2 ops vtable
 
@@ -324,9 +324,9 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
 - **log**:dump 与操作日志走共享 `"reflect"` 模块;策略 WARN 参数误用、ERROR 分配失败、
   TRACE 操作结果/路径未命中、dump 每行 INFO;可 `find("reflect")` 后 `set_level` /
   `set_stream` / `set_file` / 全局输出(见 `docs/` 外的 log.h 与 log demo);
-- **ds**:visited set(环形图克隆)计划复用 ds 的容器,排在三期。
+- **ds**:图遍历的克隆映射与访问集复用 ds 的 rbtree(跨模块复用)。
 
 ## 10. 路线图
 
-- 二期(已交付):指针跟随、路径访问、ops 回调集;
-- 三期:JSON 序列化、枚举、泛型比较、环形图 visited set、可选代码生成器(产出同一套宏)。
+- 一、二期(已交付):核心地基、指针、路径、ops 回调集、枚举、环形/共享图支持;
+- 三期(进行中):泛型比较、可选代码生成器(产出同一套宏)。JSON 等序列化属于 reflect 的应用层,不在本模块范围。
