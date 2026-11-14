@@ -28,6 +28,13 @@ typedef enum shrewd_basic_error {
     SHREWD_BASIC_ERR_KEY_EXISTS = -4    /**< Duplicate key already stored. */
 } shrewd_basic_error_t;
 
+/**
+ * Name of an error code, e.g. "SHREWD_BASIC_ERR_OK"; the module extension
+ * codes (like SHREWD_BASIC_ERR_LOG_FOPEN) are covered too. Codes the
+ * library does not define map to "SHREWD_BASIC_ERR_UNKNOWN".
+ */
+const char *shrewd_basic_error_name(int status);
+
 #ifdef __cplusplus
 }
 #endif

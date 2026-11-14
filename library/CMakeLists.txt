@@ -7,6 +7,7 @@ include(GNUInstallDirs)
 add_library(shrewd-basic
         src/shrewd-basic.c
         src/shrewd-basic-internal.c
+        platform/error.c
         platform/memory.c
         log/log.c
         ds/slist.c

@@ -53,5 +53,19 @@ int main(void)
     expect_true("log level is in range",
                 (0 <= SHREWD_BASIC_LOG_LEVEL) && (4 >= SHREWD_BASIC_LOG_LEVEL));
 
+    /* Error module: names for the shared error codes. */
+    expect_true("error name OK",
+                0 == strcmp(shrewd_basic_error_name(SHREWD_BASIC_ERR_OK),
+                            "SHREWD_BASIC_ERR_OK"));
+    expect_true("error name ARG_INVALID",
+                0 == strcmp(shrewd_basic_error_name(SHREWD_BASIC_ERR_ARG_INVALID),
+                            "SHREWD_BASIC_ERR_ARG_INVALID"));
+    expect_true("error name KEY_NOTFOUND",
+                0 == strcmp(shrewd_basic_error_name(SHREWD_BASIC_ERR_KEY_NOTFOUND),
+                            "SHREWD_BASIC_ERR_KEY_NOTFOUND"));
+    expect_true("error name unknown code",
+                0 == strcmp(shrewd_basic_error_name(-12345),
+                            "SHREWD_BASIC_ERR_UNKNOWN"));
+
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

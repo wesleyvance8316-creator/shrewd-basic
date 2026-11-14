@@ -35,29 +35,9 @@ static void banner(const char *title)
     fflush(stdout);
 }
 
-static const char *status_name(int status)
-{
-    switch (status) {
-    case SHREWD_BASIC_ERR_OK:
-        return "SHREWD_BASIC_ERR_OK";
-    case SHREWD_BASIC_ERR_MEM_NOMEM:
-        return "SHREWD_BASIC_ERR_MEM_NOMEM";
-    case SHREWD_BASIC_ERR_ARG_INVALID:
-        return "SHREWD_BASIC_ERR_ARG_INVALID";
-    case SHREWD_BASIC_ERR_KEY_NOTFOUND:
-        return "SHREWD_BASIC_ERR_KEY_NOTFOUND";
-    case SHREWD_BASIC_ERR_KEY_EXISTS:
-        return "SHREWD_BASIC_ERR_KEY_EXISTS";
-    case SHREWD_BASIC_ERR_LOG_FOPEN:
-        return "SHREWD_BASIC_ERR_LOG_FOPEN";
-    default:
-        return "unknown";
-    }
-}
-
 static void print_status(const char *what, int status)
 {
-    printf("  %-42s -> %s (%d)\n", what, status_name(status), status);
+    printf("  %-42s -> %s (%d)\n", what, shrewd_basic_error_name(status), status);
     fflush(stdout);
 }
 

@@ -162,6 +162,10 @@ static void test_runtime_module(void)
     expect_eq_int("log set_file bad path",
                   shrewd_basic_log_module_set_file(mod, "/no/such/dir/log.txt"),
                   SHREWD_BASIC_ERR_LOG_FOPEN);
+    /* Module extension codes are named by the error module too. */
+    expect_true("log error name",
+                0 == strcmp(shrewd_basic_error_name(SHREWD_BASIC_ERR_LOG_FOPEN),
+                            "SHREWD_BASIC_ERR_LOG_FOPEN"));
     shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, mod, "file", "to file\n");
 
     shrewd_basic_log_module_t *found = NULL;
