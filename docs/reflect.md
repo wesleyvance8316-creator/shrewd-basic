@@ -1,0 +1,327 @@
+# reflect 模块 — 机制、接口与用法
+
+`shrewd-basic/reflect` 为 C 结构体提供**编译期生成的运行时类型元数据**:泛型代码可以枚举
+字段、按名/按路径取值赋值、递归打印、校验、深拷贝,而不需要知道具体类型。所有元数据是
+`const` 数据(可放 flash),注册由宏在编译期完成,零工具链依赖。
+
+- 头文件:`include/shrewd-basic/reflect/reflect.h`
+- 实现:`library/reflect/reflect.c`(核心)、`library/reflect/reflect_dump.c`(打印)
+- 演示:`programs/reflect_demo.c`(覆盖全部接口)
+- 测试:`tests/test_reflect.c`(宏展开回归、全接口语义)
+
+---
+
+## 1. 设计原则
+
+1. **宏为基座**:用户用宏注解结构体,编译期展开成 `const` 描述符;未来的代码生成器产出同一套宏,不改变使用方式。
+2. **混合式类型绑定**:基础类型经 C11 `_Generic` 自动推导;聚合(嵌套结构体、数组、指针)显式传入目标描述符。
+3. **size 不变量**:**一切数据读写走 `field->size`**(数组步长为 `size/count`),`type->size` 仅信息性。这使 `long` → int64 描述符的映射在 LLP64 平台上依然内存安全。
+4. **零所有权**:反射默认不分配、不释放、不深拷贝;需要时由 ops 回调(见 §7)接管。
+5. **恒定错误码**:`shrewd-basic/platform/error.h` 集中注册,reflect 占 `-200..-299` 号段
+   (`SHREWD_BASIC_ERR_REFLECT_MISMATCH = -200`)。
+
+---
+
+## 2. 快速上手
+
+```c
+#include "shrewd-basic/reflect/reflect.h"
+
+typedef struct { int32_t x; int32_t y; } point_t;
+typedef struct {
+    const char *name;
+    int32_t age;
+    float scores[3];
+    point_t home;
+} person_t;
+
+/* 每个类型只 DEFINE 一次(一个 .c);其他 .c 用 TYPE_DECLARE 引入 */
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(point_type, point_t,
+    SHREWD_BASIC_REFLECT_FIELD(point_t, x),
+    SHREWD_BASIC_REFLECT_FIELD(point_t, y));
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(person_type, person_t,
+    SHREWD_BASIC_REFLECT_FIELD(person_t, name),          /* 字符串:自动 */
+    SHREWD_BASIC_REFLECT_FIELD(person_t, age),           /* 标量:自动 */
+    SHREWD_BASIC_REFLECT_FIELD_ARRAY(person_t, scores, shrewd_basic_reflect_float),
+    SHREWD_BASIC_REFLECT_FIELD_STRUCT(person_t, home, point_type));
+
+void demo(void)
+{
+    person_t p = { .name = "Alice", .age = 30, .home = {1, 2} };
+
+    /* 递归打印(经 log 模块输出,终端带颜色) */
+    shrewd_basic_reflect_dump(&person_type, &p, "person");
+
+    /* 按路径读写 */
+    int32_t x = 0;
+    shrewd_basic_reflect_path_get(&p, &person_type, "home.x", &x, sizeof(x));
+    shrewd_basic_reflect_path_set(&p, &person_type, "home.x", &(int32_t){7}, sizeof(int32_t));
+}
+```
+
+输出:
+
+```
+person (person_t) {
+  name = "Alice"
+  age = 30
+  scores = [ 0, 0, 0 ]
+  home = {
+    x = 7
+    y = 2
+  }
+}
+```
+
+---
+
+## 3. 数据模型
+
+### 3.1 kind(`shrewd_basic_reflect_kind_t`)
+
+`BOOL, CHAR, INT8, UINT8, INT16, UINT16, INT32, UINT32, INT64, UINT64,
+FLOAT, DOUBLE, STRING, STRUCT, OPAQUE`
+
+- `STRING`:`char *` / `const char *` 成员,指针即值;
+- `STRUCT`:有字段表的聚合;
+- `OPAQUE`:不可描述的目标(`shrewd_basic_reflect_void` 或应用自定义),只能打地址/走 ops;
+- 枚举可扩展(未来 ENUM/POINTER),所有 switch 都有 `default` 兜底为 `unknown`。
+
+`shrewd_basic_reflect_kind_name()` 返回小写名(`"int32"`、`"struct"` …)。
+
+### 3.2 描述符
+
+```c
+typedef struct shrewd_basic_reflect_field {
+    const char *name;                        /* 成员名 */
+    const shrewd_basic_reflect_type_t *type; /* 值类型 / 数组元素类型 / 指针目标类型 */
+    size_t offset;                           /* offsetof(owner, member) */
+    size_t size;                             /* sizeof(member);数组为总字节 */
+    size_t count;                            /* 元素数,非数组为 1 */
+    uint32_t flags;                          /* F_ARRAY / F_PTR,可组合 */
+    const shrewd_basic_reflect_ops_t *ops;   /* 字段级 ops 覆盖,NULL = 用 type->ops */
+} shrewd_basic_reflect_field_t;
+
+struct shrewd_basic_reflect_type {
+    shrewd_basic_reflect_kind_t kind;
+    const char *name;
+    size_t size;          /* 信息性宽度 */
+    size_t field_count;
+    const shrewd_basic_reflect_field_t *fields;
+    const shrewd_basic_reflect_ops_t *ops;  /* 类型级 ops,NULL = 纯元数据行为 */
+};
+```
+
+**数组是字段形态不是 kind**:`F_ARRAY` + `count` 包装一个元素类型;指针同理是 `F_PTR`
+形态,`type` 指向目标类型。两者正交(`F_PTR|F_ARRAY` = 指针数组)。
+
+### 3.3 基础类型描述符
+
+每种 kind 一个 `extern const` 实例,供宏引用:
+
+```c
+shrewd_basic_reflect_bool / _char / _int8 / _uint8 / _int16 / _uint16
+shrewd_basic_reflect_int32 / _uint32 / _int64 / _uint64 / _float / _double
+shrewd_basic_reflect_string   /* const char * */
+shrewd_basic_reflect_void     /* 不透明目标(OPAQUE),size = 0 */
+```
+
+---
+
+## 4. 注册宏
+
+### 4.1 字段宏
+
+| 宏 | 用途 |
+|---|---|
+| `FIELD(struct_type, member)` | 标量 / 字符串,`_Generic` 自动推导类型 |
+| `FIELD_STRUCT(struct_type, member, ref)` | 嵌套结构体值成员 |
+| `FIELD_ARRAY(struct_type, member, ref)` | 定长数组,`ref` 为元素描述符 |
+| `FIELD_PTR(struct_type, member, ref)` | 指针成员,`ref` 为目标描述符 |
+| `FIELD_PTR_ARRAY(struct_type, member, ref)` | 定长指针数组 |
+| `FIELD_STRUCT_OPS` / `FIELD_PTR_OPS` / `FIELD_PTR_ARRAY_OPS` | 同上 + 字段级 ops 覆盖 |
+
+`ref`/`ops_ref` 参数**不带 `&`**(宏内部补 `&` 以保持地址常量)。
+
+### 4.2 类型宏
+
+```c
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(var, struct_type, field, ...)        /* 结构体类型 */
+SHREWD_BASIC_REFLECT_TYPE_DEFINE_OPS(var, struct_type, ops_ref, ...)  /* 结构体 + 类型级 ops */
+SHREWD_BASIC_REFLECT_OPAQUE_DEFINE(var, "name", ops_ref)              /* 不透明类型 + ops */
+SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                /* 跨 TU 引入 */
+```
+
+纪律与 log 模块一致:**每个类型在一个 .c 中 DEFINE 一次**,兄弟 .c 用 DECLARE 共享
+(描述符对象外部链接,`&var` 是地址常量,可自引用——递归指针类型正是靠这一点)。
+
+### 4.3 `_Generic` 绑定规则
+
+`PRIM_TYPE` 只列**基本类型**(`char`、`signed char`、`unsigned char` 是三个独立类型,
+各有分支;绝不列 `int8_t` 等 stdint 别名,否则重复关联编译报错),且**没有 default 分支**:
+不支持的成员类型(指针、函数指针、`long double` 等)直接编译报错——这是特性。
+
+---
+
+## 5. 接口参考
+
+全部返回 `int` 错误码(`shrewd-basic/platform/error.h`),数据经出参返回。
+
+| 接口 | 语义 | 错误码 |
+|---|---|---|
+| `kind_name(kind)` | kind 的名字 | — |
+| `type_find_field(type, name, &field)` | 扁平按名查字段 | `KEY_NOTFOUND` / `ARG_INVALID` |
+| `field_get(obj, field, out, n)` | 原始字节读字段(`n == field->size`) | `REFLECT_MISMATCH` / `ARG_INVALID` |
+| `field_set(obj, field, in, n)` | 原始字节写字段 | 同上 |
+| `dump(type, obj, label)` | 递归打印(type 需为 STRUCT) | `ARG_INVALID` |
+| `type_resolve(type, path, &field, &offset, &size)` | 路径→字段+偏移+值尺寸(纯元数据) | `KEY_NOTFOUND` / `ARG_INVALID` |
+| `path_get(obj, type, path, out, n)` | 沿路径读(自动解引用指针段) | `REFLECT_MISMATCH` / `KEY_NOTFOUND` / `ARG_INVALID` |
+| `path_set(obj, type, path, in, n)` | 沿路径写 | 同上 |
+| `value_get(obj, field, out, n)` | 经 ops 取目标的规范值 | `REFLECT_MISMATCH` / `KEY_NOTFOUND` / `ARG_INVALID` |
+| `value_set(obj, field, in, n)` | 经 ops 写目标的规范值 | 同上 |
+| `check(obj, type)` | 图校验(ops->check + 字段递归) | 回调返回值 / `ARG_INVALID` |
+| `copy(&out, obj, type)` | 深拷贝(clone-out) | `MEM_NOMEM` / `ARG_INVALID` |
+| `destroy(obj, type)` | 深释放(copy 的逆) | `ARG_INVALID` |
+
+### 5.1 get/set 的尺寸规则
+
+`value_size` 必须等于目标的字节宽度(`field->size` 或 `ops->value_size`),否则
+`REFLECT_MISMATCH`;数组整体读写时 `n` 为总字节,路径以索引结尾时为单元素宽度
+(`resolve` 的 `out_size` 明确给出,无需猜测)。
+
+### 5.2 路径语法
+
+```
+member ( '[' index ']' )? ( '.' member ( '[' index ']' )? )*
+```
+
+- 成员名为 C 标识符,索引为十进制数字,**每段最多一个索引**(不支持多维数组);
+- `.` 由字段形态驱动:值成员直进,`F_PTR` 段自动解引用(与 `->` 不区分);
+- 语法非法 → `ARG_INVALID`;成员不存在 / 索引越界 / **指针段为 NULL** → `KEY_NOTFOUND`;
+- `resolve` 是纯元数据零解引用,**跨指针段的路径被拒绝**(`ARG_INVALID`),动态寻址用
+  `path_get/set`;路径终点是指针字段时返回指针值本身(与 `field_get` 一致)。
+
+---
+
+## 6. dump 输出格式
+
+```
+person (person_t) {
+  name = "Alice"            字符串:转义 \\ \" \n \r \t 与 \xHH,NULL → (null),256 字节截断
+  grade = 'A'               char:可打印字符,否则 '\x07'
+  small = -7                有符号整数(按真实宽度读)
+  big = 5                   无符号整数
+  ratio = 1.5               浮点 %g
+  tag = [ 't', 'a', 'g' ]   标量数组单行,32 个封顶 ...(N more)
+  scores = [ 1, 2, 3 ]
+  home = {                  嵌套结构体缩进块(2 空格/层,16 层深度钳制)
+    x = 1
+    y = 2
+  }
+  pair[0] = { ... }         结构体数组逐元素块
+  ptr = { ... }             指针跟随(NULL → (null))
+  ctx = 0x7ffd1234          不透明目标打地址
+}
+```
+
+经共享 `"reflect"` log 模块输出(INFO 级、每行一条),因此**彩色前缀、输出重定向
+(`set_file`/全局输出)全部免费获得**;捕获测试用
+`shrewd_basic_log_module_find("reflect", &m)` + `set_stream(tmpfile())`。
+
+---
+
+## 7. 指针语义与 ops 回调
+
+### 7.1 指针规则
+
+| 场景 | 行为 |
+|---|---|
+| `field_get/set` / 路径终点 | **浅层**拷贝指针值 |
+| dump | **跟随**解引用(`(null)` / 地址 / 值 / 块,深度钳制防环) |
+| `path_get/set` | 解引用**寻址**;中途 NULL → `KEY_NOTFOUND`,绝不半途写入 |
+| `check/copy/destroy` | 见下 |
+
+自引用(`struct node *next`)合法且递归打印安全(16 层深度钳制输出 `...(max depth)`)。
+
+### 7.2 ops vtable
+
+```c
+struct shrewd_basic_reflect_ops {
+    size_t value_size;                                  /* get/set 规范值宽度 */
+    int  (*get)(const void *pointee, void *out, size_t value_size);
+    int  (*set)(void *pointee, const void *value, size_t value_size);
+    int  (*check)(const void *pointee);                 /* 不变量校验 */
+    int  (*copy)(void **out, const void *pointee);      /* clone-out 深拷贝 */
+    void (*destroy)(void *pointee);                     /* 释放 copy 产物 */
+};
+```
+
+- **两级挂载**:`field->ops` 优先,缺省回落 `type->ops`;
+- **逐回调解退**:缺哪个回调就用哪个元数据默认(只写 `check` 也能复用通用拷贝);
+- `get/set/check` 对值和指针目标同样适用;`copy/destroy` 是**对象语义**(指针目标与
+  `copy/destroy` 的根对象)。
+
+### 7.3 通用深拷贝/释放矩阵(无 ops 时)
+
+| 目标 | copy | destroy |
+|---|---|---|
+| 结构体 | `platform_calloc` + 字段递归 | 递归 + `platform_free` |
+| 标量 | `platform_alloc` + 拷值(规范宽度) | `platform_free` |
+| 字符串(槽) | **别名**(借用语义) | 永不触碰 |
+| 不透明 | 拒绝(`ARG_INVALID`) | 跳过(非我方分配) |
+| 超深度钳制 | 别名(防御) | 跳过 |
+
+**所有权契约**:`destroy` 是 `copy` 的逆操作,只对"图自持所有权"的图运行(copy 产物或
+`platform_alloc` 构建的数据)。指针指向调用方栈/静态存储的图必须自供 ops(空
+`destroy`)或不调用 `destroy`。`copy` 失败路径会清理部分克隆,不泄漏。
+
+### 7.4 ops 用法示例
+
+```c
+static int handle_get(const void *h, void *out, size_t n) { memcpy(out, h, n); return 0; }
+static int handle_check(const void *h) { return (*(const int32_t *)h >= 0) ? 0 : SHREWD_BASIC_ERR_ARG_INVALID; }
+static int handle_copy(void **out, const void *h);
+static void handle_destroy(void *h);
+
+static const shrewd_basic_reflect_ops_t handle_ops = {
+    .value_size = sizeof(int32_t),
+    .get = handle_get, .set = handle_set, .check = handle_check,
+    .copy = handle_copy, .destroy = handle_destroy };
+
+SHREWD_BASIC_REFLECT_OPAQUE_DEFINE(handle_type, "handle", handle_ops);
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
+    SHREWD_BASIC_REFLECT_FIELD_PTR(device_t, h, handle_type));   /* 或 FIELD_PTR_OPS 覆盖 */
+```
+
+---
+
+## 8. 约束与陷阱
+
+1. **宏参数名不得与描述符成员名重合**(参数会替换 designated initializer 的设计器,
+   如参数 `type` 会毁掉 `.type =`)。参数固定为 `var / struct_type / member / ref / ops_ref`。
+2. **`char buf[N]` 必须用 `FIELD_ARRAY(t, buf, shrewd_basic_reflect_char)`**:
+   `FIELD` 会因数组退化把 `char[N]` 当 `char *` 误判为字符串(编译器抓不到)。
+3. **多维数组不支持**(元素类型模型是单层),bit-field / 联合体 / 柔性数组成员 /
+   函数指针 / 匿名成员不支持。
+4. **`long` → int64 在 LLP64 上 kind 与真实宽度不符**:安全靠 size 不变量,但 dump 的
+   指针目标标量按 `type->size` 规范宽度读——`long *` 这类目标建议自供 ops。
+5. **宏需要 C11(`_Generic`)且展开为声明**,必须放文件作用域;类型至少 1 个字段。
+6. **destroy 契约**(§7.3):别对栈上目标的图调用 `destroy`。
+
+---
+
+## 9. 与其他模块的集成
+
+- **error**:错误码集中在 `platform/error.h`(reflect = -200..-299),
+  `shrewd_basic_error_name()` 可打印任意返回码;
+- **log**:dump 与操作日志走共享 `"reflect"` 模块;策略 WARN 参数误用、ERROR 分配失败、
+  TRACE 操作结果/路径未命中、dump 每行 INFO;可 `find("reflect")` 后 `set_level` /
+  `set_stream` / `set_file` / 全局输出(见 `docs/` 外的 log.h 与 log demo);
+- **ds**:visited set(环形图克隆)计划复用 ds 的容器,排在三期。
+
+## 10. 路线图
+
+- 二期(已交付):指针跟随、路径访问、ops 回调集;
+- 三期:JSON 序列化、枚举、泛型比较、环形图 visited set、可选代码生成器(产出同一套宏)。
