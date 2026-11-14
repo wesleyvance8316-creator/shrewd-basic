@@ -782,6 +782,180 @@ static void test_dump_pointers(void)
     fclose(stream);
 }
 
+static void test_paths(void)
+{
+    const shrewd_basic_reflect_field_t *field = NULL;
+    size_t offset = 0;
+    size_t size = 0;
+
+    /* resolve: value nesting and indices. */
+    expect_eq_int("resolve home.x",
+                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "home.x",
+                                                    &field, &offset, &size),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("resolve home.x shape",
+                (0 == strcmp(field->name, "x"))
+                && (offsetof(person_t, home) + offsetof(point_t, x) == offset)
+                && (sizeof(int32_t) == size));
+    expect_eq_int("resolve pair[1].y",
+                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "pair[1].y",
+                                                    &field, &offset, &size),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("resolve pair[1].y shape",
+                (offsetof(person_t, pair) + sizeof(point_t) + offsetof(point_t, y) == offset)
+                && (sizeof(int32_t) == size));
+    expect_eq_int("resolve scores",
+                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "scores",
+                                                    &field, &offset, &size),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("resolve scores is the whole array", 3 * sizeof(int32_t) == size);
+    expect_eq_int("resolve scores[2]",
+                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "scores[2]",
+                                                    &field, &offset, &size),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("resolve scores[2] is one element",
+                (offsetof(person_t, scores) + 2 * sizeof(int32_t) == offset)
+                && (sizeof(int32_t) == size));
+
+    /* Misses, bounds and syntax. */
+    expect_eq_int("resolve miss",
+                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "nope",
+                                                    &field, &offset, &size),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("resolve nested miss",
+                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "home.nope",
+                                                    &field, &offset, &size),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("resolve index out of range",
+                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "scores[3]",
+                                                    &field, &offset, &size),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("resolve empty path",
+                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "",
+                                                    &field, &offset, &size),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("resolve trailing dot",
+                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "home.",
+                                                    &field, &offset, &size),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("resolve double dot",
+                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "home..x",
+                                                    &field, &offset, &size),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("resolve leading digit",
+                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "1bad",
+                                                    &field, &offset, &size),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("resolve index on scalar",
+                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "age[0]",
+                                                    &field, &offset, &size),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("resolve double index",
+                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "pair[1][0]",
+                                                    &field, &offset, &size),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("resolve non-numeric index",
+                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "scores[x]",
+                                                    &field, &offset, &size),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("resolve NULL type",
+                  shrewd_basic_reflect_type_resolve(NULL, "age", &field, &offset, &size),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+
+    /* path_get/path_set on value paths. */
+    person_t person;
+    memset(&person, 0, sizeof(person));
+    int32_t value = 21;
+    expect_eq_int("path_set home.x",
+                  shrewd_basic_reflect_path_set(&person, &g_person_reflect,
+                                                "home.x", &value, sizeof(value)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("path_set home.x lands", 21 == person.home.x);
+    int32_t back = 0;
+    expect_eq_int("path_get home.x",
+                  shrewd_basic_reflect_path_get(&person, &g_person_reflect,
+                                                "home.x", &back, sizeof(back)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("path_get home.x value", 21 == back);
+    value = 5;
+    expect_eq_int("path_set pair[1].y",
+                  shrewd_basic_reflect_path_set(&person, &g_person_reflect,
+                                                "pair[1].y", &value, sizeof(value)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("path_set pair[1].y lands", 5 == person.pair[1].y);
+    int32_t scores[3] = {7, 8, 9};
+    expect_eq_int("path_set scores blob",
+                  shrewd_basic_reflect_path_set(&person, &g_person_reflect,
+                                                "scores", scores, sizeof(scores)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("path_set scores blob lands", 0 == memcmp(person.scores, scores, sizeof(scores)));
+    value = 42;
+    expect_eq_int("path_set scores[2]",
+                  shrewd_basic_reflect_path_set(&person, &g_person_reflect,
+                                                "scores[2]", &value, sizeof(value)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("path_set scores[2] lands", 42 == person.scores[2]);
+    expect_eq_int("path_get size mismatch",
+                  shrewd_basic_reflect_path_get(&person, &g_person_reflect,
+                                                "home.x", &back, (size_t)2),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+
+    /* Pointer segments are followed for addressing. */
+    node_t tail;
+    memset(&tail, 0, sizeof(tail));
+    node_t head;
+    memset(&head, 0, sizeof(head));
+    head.next = &tail;
+    value = 7;
+    expect_eq_int("path_set next.data",
+                  shrewd_basic_reflect_path_set(&head, &g_node_reflect,
+                                                "next.data", &value, sizeof(value)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("path_set next.data lands", 7 == tail.data);
+    expect_eq_int("path_get next.data",
+                  shrewd_basic_reflect_path_get(&head, &g_node_reflect,
+                                                "next.data", &back, sizeof(back)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("path_get next.data value", 7 == back);
+    node_t *link = NULL;
+    expect_eq_int("path_get next (pointer value)",
+                  shrewd_basic_reflect_path_get(&head, &g_node_reflect,
+                                                "next", &link, sizeof(link)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("path_get next copies pointer", &tail == link);
+    head.next = NULL;
+    expect_eq_int("path_get through NULL",
+                  shrewd_basic_reflect_path_get(&head, &g_node_reflect,
+                                                "next.data", &back, sizeof(back)),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("path_set through NULL",
+                  shrewd_basic_reflect_path_set(&head, &g_node_reflect,
+                                                "next.data", &value, sizeof(value)),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_true("path_set through NULL untouched", 7 == tail.data);
+
+    /* resolve is metadata-only: crossing a pointer is not static. */
+    head.next = &tail;
+    expect_eq_int("resolve crosses pointer",
+                  shrewd_basic_reflect_type_resolve(&g_node_reflect, "next.data",
+                                                    &field, &offset, &size),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("resolve pointer field itself",
+                  shrewd_basic_reflect_type_resolve(&g_node_reflect, "next",
+                                                    &field, &offset, &size),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("resolve pointer field size", sizeof(node_t *) == size);
+
+    expect_eq_int("path_get NULL path",
+                  shrewd_basic_reflect_path_get(&person, &g_person_reflect,
+                                                NULL, &back, sizeof(back)),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("path_set NULL value",
+                  shrewd_basic_reflect_path_set(&person, &g_person_reflect,
+                                                "home.x", NULL, sizeof(value)),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+}
+
 int main(void)
 {
     test_describe();
@@ -793,6 +967,7 @@ int main(void)
     test_pointer_fields();
     test_dump();
     test_dump_pointers();
+    test_paths();
     test_logging_policy();
     test_cross_tu();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;

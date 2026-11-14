@@ -162,3 +162,213 @@ int shrewd_basic_reflect_field_set(void *object,
                      field->name, field->size);
     return SHREWD_BASIC_ERR_OK;
 }
+
+/*
+ * Walk a dotted/indexed path over an object: member ( '[' index ']' )?
+ * ( '.' member ( '[' index ']' )? )*. With @p follow the walk
+ * dereferences pointer segments (a NULL pointer ends the walk with
+ * KEY_NOTFOUND); without it crossing a pointer is rejected, since such a
+ * path has no static offset. *out_at may be NULL to only compute the
+ * offset. *out_size receives the designated value's size: the whole
+ * field, or one element when the path ends with an index.
+ */
+static int reflect_path_walk(const unsigned char *object,
+                             const shrewd_basic_reflect_type_t *type,
+                             const char *path, int follow,
+                             const unsigned char **out_at, size_t *out_offset,
+                             const shrewd_basic_reflect_field_t **out_field,
+                             size_t *out_size)
+{
+    const unsigned char *base = object;
+    size_t offset = 0;
+    const shrewd_basic_reflect_type_t *cur = type;
+    const shrewd_basic_reflect_field_t *field = NULL;
+    size_t size = 0;
+    const char *p = path;
+
+    for (;;) {
+        if (('A' > *p || 'Z' < *p) && ('a' > *p || 'z' < *p) && ('_' != *p)) {
+            return SHREWD_BASIC_ERR_ARG_INVALID;
+        }
+        const char *name = p;
+        while (('a' <= *p && 'z' >= *p) || ('A' <= *p && 'Z' >= *p)
+                || ('0' <= *p && '9' >= *p) || ('_' == *p)) {
+            ++p;
+        }
+        size_t name_len = (size_t)(p - name);
+        if (SHREWD_BASIC_REFLECT_KIND_STRUCT != cur->kind) {
+            return SHREWD_BASIC_ERR_KEY_NOTFOUND;
+        }
+        field = NULL;
+        for (size_t i = 0; i < cur->field_count; ++i) {
+            const char *candidate = cur->fields[i].name;
+            if ((strlen(candidate) == name_len)
+                    && (0 == memcmp(candidate, name, name_len))) {
+                field = &cur->fields[i];
+                break;
+            }
+        }
+        if (NULL == field) {
+            return SHREWD_BASIC_ERR_KEY_NOTFOUND;
+        }
+        offset += field->offset;
+        size = field->size;
+
+        int indexed = 0;
+        if ('[' == *p) {
+            ++p;
+            if (('0' > *p) || ('9' < *p)) {
+                return SHREWD_BASIC_ERR_ARG_INVALID;
+            }
+            size_t index = 0;
+            while (('0' <= *p) && ('9' >= *p)) {
+                if (index <= (SIZE_MAX / 10)) {
+                    index = (index * 10) + (size_t)(*p - '0');
+                }
+                ++p;
+            }
+            if (']' != *p) {
+                return SHREWD_BASIC_ERR_ARG_INVALID;
+            }
+            ++p;
+            if (0u == (field->flags & SHREWD_BASIC_REFLECT_FIELD_F_ARRAY)) {
+                return SHREWD_BASIC_ERR_ARG_INVALID;
+            }
+            if (index >= field->count) {
+                return SHREWD_BASIC_ERR_KEY_NOTFOUND;
+            }
+            offset += index * (field->size / field->count);
+            size = field->size / field->count;
+            indexed = 1;
+        }
+
+        if ('.' == *p) {
+            ++p;
+            if ((0u != (field->flags & SHREWD_BASIC_REFLECT_FIELD_F_ARRAY))
+                    && (0 == indexed)) {
+                return SHREWD_BASIC_ERR_ARG_INVALID;
+            }
+            if (0u != (field->flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
+                if (0 == follow) {
+                    return SHREWD_BASIC_ERR_ARG_INVALID;
+                }
+                void *pointer = NULL;
+                memcpy(&pointer, base + offset, sizeof(pointer));
+                if (NULL == pointer) {
+                    return SHREWD_BASIC_ERR_KEY_NOTFOUND;
+                }
+                base = (const unsigned char *)pointer;
+                offset = 0;
+            }
+            cur = field->type;
+            continue;
+        }
+        if ('\0' != *p) {
+            return SHREWD_BASIC_ERR_ARG_INVALID;
+        }
+        if (NULL != out_at) {
+            *out_at = base + offset;
+        }
+        if (NULL != out_offset) {
+            *out_offset = offset;
+        }
+        *out_field = field;
+        *out_size = size;
+        return SHREWD_BASIC_ERR_OK;
+    }
+}
+
+static void reflect_path_log(int status, const char *op, const char *path,
+                             size_t size)
+{
+    if (SHREWD_BASIC_ERR_OK == status) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
+                         "field", "%s ok (%s, %zu bytes)\n", op, path, size);
+    } else if (SHREWD_BASIC_ERR_KEY_NOTFOUND == status) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
+                         "field", "%s: no path \"%s\"\n", op, path);
+    } else {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "field", "%s: bad path \"%s\"\n", op, path);
+    }
+}
+
+int shrewd_basic_reflect_type_resolve(const shrewd_basic_reflect_type_t *type,
+                                      const char *path,
+                                      const shrewd_basic_reflect_field_t **out_field,
+                                      size_t *out_offset, size_t *out_size)
+{
+    if ((NULL == type) || (NULL == path) || (NULL == out_field)
+            || (NULL == out_offset) || (NULL == out_size)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "field", "resolve: type, path or out is NULL\n");
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    size_t size = 0;
+    int status = reflect_path_walk(NULL, type, path, 0, NULL, out_offset,
+                                   out_field, &size);
+    if (SHREWD_BASIC_ERR_OK == status) {
+        *out_size = size;
+    } else {
+        reflect_path_log(status, "resolve", path, 0);
+    }
+    return status;
+}
+
+int shrewd_basic_reflect_path_get(const void *object,
+                                  const shrewd_basic_reflect_type_t *type,
+                                  const char *path, void *out_value, size_t value_size)
+{
+    if ((NULL == object) || (NULL == type) || (NULL == path) || (NULL == out_value)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "field", "path_get: object, type, path or out_value is NULL\n");
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    const unsigned char *at = NULL;
+    const shrewd_basic_reflect_field_t *field = NULL;
+    size_t size = 0;
+    int status = reflect_path_walk((const unsigned char *)object, type, path, 1,
+                                   &at, NULL, &field, &size);
+    if (SHREWD_BASIC_ERR_OK != status) {
+        reflect_path_log(status, "path_get", path, 0);
+        return status;
+    }
+    if (value_size != size) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
+                         "field", "path_get: size mismatch (%zu != %zu)\n",
+                         value_size, size);
+        return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
+    }
+    memcpy(out_value, at, size);
+    reflect_path_log(SHREWD_BASIC_ERR_OK, "path_get", path, size);
+    return SHREWD_BASIC_ERR_OK;
+}
+
+int shrewd_basic_reflect_path_set(void *object,
+                                  const shrewd_basic_reflect_type_t *type,
+                                  const char *path, const void *value, size_t value_size)
+{
+    if ((NULL == object) || (NULL == type) || (NULL == path) || (NULL == value)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "field", "path_set: object, type, path or value is NULL\n");
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    const unsigned char *at = NULL;
+    const shrewd_basic_reflect_field_t *field = NULL;
+    size_t size = 0;
+    int status = reflect_path_walk((const unsigned char *)object, type, path, 1,
+                                   &at, NULL, &field, &size);
+    if (SHREWD_BASIC_ERR_OK != status) {
+        reflect_path_log(status, "path_set", path, 0);
+        return status;
+    }
+    if (value_size != size) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
+                         "field", "path_set: size mismatch (%zu != %zu)\n",
+                         value_size, size);
+        return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
+    }
+    memcpy((unsigned char *)(uintptr_t)at, value, size);
+    reflect_path_log(SHREWD_BASIC_ERR_OK, "path_set", path, size);
+    return SHREWD_BASIC_ERR_OK;
+}

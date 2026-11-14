@@ -281,6 +281,53 @@ int shrewd_basic_reflect_field_set(void *object,
 int shrewd_basic_reflect_dump(const shrewd_basic_reflect_type_t *type,
                               const void *object, const char *label);
 
+/*
+ * Path syntax shared by the three functions below:
+ * member ( '[' index ']' )? ( '.' member ( '[' index ']' )? )*
+ * with C identifier member names and decimal indices, e.g. "home.x",
+ * "pair[2].y". A member takes at most one index (multi-dimension arrays
+ * are not described). Paths that cross a pointer segment are followed
+ * where the API says so; NULL pointers along the way end the walk.
+ */
+
+/**
+ * Resolve a value path to its final field (metadata only, no memory
+ * access). @p out_offset receives the byte offset of the value inside
+ * the root object, @p out_size the size of the designated value - one
+ * element's size when the path ends with an index. Pointer-free paths
+ * only: crossing a pointer cannot be resolved statically and returns
+ * SHREWD_BASIC_ERR_ARG_INVALID (use path_get/path_set). Unknown members
+ * or out-of-range indices return SHREWD_BASIC_ERR_KEY_NOTFOUND;
+ * malformed paths and NULL arguments return SHREWD_BASIC_ERR_ARG_INVALID.
+ */
+int shrewd_basic_reflect_type_resolve(const shrewd_basic_reflect_type_t *type,
+                                      const char *path,
+                                      const shrewd_basic_reflect_field_t **out_field,
+                                      size_t *out_offset, size_t *out_size);
+
+/**
+ * Read the value a path designates out of @p object (raw bytes, same
+ * size rule as shrewd_basic_reflect_field_get(): @p value_size must equal
+ * the resolved value size or the call fails with
+ * SHREWD_BASIC_ERR_REFLECT_MISMATCH). Pointer segments are followed; a
+ * NULL pointer along the way returns SHREWD_BASIC_ERR_KEY_NOTFOUND. A
+ * path ending at a pointer field yields the pointer value itself.
+ */
+int shrewd_basic_reflect_path_get(const void *object,
+                                  const shrewd_basic_reflect_type_t *type,
+                                  const char *path, void *out_value, size_t value_size);
+
+/**
+ * Write @p value where a path designates (raw bytes, same size rule and
+ * errors as shrewd_basic_reflect_path_get()). Pointer segments are
+ * followed for addressing only; nothing is allocated or freed and a
+ * NULL pointer along the way leaves the object untouched
+ * (SHREWD_BASIC_ERR_KEY_NOTFOUND).
+ */
+int shrewd_basic_reflect_path_set(void *object,
+                                  const shrewd_basic_reflect_type_t *type,
+                                  const char *path, const void *value, size_t value_size);
+
 #ifdef __cplusplus
 }
 #endif
