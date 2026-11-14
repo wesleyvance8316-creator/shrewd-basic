@@ -1,3 +1,8 @@
+/* fileno()/isatty() for terminal color detection (POSIX, not plain C11). */
+#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "shrewd-basic/log/log.h"
 
 #include <stdarg.h>
@@ -5,6 +10,26 @@
 #include <time.h>
 
 #include "shrewd-basic/platform/memory.h"
+
+#if defined(_WIN32)
+#include <io.h>
+#define log_isatty(stream) _isatty(_fileno(stream))
+#else
+#include <unistd.h>
+#define log_isatty(stream) isatty(fileno(stream))
+#endif
+
+/*
+ * ANSI colors for the line prefix. Each bracketed part gets its own color
+ * and the level tag gets a per-level color; the message (and the hex dump)
+ * stays uncolored. Empty strings are substituted when color is off, so the
+ * printf shape never changes.
+ */
+#define LOG_COLOR_RESET   "\033[0m"
+#define LOG_COLOR_TIME    "\033[0;90m"  /* gray    */
+#define LOG_COLOR_MODULE  "\033[0;34m"  /* blue    */
+#define LOG_COLOR_WHERE   "\033[0;35m"  /* magenta */
+#define LOG_COLOR_LABEL   "\033[0;33m"  /* yellow  */
 
 /* Registry of every module seen so far (compile-time and runtime). */
 static shrewd_basic_log_module_t *g_modules = NULL;
@@ -69,6 +94,43 @@ static const char *log_level_name(shrewd_basic_log_level_t level)
         break;
     }
     return name;
+}
+
+static const char *log_level_color(shrewd_basic_log_level_t level)
+{
+    const char *color = "\033[1;37m";  /* bold white */
+    switch (level) {
+    case SHREWD_BASIC_LOG_LEVEL_FATAL:
+        color = "\033[1;31m";  /* bold red    */
+        break;
+    case SHREWD_BASIC_LOG_LEVEL_ERROR:
+        color = "\033[0;31m";  /* red         */
+        break;
+    case SHREWD_BASIC_LOG_LEVEL_WARN:
+        color = "\033[1;33m";  /* bold yellow */
+        break;
+    case SHREWD_BASIC_LOG_LEVEL_INFO:
+        color = "\033[0;32m";  /* green       */
+        break;
+    case SHREWD_BASIC_LOG_LEVEL_DEBUG:
+        color = "\033[0;36m";  /* cyan        */
+        break;
+    case SHREWD_BASIC_LOG_LEVEL_TRACE:
+        color = "\033[0;37m";  /* white       */
+        break;
+    case SHREWD_BASIC_LOG_LEVEL_NONE:
+    case SHREWD_BASIC_LOG_LEVEL_ALL:
+    default:
+        color = "\033[1;37m";  /* bold white */
+        break;
+    }
+    return color;
+}
+
+/* Colors only reach real terminals; files and pipes get plain text. */
+static int log_use_color(FILE *stream)
+{
+    return 0 != log_isatty(stream);
 }
 
 static const char *log_basename(const char *path)
@@ -236,9 +298,20 @@ int shrewd_basic_log_write(shrewd_basic_log_level_t level,
     log_timestamp(timestamp, sizeof(timestamp));
 
     FILE *out = log_output(module);
-    fprintf(out, "%s[%s][%s][%s:%d::%s()][%s] ",
-            timestamp, log_level_name(level), module->name,
-            log_basename(file), line, func, label);
+    const int color = log_use_color(out);
+    const char *end = (0 != color) ? LOG_COLOR_RESET : "";
+    const char *c_time = (0 != color) ? LOG_COLOR_TIME : "";
+    const char *c_level = (0 != color) ? log_level_color(level) : "";
+    const char *c_module = (0 != color) ? LOG_COLOR_MODULE : "";
+    const char *c_where = (0 != color) ? LOG_COLOR_WHERE : "";
+    const char *c_label = (0 != color) ? LOG_COLOR_LABEL : "";
+
+    fprintf(out, "%s%s%s%s[%s]%s%s[%s]%s%s[%s:%d::%s()]%s%s[%s]%s ",
+            c_time, timestamp, end,
+            c_level, log_level_name(level), end,
+            c_module, module->name, end,
+            c_where, log_basename(file), line, func, end,
+            c_label, label, end);
     va_list ap;
     va_start(ap, fmt);
     vfprintf(out, fmt, ap);
@@ -266,10 +339,23 @@ int shrewd_basic_log_hex_write(shrewd_basic_log_level_t level,
     log_timestamp(timestamp, sizeof(timestamp));
 
     FILE *out = log_output(module);
-    fprintf(out, "%s[%s][%s][%s:%d::%s()][%s] %s, data_ptr: 0x%016llX, size: (0x%04zx) %zu\n",
-            timestamp, log_level_name(level), module->name,
-            log_basename(file), line, func, label, msg,
-            (unsigned long long)(uintptr_t)data, size, size);
+    const int color = log_use_color(out);
+    const char *end = (0 != color) ? LOG_COLOR_RESET : "";
+    const char *c_time = (0 != color) ? LOG_COLOR_TIME : "";
+    const char *c_level = (0 != color) ? log_level_color(level) : "";
+    const char *c_module = (0 != color) ? LOG_COLOR_MODULE : "";
+    const char *c_where = (0 != color) ? LOG_COLOR_WHERE : "";
+    const char *c_label = (0 != color) ? LOG_COLOR_LABEL : "";
+
+    /* Colored line prefix; msg and the hex dump below stay uncolored. */
+    fprintf(out, "%s%s%s%s[%s]%s%s[%s]%s%s[%s:%d::%s()]%s%s[%s]%s"
+                 " %s, data_ptr: 0x%016llX, size: (0x%04zx) %zu\n",
+            c_time, timestamp, end,
+            c_level, log_level_name(level), end,
+            c_module, module->name, end,
+            c_where, log_basename(file), line, func, end,
+            c_label, label, end,
+            msg, (unsigned long long)(uintptr_t)data, size, size);
 
     const unsigned char *bytes = data;
     for (size_t offset = 0; offset < size; offset += 16) {

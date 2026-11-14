@@ -13,8 +13,8 @@ target_link_libraries(shrewd-basic-ds-tests
             shrewd-basic
             shrewd-basic-warnings)
 
-# Log module tests.
-add_executable(shrewd-basic-log-tests test_log.c)
+# Log module tests (two translation units: shared module DEFINE/DECLARE).
+add_executable(shrewd-basic-log-tests test_log.c test_log_ext.c)
 
 target_link_libraries(shrewd-basic-log-tests
         PRIVATE

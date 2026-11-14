@@ -4,6 +4,8 @@
 
 #include "shrewd-basic/log/log.h"
 
+#include "test_log_ext.h"
+
 static int g_failures = 0;
 
 static void expect_eq_int(const char *name, int actual, int expected)
@@ -59,6 +61,8 @@ static void test_format(void)
                 (NULL != strstr(buf, "][INFO][cmod]["))
                 && (NULL != strstr(buf, "][test_log.c:"))
                 && (NULL != strstr(buf, "::test_format()][lab] hello 42\n")));
+    /* Non-terminal output must stay free of ANSI color escapes. */
+    expect_true("log file has no color", NULL == strstr(buf, "\033"));
 
     shrewd_basic_log_module_set_stream(g_cmod, stderr);
     fclose(stream);
@@ -204,6 +208,31 @@ static void test_registry(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
+static void test_shared_module(void)
+{
+    /* The foreign translation unit must see the very same module. */
+    expect_true("log shared module pointer", shrewd_test_log_ext_module() == g_cmod);
+
+    FILE *stream = tmpfile();
+    expect_true("log shared tmpfile", NULL != stream);
+    if (NULL == stream) {
+        return;
+    }
+    shrewd_basic_log_module_set_stream(g_cmod, stream);
+
+    shrewd_test_log_ext_write("from ext");
+
+    char buf[1024] = {0};
+    slurp(stream, buf, sizeof(buf));
+    expect_true("log shared module output",
+                (NULL != strstr(buf, "][INFO][cmod]["))
+                && (NULL != strstr(buf, "][test_log_ext.c:"))
+                && (NULL != strstr(buf, "::shrewd_test_log_ext_write()][ext] from ext\n")));
+
+    shrewd_basic_log_module_set_stream(g_cmod, stderr);
+    fclose(stream);
+}
+
 int main(void)
 {
     test_format();
@@ -211,5 +240,6 @@ int main(void)
     test_hex();
     test_runtime_module();
     test_registry();
+    test_shared_module();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
