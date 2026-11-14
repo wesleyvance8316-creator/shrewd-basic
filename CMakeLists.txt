@@ -18,6 +18,7 @@ endif()
 
 option(SHREWD_BASIC_BUILD_PROGRAMS "Build the command-line programs" ON)
 option(SHREWD_BASIC_BUILD_TESTS "Build the tests" ON)
+option(SHREWD_BASIC_BUILD_SHARED "Build shrewd-basic as a shared library (static otherwise)" OFF)
 
 # Warnings applied to our own targets only (link against this INTERFACE target).
 add_library(shrewd-basic-warnings INTERFACE)
