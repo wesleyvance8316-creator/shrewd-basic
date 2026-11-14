@@ -13,6 +13,15 @@ target_link_libraries(shrewd-basic-ds-tests
             shrewd-basic
             shrewd-basic-warnings)
 
+# Log module tests.
+add_executable(shrewd-basic-log-tests test_log.c)
+
+target_link_libraries(shrewd-basic-log-tests
+        PRIVATE
+            shrewd-basic
+            shrewd-basic-warnings)
+
 # Test binary returns non-zero on failure, so a plain COMMAND run is enough.
 add_test(NAME shrewd-basic.unit COMMAND shrewd-basic-tests)
 add_test(NAME shrewd-basic.ds COMMAND shrewd-basic-ds-tests)
+add_test(NAME shrewd-basic.log COMMAND shrewd-basic-log-tests)
