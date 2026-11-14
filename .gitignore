@@ -113,3 +113,6 @@ out/
 # (templates: include/shrewd-basic/config/build.h.in, include/shrewd-basic/config/config.h.in)
 include/shrewd-basic/config/build.h
 include/shrewd-basic/config/config.h
+
+# Demo output (programs/log_demo.c)
+shrewd-basic-log-demo.txt
