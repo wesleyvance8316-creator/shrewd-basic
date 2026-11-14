@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "reflect-internal.h"
 #include "shrewd-basic/log/log.h"
 #include "shrewd-basic/platform/memory.h"
 
@@ -92,94 +93,6 @@ static void dump_emit(dump_ctx_t *ctx)
     dump_append(ctx, "\n");
 }
 
-/*
- * Loaders: memcpy into a width-matched temporary (alignment-safe, packed
- * safe, endian-safe) then widen. The byte count comes from field->sb_refl_size
- * (the size invariant), so a long mapped to the int64 descriptor is read
- * with its real width.
- */
-static int64_t dump_load_i64(const unsigned char *bytes, size_t nbytes)
-{
-    switch (nbytes) {
-    case 1: {
-        int8_t value = 0;
-        memcpy(&value, bytes, sizeof(value));
-        return (int64_t)value;
-    }
-    case 2: {
-        int16_t value = 0;
-        memcpy(&value, bytes, sizeof(value));
-        return (int64_t)value;
-    }
-    case 4: {
-        int32_t value = 0;
-        memcpy(&value, bytes, sizeof(value));
-        return (int64_t)value;
-    }
-    case 8: {
-        int64_t value = 0;
-        memcpy(&value, bytes, sizeof(value));
-        return value;
-    }
-    default:
-        return 0;
-    }
-}
-
-static uint64_t dump_load_u64(const unsigned char *bytes, size_t nbytes)
-{
-    switch (nbytes) {
-    case 1: {
-        uint8_t value = 0;
-        memcpy(&value, bytes, sizeof(value));
-        return (uint64_t)value;
-    }
-    case 2: {
-        uint16_t value = 0;
-        memcpy(&value, bytes, sizeof(value));
-        return (uint64_t)value;
-    }
-    case 4: {
-        uint32_t value = 0;
-        memcpy(&value, bytes, sizeof(value));
-        return (uint64_t)value;
-    }
-    case 8: {
-        uint64_t value = 0;
-        memcpy(&value, bytes, sizeof(value));
-        return value;
-    }
-    default:
-        return 0;
-    }
-}
-
-static double dump_load_f64(const unsigned char *bytes, size_t nbytes)
-{
-    if (4 == nbytes) {
-        float value = 0.0f;
-        memcpy(&value, bytes, sizeof(value));
-        return (double)value;
-    }
-    if (8 == nbytes) {
-        double value = 0.0;
-        memcpy(&value, bytes, sizeof(value));
-        return value;
-    }
-    return 0.0;
-}
-
-static void *dump_load_ptr(const unsigned char *bytes)
-{
-    void *pointer = NULL;
-    memcpy(&pointer, bytes, sizeof(pointer));
-    return pointer;
-}
-
-static const char *dump_load_str(const unsigned char *bytes)
-{
-    return (const char *)dump_load_ptr(bytes);
-}
 
 static void dump_string(dump_ctx_t *ctx, const char *text, size_t str_max)
 {
@@ -229,7 +142,7 @@ static void dump_scalar(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
 {
     switch (type->sb_refl_kind) {
     case SHREWD_BASIC_REFLECT_KIND_BOOL:
-        dump_append(ctx, "%s", (0 != dump_load_u64(bytes, nbytes)) ? "true" : "false");
+        dump_append(ctx, "%s", (0 != reflect_load_u64(bytes, nbytes)) ? "true" : "false");
         break;
     case SHREWD_BASIC_REFLECT_KIND_CHAR: {
         char c = '\0';
@@ -245,25 +158,25 @@ static void dump_scalar(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
     case SHREWD_BASIC_REFLECT_KIND_INT16:
     case SHREWD_BASIC_REFLECT_KIND_INT32:
     case SHREWD_BASIC_REFLECT_KIND_INT64:
-        dump_append(ctx, "%lld", (long long)dump_load_i64(bytes, nbytes));
+        dump_append(ctx, "%lld", (long long)reflect_load_i64(bytes, nbytes));
         break;
     case SHREWD_BASIC_REFLECT_KIND_UINT8:
     case SHREWD_BASIC_REFLECT_KIND_UINT16:
     case SHREWD_BASIC_REFLECT_KIND_UINT32:
     case SHREWD_BASIC_REFLECT_KIND_UINT64:
-        dump_append(ctx, "%llu", (unsigned long long)dump_load_u64(bytes, nbytes));
+        dump_append(ctx, "%llu", (unsigned long long)reflect_load_u64(bytes, nbytes));
         break;
     case SHREWD_BASIC_REFLECT_KIND_FLOAT:
     case SHREWD_BASIC_REFLECT_KIND_DOUBLE:
-        dump_append(ctx, "%g", dump_load_f64(bytes, nbytes));
+        dump_append(ctx, "%g", reflect_load_f64(bytes, nbytes));
         break;
     case SHREWD_BASIC_REFLECT_KIND_STRING:
-        dump_string(ctx, dump_load_str(bytes), str_max);
+        dump_string(ctx, reflect_load_str(bytes), str_max);
         break;
     case SHREWD_BASIC_REFLECT_KIND_ENUM: {
         /* Render by constant name (inline lookup: no log noise while
            printing); unknown values show their number. */
-        int64_t value = dump_load_i64(bytes, nbytes);
+        int64_t value = reflect_load_i64(bytes, nbytes);
         const char *name = NULL;
         for (size_t i = 0; i < type->sb_refl_enum_count; ++i) {
             if (type->sb_refl_enum[i].sb_refl_value == value) {
@@ -323,7 +236,7 @@ static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
                 const unsigned char *elem = at + (j * stride);
                 const unsigned char *target = elem;
                 if (0 != is_ptr) {
-                    void *pointer = dump_load_ptr(elem);
+                    void *pointer = reflect_load_ptr(elem);
                     if (NULL == pointer) {
                         dump_append(ctx, "%*s%s[%zu] = (null)", pad, "", field->sb_refl_name, j);
                         dump_emit(ctx);
@@ -361,7 +274,7 @@ static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
                 }
                 const unsigned char *elem = at + (j * stride);
                 if (0 != is_ptr) {
-                    void *pointer = dump_load_ptr(elem);
+                    void *pointer = reflect_load_ptr(elem);
                     if (NULL == pointer) {
                         dump_append(ctx, "(null)");
                     } else if (0 != is_opaque) {
@@ -379,7 +292,7 @@ static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
             dump_append(ctx, " ]");
             dump_emit(ctx);
         } else if (0 != is_ptr) {
-            void *pointer = dump_load_ptr(at);
+            void *pointer = reflect_load_ptr(at);
             if (NULL == pointer) {
                 dump_append(ctx, "%*s%s = (null)", pad, "", field->sb_refl_name);
                 dump_emit(ctx);

@@ -540,6 +540,203 @@ static void slurp(FILE *stream, char *buf, size_t size)
     buf[n] = '\0';
 }
 
+/* --- enum fixtures --------------------------------------------------- */
+
+typedef enum {
+    MODE_OFF = 0,
+    MODE_ON = 1,
+    MODE_AUTO = 2
+} mode_t;
+
+SHREWD_BASIC_REFLECT_ENUM_DEFINE(g_mode_reflect, mode_t,
+    SHREWD_BASIC_REFLECT_ENUM_VALUE(MODE_OFF),
+    SHREWD_BASIC_REFLECT_ENUM_VALUE(MODE_ON),
+    SHREWD_BASIC_REFLECT_ENUM_VALUE(MODE_AUTO));
+
+typedef struct {
+    mode_t mode;
+    mode_t *mode_ptr;
+} config_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_config_reflect, config_t,
+    SHREWD_BASIC_REFLECT_FIELD_ENUM(config_t, mode, g_mode_reflect),
+    SHREWD_BASIC_REFLECT_FIELD_PTR(config_t, mode_ptr, g_mode_reflect));
+/* --- equal fixtures --------------------------------------------------- */
+
+/* Field-level ops that always report inequality (visible override). */
+static int ops_equal_always(const void *a, const void *b, bool *out_equal)
+{
+    (void)a;
+    (void)b;
+    *out_equal = false;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+static const shrewd_basic_reflect_ops_t g_equal_ops = {
+    .value_size = 0,
+    .get = NULL,
+    .set = NULL,
+    .check = NULL,
+    .equal = ops_equal_always,
+    .copy = NULL,
+    .destroy = NULL };
+
+typedef struct {
+    int32_t *p;
+} wrap_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_wrap_reflect, wrap_t,
+    SHREWD_BASIC_REFLECT_FIELD_PTR_OPS(wrap_t, p, shrewd_basic_reflect_int32,
+                                       g_equal_ops));
+
+static void test_equal(void)
+{
+    bool same = false;
+
+    /* Scalars and strings compare by value, not by pointer. */
+    person_t a;
+    person_t b;
+    memset(&a, 0, sizeof(a));
+    memset(&b, 0, sizeof(b));
+    a.age = 30;
+    b.age = 30;
+    const char *alice = "Alice";
+    const char *alice2 = "Alice";
+    a.name = alice;
+    b.name = alice2;
+    expect_eq_int("equal identical",
+                  shrewd_basic_reflect_equal(&a, &b, &g_person_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("equal identical yes", same);
+    b.age = 31;
+    expect_eq_int("equal scalar differs",
+                  shrewd_basic_reflect_equal(&a, &b, &g_person_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("equal scalar differs no", !same);
+    b.age = 30;
+    b.name = "Bob";
+    expect_eq_int("equal string differs",
+                  shrewd_basic_reflect_equal(&a, &b, &g_person_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("equal string differs no", !same);
+    b.name = alice2;
+    expect_eq_int("equal string content matches",
+                  shrewd_basic_reflect_equal(&a, &b, &g_person_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("equal string content yes", same);
+    b.name = NULL;
+    expect_eq_int("equal string null rules",
+                  shrewd_basic_reflect_equal(&a, &b, &g_person_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("equal string null no", !same);
+
+    /* Enums compare numerically. */
+    config_t ca;
+    config_t cb;
+    memset(&ca, 0, sizeof(ca));
+    memset(&cb, 0, sizeof(cb));
+    ca.mode = MODE_ON;
+    cb.mode = MODE_ON;
+    expect_eq_int("equal enum same",
+                  shrewd_basic_reflect_equal(&ca, &cb, &g_config_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("equal enum same yes", same);
+    cb.mode = MODE_OFF;
+    expect_eq_int("equal enum differs",
+                  shrewd_basic_reflect_equal(&ca, &cb, &g_config_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("equal enum differs no", !same);
+
+    /* Pointer targets compare deeply, whatever their addresses. */
+    point_t pa;
+    point_t pb;
+    memset(&pa, 0, sizeof(pa));
+    memset(&pb, 0, sizeof(pb));
+    pa.x = 1;
+    pa.y = 2;
+    pb.x = 1;
+    pb.y = 2;
+    graph_t ga;
+    graph_t gb;
+    memset(&ga, 0, sizeof(ga));
+    memset(&gb, 0, sizeof(gb));
+    ga.home = &pa;
+    gb.home = &pb;
+    expect_eq_int("equal deep pointers",
+                  shrewd_basic_reflect_equal(&ga, &gb, &g_graph_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("equal deep pointers yes", same);
+    pb.x = 5;
+    expect_eq_int("equal deep pointers differ",
+                  shrewd_basic_reflect_equal(&ga, &gb, &g_graph_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("equal deep pointers differ no", !same);
+    ga.home = NULL;
+    expect_eq_int("equal pointer null rules",
+                  shrewd_basic_reflect_equal(&ga, &gb, &g_graph_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("equal pointer null no", !same);
+    gb.home = NULL;
+    expect_eq_int("equal pointer both null",
+                  shrewd_basic_reflect_equal(&ga, &gb, &g_graph_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("equal pointer both null yes", same);
+
+    /* Cycles terminate and compare coinductively. */
+    node_t ra;
+    node_t rb;
+    memset(&ra, 0, sizeof(ra));
+    memset(&rb, 0, sizeof(rb));
+    ra.data = 3;
+    rb.data = 3;
+    ra.next = &ra;
+    rb.next = &rb;
+    expect_eq_int("equal cycles",
+                  shrewd_basic_reflect_equal(&ra, &rb, &g_node_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("equal cycles yes", same);
+    rb.data = 4;
+    expect_eq_int("equal cycles differ",
+                  shrewd_basic_reflect_equal(&ra, &rb, &g_node_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("equal cycles differ no", !same);
+
+    /* Field-level ops override the comparison. */
+    int32_t nine_a = 9;
+    int32_t nine_b = 9;
+    wrap_t wa;
+    wrap_t wb;
+    memset(&wa, 0, sizeof(wa));
+    memset(&wb, 0, sizeof(wb));
+    wa.p = &nine_a;
+    wb.p = &nine_b;
+    expect_eq_int("equal ops override",
+                  shrewd_basic_reflect_equal(&wa, &wb, &g_wrap_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("equal ops override no", !same);
+
+    /* Opaque targets fall back to identity. */
+    refs_t oa;
+    refs_t ob;
+    memset(&oa, 0, sizeof(oa));
+    memset(&ob, 0, sizeof(ob));
+    oa.ctx = &pa;
+    ob.ctx = &pa;
+    expect_eq_int("equal opaque identity",
+                  shrewd_basic_reflect_equal(&oa, &ob, &g_refs_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("equal opaque identity yes", same);
+    ob.ctx = &pb;
+    expect_eq_int("equal opaque identity differs",
+                  shrewd_basic_reflect_equal(&oa, &ob, &g_refs_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("equal opaque identity differs no", !same);
+
+    expect_eq_int("equal NULL args",
+                  shrewd_basic_reflect_equal(NULL, &b, &g_person_reflect, &same),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+}
+
 static void test_logging_policy(void)
 {
     FILE *stream = tmpfile();
@@ -1122,27 +1319,6 @@ static void test_paths(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
-/* --- enum fixtures --------------------------------------------------- */
-
-typedef enum {
-    MODE_OFF = 0,
-    MODE_ON = 1,
-    MODE_AUTO = 2
-} mode_t;
-
-SHREWD_BASIC_REFLECT_ENUM_DEFINE(g_mode_reflect, mode_t,
-    SHREWD_BASIC_REFLECT_ENUM_VALUE(MODE_OFF),
-    SHREWD_BASIC_REFLECT_ENUM_VALUE(MODE_ON),
-    SHREWD_BASIC_REFLECT_ENUM_VALUE(MODE_AUTO));
-
-typedef struct {
-    mode_t mode;
-    mode_t *mode_ptr;
-} config_t;
-
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_config_reflect, config_t,
-    SHREWD_BASIC_REFLECT_FIELD_ENUM(config_t, mode, g_mode_reflect),
-    SHREWD_BASIC_REFLECT_FIELD_PTR(config_t, mode_ptr, g_mode_reflect));
 
 static void test_enum(void)
 {
@@ -1467,6 +1643,7 @@ int main(void)
     test_dump_pointers();
     test_paths();
     test_graph_ops();
+    test_equal();
     test_logging_policy();
     test_cross_tu();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;

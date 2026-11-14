@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "reflect-internal.h"
 #include "shrewd-basic/log/log.h"
 #include "shrewd-basic/ds/rbtree.h"
 #include "shrewd-basic/platform/memory.h"
@@ -430,12 +431,6 @@ int shrewd_basic_reflect_path_set(void *object,
     return SHREWD_BASIC_ERR_OK;
 }
 
-/* Effective ops of a field: the field-level override wins over type ops. */
-static const shrewd_basic_reflect_ops_t *reflect_field_ops(
-        const shrewd_basic_reflect_field_t *field)
-{
-    return (NULL != field->sb_refl_ops) ? field->sb_refl_ops : field->sb_refl_type->sb_refl_ops;
-}
 
 /* Defensive recursion cap for the graph walkers. */
 #define REFLECT_MAX_DEPTH 16

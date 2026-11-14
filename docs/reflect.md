@@ -1,7 +1,7 @@
 # reflect 模块 — 机制、接口与用法
 
 `shrewd-basic/reflect` 为 C 结构体提供**编译期生成的运行时类型元数据**:泛型代码可以枚举
-字段、按名/按路径取值赋值、递归打印、校验、深拷贝,而不需要知道具体类型。所有元数据是
+字段、按名/按路径取值赋值、递归打印、校验、比较、深拷贝,而不需要知道具体类型。所有元数据是
 `const` 数据(可放 flash),注册由宏在编译期完成,零工具链依赖。
 
 - 头文件:`include/shrewd-basic/reflect/reflect.h`
@@ -185,6 +185,7 @@ SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                /* 跨 TU 
 | `value_get(obj, field, out, n)` | 经 ops 取目标的规范值 | `REFLECT_MISMATCH` / `KEY_NOTFOUND` / `ARG_INVALID` |
 | `value_set(obj, field, in, n)` | 经 ops 写目标的规范值 | 同上 |
 | `check(obj, type)` | 图校验(ops->check + 字段递归) | 回调返回值 / `ARG_INVALID` |
+| `equal(a, b, type, &same)` | 深度比较(值语义/内容/深目标,环安全) | `ARG_INVALID` |
 | `copy(&out, obj, type)` | 深拷贝(clone-out) | `MEM_NOMEM` / `ARG_INVALID` |
 | `destroy(obj, type)` | 深释放(copy 的逆) | `ARG_INVALID` |
 
@@ -258,6 +259,7 @@ struct shrewd_basic_reflect_ops {
     int  (*get)(const void *pointee, void *out, size_t value_size);
     int  (*set)(void *pointee, const void *value, size_t value_size);
     int  (*check)(const void *pointee);                 /* 不变量校验 */
+    int  (*equal)(const void *a, const void *b, bool *out_equal);     /* 比较两个目标 */
     int  (*copy)(void **out, const void *pointee);      /* clone-out 深拷贝 */
     void (*destroy)(void *pointee);                     /* 释放 copy 产物 */
 };

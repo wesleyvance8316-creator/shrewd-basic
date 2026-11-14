@@ -70,6 +70,7 @@
  * no-op destroy) or must not be destroyed.
  */
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -119,6 +120,8 @@ struct shrewd_basic_reflect_ops {
     int (*set)(void *pointee, const void *value, size_t value_size);
     /** Validate the invariants of @p pointee. */
     int (*check)(const void *pointee);
+    /** Compare @p a and @p b for equality. */
+    int (*equal)(const void *a, const void *b, bool *out_equal);
     /** Deep-copy @p pointee into a new object stored into @p *out. */
     int (*copy)(void **out, const void *pointee);
     /** Release an object produced by @c copy (or an equivalent owner). */
@@ -575,6 +578,18 @@ int shrewd_basic_reflect_copy(void **out, const void *object,
  */
 int shrewd_basic_reflect_destroy(void *object,
                                  const shrewd_basic_reflect_type_t *type);
+
+/**
+ * Compare two objects of @p type for equality into @p *out_equal. Values
+ * compare by their semantics (integers and enums numerically, floats
+ * numerically, strings by content, char and bool as themselves);
+ * pointer fields compare their targets recursively (NULL rules apply,
+ * cycles terminate); effective ops->equal overrides the comparison per
+ * node. Opaque targets without ops compare by address identity.
+ */
+int shrewd_basic_reflect_equal(const void *a, const void *b,
+                               const shrewd_basic_reflect_type_t *type,
+                               bool *out_equal);
 
 #ifdef __cplusplus
 }
