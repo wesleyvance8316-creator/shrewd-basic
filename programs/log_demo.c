@@ -28,6 +28,7 @@
 SHREWD_BASIC_LOG_MODULE_DEFINE(g_demo, "demo", SHREWD_BASIC_LOG_LEVEL_ALL);
 
 #define DEMO_FILE "shrewd-basic-log-demo.txt"
+#define DEMO_GLOBAL_FILE "shrewd-basic-log-demo-global.txt"
 
 static void banner(const char *title)
 {
@@ -165,7 +166,38 @@ int main(void)
     banner("8. SHREWD_BASIC_LOG_MODULE_DECLARE: shared across .c files");
     shrewd_demo_log_ext_run();
 
-    printf("\nDemo done. The plain-text file is kept at ./%s for inspection.\n",
-           DEMO_FILE);
+    banner("9. global default output: stderr | stdout | /path/file");
+    shrewd_basic_log_module_t *g1 = NULL;
+    (void)shrewd_basic_log_module_create("g1", SHREWD_BASIC_LOG_LEVEL_ALL, &g1);
+    status = shrewd_basic_log_set_global_file(DEMO_GLOBAL_FILE);
+    print_status("set_global_file(shrewd-basic-log-demo-global.txt)", status);
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_INFO, g1, "global",
+                     "module without its own stream follows the global file\n");
+    status = shrewd_basic_log_set_global_file("/no/such/dir/log.txt");
+    print_status("set_global_file(bad path) rejects", status);
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, g1, "global",
+                     "still the previous file after the failed open\n");
+    status = shrewd_basic_log_set_global_stream(stderr);
+    print_status("set_global_stream(stderr) resets", status);
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_INFO, g1, "global",
+                     "and this line is back on stderr\n");
+    (void)shrewd_basic_log_module_destroy(g1);
+    printf("  global file content read back:\n");
+    {
+        FILE *file = fopen(DEMO_GLOBAL_FILE, "r");
+        if (NULL == file) {
+            printf("  (cannot reopen %s)\n", DEMO_GLOBAL_FILE);
+        } else {
+            char line[256];
+            while (NULL != fgets(line, sizeof(line), file)) {
+                printf("  | %s", line);
+            }
+            fclose(file);
+        }
+    }
+    fflush(stdout);
+
+    printf("\nDemo done. The plain-text files are kept at ./%s and ./%s"
+           " for inspection.\n", DEMO_FILE, DEMO_GLOBAL_FILE);
     return EXIT_SUCCESS;
 }

@@ -26,6 +26,14 @@
  * .c defines it and any sibling .c of the same module shares it through
  * SHREWD_BASIC_LOG_MODULE_DECLARE().
  *
+ * Output resolution: a module's own stream (set_stream/set_file) always
+ * wins; modules without one fall back to the global default output -
+ * stderr while it is unset, or the stream/file configured with
+ * shrewd_basic_log_set_global_stream() and shrewd_basic_log_set_global_file().
+ * File outputs are opened in append mode and owned by the log module:
+ * replacing the output closes the file, and lines are flushed as they are
+ * written so the file is complete even after a crash.
+ *
  * The logging macros filter on the module level mask before calling into
  * the library, so a disabled level costs a single bit test (no function
  * call). Macros are statements; their arguments must have no side effects
@@ -63,7 +71,7 @@ typedef enum shrewd_basic_log_level {
 typedef struct shrewd_basic_log_module {
     const char *name;
     uint32_t level_mask;
-    FILE *out;       /**< NULL means the default stream (stderr). */
+    FILE *out;       /**< NULL falls back to the global default output. */
     int owns_out;    /**< Close out when it is replaced or the module dies. */
     int heap;        /**< Created by shrewd_basic_log_module_create(). */
     int registered;  /**< Already linked into the global registry. */
@@ -126,6 +134,20 @@ int shrewd_basic_log_module_set_stream(shrewd_basic_log_module_t *module,
  */
 int shrewd_basic_log_module_set_file(shrewd_basic_log_module_t *module,
                                      const char *path);
+
+/**
+ * Send every module without its own output to @p stream (e.g. stdout or
+ * stderr); replacing a file-backed global output closes that file.
+ */
+int shrewd_basic_log_set_global_stream(FILE *stream);
+
+/**
+ * Send every module without its own output to the file at @p path (opened
+ * in append mode; owned by the log module and closed when the output is
+ * replaced). Returns SHREWD_BASIC_ERR_LOG_FOPEN when the file cannot be
+ * opened - the previous global output stays in place.
+ */
+int shrewd_basic_log_set_global_file(const char *path);
 
 /** Core writer used by shrewd_basic_log(); the format is printf-style. */
 int shrewd_basic_log_write(shrewd_basic_log_level_t level,

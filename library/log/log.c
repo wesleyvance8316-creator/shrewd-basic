@@ -34,6 +34,10 @@
 /* Registry of every module seen so far (compile-time and runtime). */
 static shrewd_basic_log_module_t *g_modules = NULL;
 
+/* Global default output for modules without their own stream. */
+static FILE *g_global_out = NULL;
+static int g_global_owns_out = 0;
+
 static void log_touch(shrewd_basic_log_module_t *module)
 {
     if (0 == module->registered) {
@@ -62,7 +66,10 @@ static void log_unlink(shrewd_basic_log_module_t *module)
 
 static FILE *log_output(shrewd_basic_log_module_t *module)
 {
-    return (NULL != module->out) ? module->out : stderr;
+    if (NULL != module->out) {
+        return module->out;
+    }
+    return (NULL != g_global_out) ? g_global_out : stderr;
 }
 
 static const char *log_level_name(shrewd_basic_log_level_t level)
@@ -277,6 +284,36 @@ int shrewd_basic_log_module_set_file(shrewd_basic_log_module_t *module,
     }
     module->out = file;
     module->owns_out = 1;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+int shrewd_basic_log_set_global_stream(FILE *stream)
+{
+    if (NULL == stream) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    if ((0 != g_global_owns_out) && (NULL != g_global_out)) {
+        fclose(g_global_out);
+    }
+    g_global_out = stream;
+    g_global_owns_out = 0;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+int shrewd_basic_log_set_global_file(const char *path)
+{
+    if (NULL == path) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    FILE *file = fopen(path, "a");
+    if (NULL == file) {
+        return SHREWD_BASIC_ERR_LOG_FOPEN;
+    }
+    if ((0 != g_global_owns_out) && (NULL != g_global_out)) {
+        fclose(g_global_out);
+    }
+    g_global_out = file;
+    g_global_owns_out = 1;
     return SHREWD_BASIC_ERR_OK;
 }
 

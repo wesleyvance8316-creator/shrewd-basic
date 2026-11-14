@@ -237,6 +237,69 @@ static void test_shared_module(void)
     fclose(stream);
 }
 
+static void test_global_output(void)
+{
+    const char *path = "shrewd-basic-log-global-test.txt";
+
+    expect_eq_int("log global set_file",
+                  shrewd_basic_log_set_global_file(path), SHREWD_BASIC_ERR_OK);
+    /* A failed open must keep the previous global output in place. */
+    expect_eq_int("log global set_file bad path",
+                  shrewd_basic_log_set_global_file("/no/such/dir/log.txt"),
+                  SHREWD_BASIC_ERR_LOG_FOPEN);
+    expect_eq_int("log global set_file NULL",
+                  shrewd_basic_log_set_global_file(NULL),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("log global set_stream NULL",
+                  shrewd_basic_log_set_global_stream(NULL),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+
+    /* A module without its own stream follows the global file. */
+    shrewd_basic_log_module_t *mod = NULL;
+    expect_eq_int("log global module create",
+                  shrewd_basic_log_module_create("gmod", SHREWD_BASIC_LOG_LEVEL_ALL, &mod),
+                  SHREWD_BASIC_ERR_OK);
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_INFO, mod, "global", "to global file\n");
+    expect_eq_int("log global module destroy",
+                  shrewd_basic_log_module_destroy(mod), SHREWD_BASIC_ERR_OK);
+
+    /* A module with its own stream still wins over the global file. */
+    FILE *stream = tmpfile();
+    expect_true("log global tmpfile", NULL != stream);
+    if (NULL == stream) {
+        (void)shrewd_basic_log_set_global_stream(stderr);
+        return;
+    }
+    shrewd_basic_log_module_t *own = NULL;
+    (void)shrewd_basic_log_module_create("gown", SHREWD_BASIC_LOG_LEVEL_ALL, &own);
+    (void)shrewd_basic_log_module_set_stream(own, stream);
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_INFO, own, "own", "to own stream\n");
+    (void)shrewd_basic_log_module_destroy(own);
+
+    char buf[1024] = {0};
+    slurp(stream, buf, sizeof(buf));
+    expect_true("log global own stream wins", NULL != strstr(buf, "to own stream\n"));
+    fclose(stream);
+
+    memset(buf, 0, sizeof(buf));
+    FILE *file = fopen(path, "r");
+    expect_true("log global file exists", NULL != file);
+    if (NULL != file) {
+        size_t n = fread(buf, 1, sizeof(buf) - 1, file);
+        buf[n] = '\0';
+        fclose(file);
+        expect_true("log global file content",
+                    (NULL != strstr(buf, "][gmod]"))
+                    && (NULL != strstr(buf, "to global file\n"))
+                    && (NULL == strstr(buf, "to own stream")));
+    }
+    remove(path);
+
+    /* Resetting closes the owned file and restores the stderr default. */
+    expect_eq_int("log global reset",
+                  shrewd_basic_log_set_global_stream(stderr), SHREWD_BASIC_ERR_OK);
+}
+
 int main(void)
 {
     test_format();
@@ -245,5 +308,6 @@ int main(void)
     test_runtime_module();
     test_registry();
     test_shared_module();
+    test_global_output();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
