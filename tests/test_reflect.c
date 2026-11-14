@@ -8,6 +8,8 @@
 #include "shrewd-basic/log/log.h"
 #include "shrewd-basic/reflect/reflect.h"
 
+#include "test_reflect_ext.h"
+
 static int g_failures = 0;
 
 static void expect_eq_int(const char *name, int actual, int expected)
@@ -560,6 +562,21 @@ static void test_dump(void)
     fclose(stream);
 }
 
+static void test_cross_tu(void)
+{
+    /* The foreign translation unit must see the very same descriptor. */
+    point_t point;
+    memset(&point, 0, sizeof(point));
+    expect_eq_int("cross_tu set_x",
+                  shrewd_test_reflect_ext_set_x(&point, 17), SHREWD_BASIC_ERR_OK);
+    expect_true("cross_tu set lands", 17 == point.x);
+    int32_t value = 0;
+    expect_eq_int("cross_tu get_x",
+                  shrewd_test_reflect_ext_get_x(&point, &value), SHREWD_BASIC_ERR_OK);
+    expect_true("cross_tu round-trip", 17 == value);
+    expect_true("cross_tu field count", 2 == shrewd_test_reflect_ext_field_count());
+}
+
 int main(void)
 {
     test_describe();
@@ -570,5 +587,6 @@ int main(void)
     test_array();
     test_dump();
     test_logging_policy();
+    test_cross_tu();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

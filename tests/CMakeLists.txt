@@ -21,8 +21,8 @@ target_link_libraries(shrewd-basic-log-tests
             shrewd-basic
             shrewd-basic-warnings)
 
-# Reflect module tests.
-add_executable(shrewd-basic-reflect-tests test_reflect.c)
+# Reflect module tests (two translation units: descriptor sharing).
+add_executable(shrewd-basic-reflect-tests test_reflect.c test_reflect_ext.c)
 
 target_link_libraries(shrewd-basic-reflect-tests
         PRIVATE
