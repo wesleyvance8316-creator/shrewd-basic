@@ -232,6 +232,8 @@ int shrewd_basic_reflect_field_set(void *object,
 /**
  * Pretty-print @p object according to @p type through the "reflect" log
  * module (one log line per output line, level INFO). @p label may be NULL.
+ * @p type must describe a struct (SHREWD_BASIC_REFLECT_KIND_STRUCT); the
+ * nested fields are rendered recursively with indentation.
  */
 int shrewd_basic_reflect_dump(const shrewd_basic_reflect_type_t *type,
                               const void *object, const char *label);

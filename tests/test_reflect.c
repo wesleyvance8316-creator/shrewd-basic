@@ -44,6 +44,7 @@ typedef struct {
     char tag[4];
     int32_t scores[3];
     point_t home;
+    point_t pair[2];
 } person_t;
 
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_point_reflect, point_t,
@@ -61,7 +62,16 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_person_reflect, person_t,
     SHREWD_BASIC_REFLECT_FIELD(person_t, name),
     SHREWD_BASIC_REFLECT_FIELD_ARRAY(person_t, tag, shrewd_basic_reflect_char),
     SHREWD_BASIC_REFLECT_FIELD_ARRAY(person_t, scores, shrewd_basic_reflect_int32),
-    SHREWD_BASIC_REFLECT_FIELD_STRUCT(person_t, home, g_point_reflect));
+    SHREWD_BASIC_REFLECT_FIELD_STRUCT(person_t, home, g_point_reflect),
+    SHREWD_BASIC_REFLECT_FIELD_ARRAY(person_t, pair, g_point_reflect));
+
+/* Oversized array: exercises the dump element cap. */
+typedef struct {
+    int32_t wide[40];
+} wide_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_wide_reflect, wide_t,
+    SHREWD_BASIC_REFLECT_FIELD_ARRAY(wide_t, wide, shrewd_basic_reflect_int32));
 
 /* find_field wrapper that reports failures as test failures. */
 static const shrewd_basic_reflect_field_t *find_or_fail(const char *test_name,
@@ -85,7 +95,7 @@ static void test_describe(void)
     expect_true("describe type kind",
                 SHREWD_BASIC_REFLECT_KIND_STRUCT == g_person_reflect.kind);
     expect_true("describe type size", sizeof(person_t) == g_person_reflect.size);
-    expect_true("describe field count", (size_t)11 == g_person_reflect.field_count);
+    expect_true("describe field count", (size_t)12 == g_person_reflect.field_count);
     expect_true("describe fields table", NULL != g_person_reflect.fields);
     expect_true("describe primitive has no fields",
                 (0 == shrewd_basic_reflect_int32.field_count)
@@ -401,6 +411,155 @@ static void test_logging_policy(void)
     fclose(stream);
 }
 
+static void test_dump(void)
+{
+    shrewd_basic_log_module_t *module = NULL;
+    expect_eq_int("dump find module",
+                  shrewd_basic_log_module_find("reflect", &module),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("dump module found", NULL != module);
+    if (NULL == module) {
+        return;
+    }
+
+    person_t person;
+    memset(&person, 0, sizeof(person));
+    person.active = true;
+    person.grade = 'A';
+    person.small = -7;
+    person.age = 30;
+    person.big = 5;
+    person.ratio = 1.5f;
+    person.precise = 2.25;
+    person.name = "Alice";
+    person.tag[0] = 't';
+    person.tag[1] = 'a';
+    person.tag[2] = 'g';
+    person.tag[3] = '\0';
+    person.scores[0] = 1;
+    person.scores[1] = 2;
+    person.scores[2] = 3;
+    person.home.x = 4;
+    person.home.y = 5;
+    person.pair[0].x = 6;
+    person.pair[0].y = 7;
+    person.pair[1].x = 8;
+    person.pair[1].y = 9;
+
+    /* Phase 1: full rendering of every field kind. */
+    FILE *stream = tmpfile();
+    expect_true("dump tmpfile", NULL != stream);
+    if (NULL == stream) {
+        return;
+    }
+    shrewd_basic_log_module_set_stream(module, stream);
+    expect_eq_int("dump ok",
+                  shrewd_basic_reflect_dump(&g_person_reflect, &person, "person"),
+                  SHREWD_BASIC_ERR_OK);
+
+    char buf[8192] = {0};
+    slurp(stream, buf, sizeof(buf));
+    expect_true("dump header", NULL != strstr(buf, "person (person_t) {"));
+    expect_true("dump bool", NULL != strstr(buf, "  active = true"));
+    expect_true("dump char", NULL != strstr(buf, "  grade = 'A'"));
+    expect_true("dump int8", NULL != strstr(buf, "  small = -7"));
+    expect_true("dump int32", NULL != strstr(buf, "  age = 30"));
+    expect_true("dump uint64", NULL != strstr(buf, "  big = 5"));
+    expect_true("dump float", NULL != strstr(buf, "  ratio = 1.5"));
+    expect_true("dump double", NULL != strstr(buf, "  precise = 2.25"));
+    expect_true("dump string", NULL != strstr(buf, "  name = \"Alice\""));
+    expect_true("dump char array",
+                NULL != strstr(buf, "  tag = [ 't', 'a', 'g', '\\x00' ]"));
+    expect_true("dump int array", NULL != strstr(buf, "  scores = [ 1, 2, 3 ]"));
+    expect_true("dump struct field",
+                (NULL != strstr(buf, "  home = {"))
+                && (NULL != strstr(buf, "    x = 4"))
+                && (NULL != strstr(buf, "    y = 5")));
+    expect_true("dump struct array",
+                (NULL != strstr(buf, "  pair[0] = {"))
+                && (NULL != strstr(buf, "  pair[1] = {"))
+                && (NULL != strstr(buf, "    x = 8"))
+                && (NULL != strstr(buf, "    y = 9")));
+    /* Every payload line is a full log line: match per line, not across. */
+    expect_true("dump nested close", NULL != strstr(buf, "[dump]   }\n"));
+    expect_true("dump top close", NULL != strstr(buf, "[dump] }\n"));
+    fclose(stream);
+
+    /* Phase 2: escapes and the label-free header. */
+    person_t weird;
+    memset(&weird, 0, sizeof(weird));
+    weird.name = "a\"b\nc";
+    stream = tmpfile();
+    if (NULL != stream) {
+        shrewd_basic_log_module_set_stream(module, stderr);
+        return;
+    }
+    shrewd_basic_log_module_set_stream(module, stream);
+    expect_eq_int("dump escapes",
+                  shrewd_basic_reflect_dump(&g_person_reflect, &weird, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    memset(buf, 0, sizeof(buf));
+    slurp(stream, buf, sizeof(buf));
+    expect_true("dump no-label header", NULL != strstr(buf, "person_t {"));
+    expect_true("dump string escapes", NULL != strstr(buf, "name = \"a\\\"b\\nc\""));
+    fclose(stream);
+
+    /* Phase 3: NULL string and long-string truncation. */
+    weird.name = NULL;
+    stream = tmpfile();
+    if (NULL != stream) {
+        shrewd_basic_log_module_set_stream(module, stderr);
+        return;
+    }
+    shrewd_basic_log_module_set_stream(module, stream);
+    expect_eq_int("dump null string",
+                  shrewd_basic_reflect_dump(&g_person_reflect, &weird, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    char huge[300];
+    memset(huge, 'x', sizeof(huge) - 1);
+    huge[sizeof(huge) - 1] = '\0';
+    weird.name = huge;
+    expect_eq_int("dump long string",
+                  shrewd_basic_reflect_dump(&g_person_reflect, &weird, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    memset(buf, 0, sizeof(buf));
+    slurp(stream, buf, sizeof(buf));
+    expect_true("dump null string value", NULL != strstr(buf, "name = (null)"));
+    expect_true("dump string truncated", NULL != strstr(buf, "...(truncated)"));
+    fclose(stream);
+
+    /* Phase 4: array element cap and error paths. */
+    wide_t wide;
+    memset(&wide, 0, sizeof(wide));
+    wide.wide[39] = 9;
+    stream = tmpfile();
+    if (NULL != stream) {
+        shrewd_basic_log_module_set_stream(module, stderr);
+        return;
+    }
+    shrewd_basic_log_module_set_stream(module, stream);
+    expect_eq_int("dump wide array",
+                  shrewd_basic_reflect_dump(&g_wide_reflect, &wide, "wide"),
+                  SHREWD_BASIC_ERR_OK);
+    memset(buf, 0, sizeof(buf));
+    slurp(stream, buf, sizeof(buf));
+    expect_true("dump array capped", NULL != strstr(buf, "...(8 more)"));
+
+    expect_eq_int("dump NULL type",
+                  shrewd_basic_reflect_dump(NULL, &person, "person"),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("dump NULL object",
+                  shrewd_basic_reflect_dump(&g_person_reflect, NULL, "person"),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("dump non-struct",
+                  shrewd_basic_reflect_dump(&shrewd_basic_reflect_int32,
+                                            &person.age, NULL),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+
+    shrewd_basic_log_module_set_stream(module, stderr);
+    fclose(stream);
+}
+
 int main(void)
 {
     test_describe();
@@ -409,6 +568,7 @@ int main(void)
     test_get_set_string();
     test_nested();
     test_array();
+    test_dump();
     test_logging_policy();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
