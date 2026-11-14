@@ -30,8 +30,8 @@
  * the library, so a disabled level costs a single bit test (no function
  * call). Macros are statements; their arguments must have no side effects
  * beyond the call itself (module and level are evaluated once each).
- * Non-boolean interfaces return shrewd-basic/platform/error.h codes (plus
- * the log-specific codes below):
+ * Non-boolean interfaces return shrewd-basic/platform/error.h codes
+ * (including the log code SHREWD_BASIC_ERR_LOG_FOPEN):
  *
  *   shrewd_basic_log(level, module, "label", "fmt\n", x, y);
  *   shrewd_basic_log_hex(level, module, "label", "msg", data_ptr, data_size);
@@ -46,11 +46,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/** Log-specific error codes, extending the generic SHREWD_BASIC_ERR scheme. */
-enum shrewd_basic_log_error {
-    SHREWD_BASIC_ERR_LOG_FOPEN = -100 /**< Failed to open the output file. */
-};
 
 /** Log levels as bit masks; combine with | to enable several at once. */
 typedef enum shrewd_basic_log_level {

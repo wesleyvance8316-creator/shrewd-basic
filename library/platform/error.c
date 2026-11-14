@@ -1,12 +1,5 @@
 #include "shrewd-basic/platform/error.h"
 
-/*
- * Module extension codes (log.h) are named here as well, so one function
- * maps every code the library defines. The include only pulls the code
- * constants, not any log behaviour.
- */
-#include "shrewd-basic/log/log.h"
-
 const char *shrewd_basic_error_name(int status)
 {
     switch (status) {
