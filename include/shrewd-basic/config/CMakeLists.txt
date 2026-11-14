@@ -48,9 +48,11 @@ configure_file(
 
 option(SHREWD_BASIC_ENABLE_ASSERTS "Enable internal consistency checks" OFF)
 
-set(SHREWD_BASIC_LOG_LEVEL "1" CACHE STRING
-        "Log verbosity: 0=off 1=error 2=warning 3=info 4=debug")
-set_property(CACHE SHREWD_BASIC_LOG_LEVEL PROPERTY STRINGS 0 1 2 3 4)
+# Default log level mask; values match the level bit masks of
+# shrewd-basic/log/log.h and can be added together (7 = fatal+error+warn).
+set(SHREWD_BASIC_LOG_LEVEL "63" CACHE STRING
+        "Default log level mask: 0=none 1=fatal 2=error 4=warn 8=info 16=debug 32=trace 63=all")
+set_property(CACHE SHREWD_BASIC_LOG_LEVEL PROPERTY STRINGS 0 1 2 4 8 16 32 63)
 
 configure_file(
         ${CMAKE_CURRENT_SOURCE_DIR}/config.h.in

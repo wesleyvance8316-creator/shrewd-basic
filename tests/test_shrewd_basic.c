@@ -5,6 +5,7 @@
 
 #include "shrewd-basic/config/build.h"
 #include "shrewd-basic/config/config.h"
+#include "shrewd-basic/log/log.h"
 #include "shrewd-basic/shrewd-basic.h"
 
 static int g_failures = 0;
@@ -50,8 +51,10 @@ int main(void)
 
     expect_true("asserts flag is 0 or 1",
                 (0 == SHREWD_BASIC_ENABLE_ASSERTS) || (1 == SHREWD_BASIC_ENABLE_ASSERTS));
-    expect_true("log level is in range",
-                (0 <= SHREWD_BASIC_LOG_LEVEL) && (4 >= SHREWD_BASIC_LOG_LEVEL));
+    /* Level mask semantics from shrewd-basic/log/log.h: bits 0..5. */
+    expect_true("log level mask is in range",
+                (0 <= SHREWD_BASIC_LOG_LEVEL)
+                && (SHREWD_BASIC_LOG_LEVEL_ALL >= SHREWD_BASIC_LOG_LEVEL));
 
     /* Error module: names for the shared error codes. */
     expect_true("error name OK",
