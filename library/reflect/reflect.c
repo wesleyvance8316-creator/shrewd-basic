@@ -372,3 +372,114 @@ int shrewd_basic_reflect_path_set(void *object,
     reflect_path_log(SHREWD_BASIC_ERR_OK, "path_set", path, size);
     return SHREWD_BASIC_ERR_OK;
 }
+
+/* Effective ops of a field: the field-level override wins over type ops. */
+static const shrewd_basic_reflect_ops_t *reflect_field_ops(
+        const shrewd_basic_reflect_field_t *field)
+{
+    return (NULL != field->ops) ? field->ops : field->type->ops;
+}
+
+/* Target address of a single-value field (deref one pointer level). */
+static int reflect_field_target(const void *object,
+                                const shrewd_basic_reflect_field_t *field,
+                                const unsigned char **out_at)
+{
+    const unsigned char *at = (const unsigned char *)object + field->offset;
+    if (0u != (field->flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
+        void *pointer = NULL;
+        memcpy(&pointer, at, sizeof(pointer));
+        if (NULL == pointer) {
+            shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
+                             "field", "value: field \"%s\" is NULL\n", field->name);
+            return SHREWD_BASIC_ERR_KEY_NOTFOUND;
+        }
+        at = (const unsigned char *)pointer;
+    }
+    *out_at = at;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+int shrewd_basic_reflect_value_get(const void *object,
+                                   const shrewd_basic_reflect_field_t *field,
+                                   void *out_value, size_t value_size)
+{
+    if ((NULL == object) || (NULL == field) || (NULL == out_value)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "field", "value_get: object, field or out_value is NULL\n");
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    const shrewd_basic_reflect_ops_t *ops = reflect_field_ops(field);
+    if ((NULL == ops) || (NULL == ops->get)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "field", "value_get: field \"%s\" has no ops->get\n",
+                         field->name);
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    if (0u != (field->flags & SHREWD_BASIC_REFLECT_FIELD_F_ARRAY)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "field", "value_get: field \"%s\" is an array\n",
+                         field->name);
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    if (value_size != ops->value_size) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
+                         "field", "value_get: size mismatch (%zu != %zu)\n",
+                         value_size, ops->value_size);
+        return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
+    }
+    const unsigned char *at = NULL;
+    int status = reflect_field_target(object, field, &at);
+    if (SHREWD_BASIC_ERR_OK != status) {
+        return status;
+    }
+    status = ops->get(at, out_value, value_size);
+    if (SHREWD_BASIC_ERR_OK == status) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
+                         "field", "value_get ok (%s, %zu bytes)\n",
+                         field->name, value_size);
+    }
+    return status;
+}
+
+int shrewd_basic_reflect_value_set(void *object,
+                                   const shrewd_basic_reflect_field_t *field,
+                                   const void *value, size_t value_size)
+{
+    if ((NULL == object) || (NULL == field) || (NULL == value)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "field", "value_set: object, field or value is NULL\n");
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    const shrewd_basic_reflect_ops_t *ops = reflect_field_ops(field);
+    if ((NULL == ops) || (NULL == ops->set)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "field", "value_set: field \"%s\" has no ops->set\n",
+                         field->name);
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    if (0u != (field->flags & SHREWD_BASIC_REFLECT_FIELD_F_ARRAY)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "field", "value_set: field \"%s\" is an array\n",
+                         field->name);
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    if (value_size != ops->value_size) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
+                         "field", "value_set: size mismatch (%zu != %zu)\n",
+                         value_size, ops->value_size);
+        return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
+    }
+    const unsigned char *at = NULL;
+    int status = reflect_field_target(object, field, &at);
+    if (SHREWD_BASIC_ERR_OK != status) {
+        return status;
+    }
+    status = ops->set((unsigned char *)(uintptr_t)at, value, value_size);
+    if (SHREWD_BASIC_ERR_OK == status) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
+                         "field", "value_set ok (%s, %zu bytes)\n",
+                         field->name, value_size);
+    }
+    return status;
+}

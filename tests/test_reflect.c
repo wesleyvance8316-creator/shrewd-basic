@@ -100,6 +100,98 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_refs_reflect, refs_t,
     SHREWD_BASIC_REFLECT_FIELD_PTR(refs_t, counter, shrewd_basic_reflect_int32),
     SHREWD_BASIC_REFLECT_FIELD_PTR_ARRAY(refs_t, team, g_point_reflect));
 
+/* --- ops fixtures ---------------------------------------------------- */
+
+static int g_type_ops_calls = 0;
+static int g_override_ops_calls = 0;
+
+static int ops_get(const void *pointee, void *out_value, size_t value_size)
+{
+    ++g_type_ops_calls;
+    memcpy(out_value, pointee, value_size);
+    return SHREWD_BASIC_ERR_OK;
+}
+
+static int ops_set(void *pointee, const void *value, size_t value_size)
+{
+    ++g_type_ops_calls;
+    memcpy(pointee, value, value_size);
+    return SHREWD_BASIC_ERR_OK;
+}
+
+/* Field-level override: rounds the value up by one so its use is visible. */
+static int ops_get_override(const void *pointee, void *out_value, size_t value_size)
+{
+    int32_t value = 0;
+    ++g_override_ops_calls;
+    memcpy(&value, pointee, sizeof(value));
+    value += 1;
+    memcpy(out_value, &value, sizeof(value));
+    (void)value_size;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+static int ops_set_override(void *pointee, const void *value, size_t value_size)
+{
+    int32_t rounded = 0;
+    ++g_override_ops_calls;
+    memcpy(&rounded, value, sizeof(rounded));
+    rounded += 1;
+    memcpy(pointee, &rounded, sizeof(rounded));
+    (void)value_size;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+static const shrewd_basic_reflect_ops_t g_type_ops = {
+    .value_size = sizeof(int32_t),
+    .get = ops_get,
+    .set = ops_set,
+    .check = NULL,
+    .copy = NULL,
+    .destroy = NULL };
+
+static const shrewd_basic_reflect_ops_t g_override_ops = {
+    .value_size = sizeof(int32_t),
+    .get = ops_get_override,
+    .set = ops_set_override,
+    .check = NULL,
+    .copy = NULL,
+    .destroy = NULL };
+
+/* An opaque handle whose layout only the application knows (an int32 here). */
+SHREWD_BASIC_REFLECT_OPAQUE_DEFINE(g_handle_reflect, "handle", g_type_ops);
+
+typedef struct {
+    int32_t *type_ops_slot;
+    int32_t *field_ops_slot;
+    int32_t *many[1];
+} ops_refs_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_ops_refs_reflect, ops_refs_t,
+    SHREWD_BASIC_REFLECT_FIELD_PTR(ops_refs_t, type_ops_slot, g_handle_reflect),
+    SHREWD_BASIC_REFLECT_FIELD_PTR_OPS(ops_refs_t, field_ops_slot, g_handle_reflect,
+                                       g_override_ops),
+    SHREWD_BASIC_REFLECT_FIELD_PTR_ARRAY_OPS(ops_refs_t, many, g_handle_reflect,
+                                             g_override_ops));
+
+static int ops_check(const void *pointee)
+{
+    (void)pointee;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+static const shrewd_basic_reflect_ops_t g_point_ops = {
+    .value_size = 0,
+    .get = NULL,
+    .set = NULL,
+    .check = ops_check,
+    .copy = NULL,
+    .destroy = NULL };
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE_OPS(g_point_ops_reflect, point_t, g_point_ops,
+    SHREWD_BASIC_REFLECT_FIELD(point_t, x),
+    SHREWD_BASIC_REFLECT_FIELD(point_t, y));
+
 /* find_field wrapper that reports failures as test failures. */
 static const shrewd_basic_reflect_field_t *find_or_fail(const char *test_name,
                                                         const shrewd_basic_reflect_type_t *type,
@@ -956,6 +1048,82 @@ static void test_paths(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
+static void test_ops(void)
+{
+    /* Attachment shapes. */
+    expect_true("ops type attach", &g_point_ops == g_point_ops_reflect.ops);
+    const shrewd_basic_reflect_field_t *type_field =
+        find_or_fail("ops", &g_ops_refs_reflect, "type_ops_slot");
+    const shrewd_basic_reflect_field_t *field_field =
+        find_or_fail("ops", &g_ops_refs_reflect, "field_ops_slot");
+    const shrewd_basic_reflect_field_t *array_field =
+        find_or_fail("ops", &g_ops_refs_reflect, "many");
+    if ((NULL == type_field) || (NULL == field_field) || (NULL == array_field)) {
+        return;
+    }
+    expect_true("ops field falls back to type",
+                (NULL == type_field->ops) && (&g_handle_reflect == type_field->type));
+    expect_true("ops field override wins", &g_override_ops == field_field->ops);
+    expect_true("ops opaque target", &g_type_ops == g_handle_reflect.ops);
+
+    /* value_get/set through the type-level ops. */
+    ops_refs_t refs;
+    memset(&refs, 0, sizeof(refs));
+    int32_t target = 5;
+    refs.type_ops_slot = &target;
+    int32_t out = 0;
+    g_type_ops_calls = 0;
+    expect_eq_int("value_get type ops",
+                  shrewd_basic_reflect_value_get(&refs, type_field, &out, sizeof(out)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("value_get type ops value", (5 == out) && (1 == g_type_ops_calls));
+    int32_t in = 6;
+    expect_eq_int("value_set type ops",
+                  shrewd_basic_reflect_value_set(&refs, type_field, &in, sizeof(in)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("value_set type ops lands", (6 == target) && (2 == g_type_ops_calls));
+
+    /* Field-level ops override the type's. */
+    int32_t target2 = 10;
+    refs.field_ops_slot = &target2;
+    g_type_ops_calls = 0;
+    g_override_ops_calls = 0;
+    expect_eq_int("value_get override ops",
+                  shrewd_basic_reflect_value_get(&refs, field_field, &out, sizeof(out)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("value_get override ran",
+                (11 == out) && (1 == g_override_ops_calls) && (0 == g_type_ops_calls));
+    in = 20;
+    expect_eq_int("value_set override ops",
+                  shrewd_basic_reflect_value_set(&refs, field_field, &in, sizeof(in)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("value_set override lands", (21 == target2) && (2 == g_override_ops_calls));
+
+    /* Size rule, NULL pointee, arrays and missing ops. */
+    expect_eq_int("value_get size mismatch",
+                  shrewd_basic_reflect_value_get(&refs, type_field, &out, (size_t)2),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    refs.type_ops_slot = NULL;
+    expect_eq_int("value_get NULL pointee",
+                  shrewd_basic_reflect_value_get(&refs, type_field, &out, sizeof(out)),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("value_get on array",
+                  shrewd_basic_reflect_value_get(&refs, array_field, &out, sizeof(out)),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    const shrewd_basic_reflect_field_t *plain =
+        find_or_fail("ops", &g_person_reflect, "age");
+    person_t person;
+    memset(&person, 0, sizeof(person));
+    if (NULL != plain) {
+        expect_eq_int("value_get without ops",
+                      shrewd_basic_reflect_value_get(&person, plain, &out, sizeof(out)),
+                      SHREWD_BASIC_ERR_ARG_INVALID);
+    }
+    expect_eq_int("value_get NULL object",
+                  shrewd_basic_reflect_value_get(NULL, type_field, &out, sizeof(out)),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+}
+
 int main(void)
 {
     test_describe();
@@ -965,6 +1133,7 @@ int main(void)
     test_nested();
     test_array();
     test_pointer_fields();
+    test_ops();
     test_dump();
     test_dump_pointers();
     test_paths();

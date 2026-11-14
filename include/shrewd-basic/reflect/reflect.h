@@ -51,6 +51,23 @@
  * address-only for opaque targets, depth-capped for self-referential
  * types); a followed pointee scalar is read with the pointee type's
  * canonical width.
+ *
+ * Operations: a type (or a single field) may carry a
+ * shrewd_basic_reflect_ops_t vtable so generic code can read, write,
+ * check, copy and destroy targets it cannot describe otherwise. The
+ * callbacks are consulted per operation - a missing callback falls back
+ * to the metadata-driven behavior - and field ops override type ops.
+ * get/set/check run for values and pointees alike; copy/destroy have
+ * object semantics (pointer targets and the root of
+ * shrewd_basic_reflect_copy/destroy): copy is clone-out through the
+ * application's allocator when ops exist, otherwise struct pointees are
+ * cloned recursively through shrewd_basic_platform_alloc, scalar
+ * pointees are cloned at their canonical width, string pointees stay
+ * borrowed (aliased, never freed) and opaque targets without ops cannot
+ * be copied. destroy is the inverse of copy and must only run on graphs
+ * that own their pointer targets (clone outputs or platform_alloc-built
+ * data); pointer targets into caller stack/static storage need ops (a
+ * no-op destroy) or must not be destroyed.
  */
 
 #include <stddef.h>
@@ -85,6 +102,27 @@ typedef enum shrewd_basic_reflect_kind {
 } shrewd_basic_reflect_kind_t;
 
 typedef struct shrewd_basic_reflect_type shrewd_basic_reflect_type_t;
+typedef struct shrewd_basic_reflect_ops shrewd_basic_reflect_ops_t;
+
+/**
+ * Application callbacks for a described type. Every member is optional
+ * (NULL falls back to the metadata-driven behavior where one exists) and
+ * each receives the target value itself (a pointee for pointer fields).
+ * Errors return shrewd-basic/platform/error.h codes.
+ */
+struct shrewd_basic_reflect_ops {
+    size_t value_size; /**< Width of the canonical value used by get/set. */
+    /** Copy the canonical value of @p pointee into @p out_value. */
+    int (*get)(const void *pointee, void *out_value, size_t value_size);
+    /** Write @p value into @p pointee as the canonical value. */
+    int (*set)(void *pointee, const void *value, size_t value_size);
+    /** Validate the invariants of @p pointee. */
+    int (*check)(const void *pointee);
+    /** Deep-copy @p pointee into a new object stored into @p *out. */
+    int (*copy)(void **out, const void *pointee);
+    /** Release an object produced by @c copy (or an equivalent owner). */
+    void (*destroy)(void *pointee);
+};
 
 /** One reflected member of a struct type. */
 typedef struct shrewd_basic_reflect_field {
@@ -94,6 +132,7 @@ typedef struct shrewd_basic_reflect_field {
     size_t size;                             /**< sizeof(member); arrays: total bytes. */
     size_t count;                            /**< Elements; 1 unless fixed array. */
     uint32_t flags;                          /**< SHREWD_BASIC_REFLECT_FIELD_F_*. */
+    const shrewd_basic_reflect_ops_t *ops;   /**< Field-level override; NULL = type ops. */
 } shrewd_basic_reflect_field_t;
 
 /** A described type: a struct layout, or one primitive/string kind. */
@@ -103,6 +142,7 @@ struct shrewd_basic_reflect_type {
     size_t size;                                  /**< Informational width. */
     size_t field_count;                           /**< 0 for primitives. */
     const shrewd_basic_reflect_field_t *fields;    /**< NULL for primitives. */
+    const shrewd_basic_reflect_ops_t *ops;         /**< Type-level ops; NULL = defaults. */
 };
 
 /** Field flag: the field is a fixed-size array of @c count elements. */
@@ -240,6 +280,77 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
 #define SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                 \
     extern const shrewd_basic_reflect_type_t var
 
+/*
+ * SHREWD_BASIC_REFLECT_TYPE_DEFINE with a type-level ops vtable; the ops
+ * object is referenced without '&'. Macro arguments must not collide with
+ * descriptor member names (hence var/struct_type/member/ref/ops_ref).
+ */
+#define SHREWD_BASIC_REFLECT_TYPE_DEFINE_OPS(var, struct_type, ops_ref, ...)   \
+    extern const shrewd_basic_reflect_type_t var;                              \
+    static const shrewd_basic_reflect_field_t var##_fields[] = { __VA_ARGS__ };\
+    const shrewd_basic_reflect_type_t var = {                                  \
+        .kind = SHREWD_BASIC_REFLECT_KIND_STRUCT,                              \
+        .name = #struct_type,                                                  \
+        .size = sizeof(struct_type),                                           \
+        .field_count = sizeof(var##_fields) / sizeof(var##_fields[0]),         \
+        .fields = var##_fields,                                                \
+        .ops = &(ops_ref)                                                      \
+    }
+
+/*
+ * Describe an opaque target type with its ops vtable (one definition per
+ * type, shared across translation units with TYPE_DECLARE). Use
+ * shrewd_basic_reflect_void for opaque targets without ops.
+ */
+#define SHREWD_BASIC_REFLECT_OPAQUE_DEFINE(var, type_name, ops_ref)            \
+    extern const shrewd_basic_reflect_type_t var;                              \
+    const shrewd_basic_reflect_type_t var = {                                  \
+        .kind = SHREWD_BASIC_REFLECT_KIND_OPAQUE,                              \
+        .name = (type_name),                                                   \
+        .size = 0,                                                             \
+        .field_count = 0,                                                      \
+        .fields = NULL,                                                        \
+        .ops = &(ops_ref)                                                      \
+    }
+
+/* FIELD_STRUCT with a field-level ops override (takes precedence over type ops). */
+#define SHREWD_BASIC_REFLECT_FIELD_STRUCT_OPS(struct_type, member, ref, ops_ref) \
+    {                                                                          \
+        .name = #member,                                                       \
+        .type = &(ref),                                                        \
+        .offset = offsetof(struct_type, member),                               \
+        .size = sizeof(((struct_type *)0)->member),                            \
+        .count = (size_t)1,                                                    \
+        .flags = (uint32_t)0,                                                  \
+        .ops = &(ops_ref)                                                      \
+    }
+
+/* FIELD_PTR with a field-level ops override. */
+#define SHREWD_BASIC_REFLECT_FIELD_PTR_OPS(struct_type, member, ref, ops_ref)  \
+    {                                                                          \
+        .name = #member,                                                       \
+        .type = &(ref),                                                        \
+        .offset = offsetof(struct_type, member),                               \
+        .size = sizeof(((struct_type *)0)->member),                            \
+        .count = (size_t)1,                                                    \
+        .flags = SHREWD_BASIC_REFLECT_FIELD_F_PTR,                             \
+        .ops = &(ops_ref)                                                      \
+    }
+
+/* FIELD_PTR_ARRAY with a field-level ops override. */
+#define SHREWD_BASIC_REFLECT_FIELD_PTR_ARRAY_OPS(struct_type, member, ref, ops_ref) \
+    {                                                                          \
+        .name = #member,                                                       \
+        .type = &(ref),                                                        \
+        .offset = offsetof(struct_type, member),                               \
+        .size = sizeof(((struct_type *)0)->member),                            \
+        .count = sizeof(((struct_type *)0)->member)                            \
+                / sizeof(((struct_type *)0)->member[0]),                       \
+        .flags = SHREWD_BASIC_REFLECT_FIELD_F_PTR                              \
+                | SHREWD_BASIC_REFLECT_FIELD_F_ARRAY,                          \
+        .ops = &(ops_ref)                                                      \
+    }
+
 /** Name of a kind, e.g. "int32"; unknown values map to "unknown". */
 const char *shrewd_basic_reflect_kind_name(shrewd_basic_reflect_kind_t kind);
 
@@ -327,6 +438,57 @@ int shrewd_basic_reflect_path_get(const void *object,
 int shrewd_basic_reflect_path_set(void *object,
                                   const shrewd_basic_reflect_type_t *type,
                                   const char *path, const void *value, size_t value_size);
+
+/*
+ * Operations: the effective vtable of a field is field->ops when set,
+ * else field->type->ops. get/set/check run for values and pointees
+ * alike; copy/destroy handle objects (pointer targets and the root of
+ * copy/destroy) - see the file header for the ownership contract.
+ */
+
+/**
+ * Read the canonical value of a field's target through ops->get. For a
+ * pointer field the pointee is read (a NULL pointer returns
+ * SHREWD_BASIC_ERR_KEY_NOTFOUND); for a value field the field's own
+ * bytes are read. Fields with arrays, or without ops->get, return
+ * SHREWD_BASIC_ERR_ARG_INVALID. @p value_size must equal ops->value_size
+ * or the call fails with SHREWD_BASIC_ERR_REFLECT_MISMATCH.
+ */
+int shrewd_basic_reflect_value_get(const void *object,
+                                   const shrewd_basic_reflect_field_t *field,
+                                   void *out_value, size_t value_size);
+
+/** Write the canonical value of a field's target through ops->set. */
+int shrewd_basic_reflect_value_set(void *object,
+                                   const shrewd_basic_reflect_field_t *field,
+                                   const void *value, size_t value_size);
+
+/**
+ * Validate an object graph: every effective ops->check is called and
+ * struct values are walked field by field (pointer targets included,
+ * NULL pointers skipped). Depth-capped; returns the first non-OK code
+ * from a callback, SHREWD_BASIC_ERR_OK otherwise.
+ */
+int shrewd_basic_reflect_check(const void *object,
+                               const shrewd_basic_reflect_type_t *type);
+
+/**
+ * Deep-copy an object into @p *out. Root structs are cloned recursively
+ * (pointer targets cloned per the ownership contract in the file
+ * header); a type with ops->copy delegates the whole clone to it.
+ * Returns SHREWD_BASIC_ERR_MEM_NOMEM when an allocation fails.
+ */
+int shrewd_basic_reflect_copy(void **out, const void *object,
+                              const shrewd_basic_reflect_type_t *type);
+
+/**
+ * Destroy an object and everything the generic copy would have cloned -
+ * the inverse of shrewd_basic_reflect_copy(). Only run it on graphs that
+ * own their pointer targets; borrowed (string) targets and opaque
+ * targets without ops->destroy are left untouched.
+ */
+int shrewd_basic_reflect_destroy(void *object,
+                                 const shrewd_basic_reflect_type_t *type);
 
 #ifdef __cplusplus
 }
