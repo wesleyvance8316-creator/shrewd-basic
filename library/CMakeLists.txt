@@ -10,6 +10,7 @@ add_library(shrewd-basic
         platform/error.c
         platform/memory.c
         log/log.c
+        ds/ds.c
         ds/slist.c
         ds/dlist.c
         ds/queue.c
