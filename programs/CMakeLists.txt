@@ -20,3 +20,11 @@ target_link_libraries(shrewd-basic-reflect-demo
         PRIVATE
             shrewd-basic
             shrewd-basic-warnings)
+
+# JSON demo: value model (parse/query/modify/serialize) and struct mapping.
+add_executable(shrewd-basic-json-demo json_demo.c)
+
+target_link_libraries(shrewd-basic-json-demo
+        PRIVATE
+            shrewd-basic
+            shrewd-basic-warnings)

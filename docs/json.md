@@ -1,7 +1,7 @@
-# json 模块 — 架构、值模型与文本契约
+# json 模块 — 架构、值模型、结构映射与文本契约
 
-JSON 支持按**分层**组织,本文覆盖已落地的第 0 层(值模型 + 解析/序列化)与全部
-线格式契约;结构映射(第 1 层)与策略注册(第 2 层)在本文末尾的分层图中标注。
+JSON 支持按**分层**组织:第 0 层(值模型 + 解析/序列化)与第 1 层(结构映射)
+已落地,本文覆盖两层与全部线格式契约;策略注册(第 2 层)在分层图中标注。
 
 ---
 
@@ -11,9 +11,9 @@ JSON 支持按**分层**组织,本文覆盖已落地的第 0 层(值模型 + 解
 ┌────────────────────────────────────────────────┐
 │ 第 2 层:JSON 策略注册(键名/别名/省略/必填/范围) │  后续落地
 ├────────────────────────────────────────────────┤
-│ 第 1 层:结构映射(struct ↔ DOM,reflect 驱动)    │  后续落地
+│ 第 1 层:结构映射(struct ↔ DOM,reflect 驱动)    │  已落地
 ├────────────────────────────────────────────────┤
-│ 第 0 层:JSON 值模型(DOM)+ 解析/序列化  ← 本文  │  已落地
+│ 第 0 层:JSON 值模型(DOM)+ 解析/序列化          │  已落地
 └────────────────────────────────────────────────┘
 ```
 
@@ -92,14 +92,67 @@ void shrewd_basic_json_text_free(text);
 (结构映射层的格式约定——union 保形嵌套、键名/别名、位组、枚举名等——随第 1、
 2 层落地时归入本文。)
 
-## 5. 所有权
+## 5. 结构映射(第 1 层)
+
+```c
+int shrewd_basic_json_encode_value(object, type, &value, opt, &err);   /* struct -> DOM */
+int shrewd_basic_json_encode(object, type, &text, opt, &err);          /* struct -> 文本 */
+int shrewd_basic_json_decode_value(value, object, type, opt, &err);    /* DOM -> struct */
+int shrewd_basic_json_decode(text, len, object, type, opt, &err);      /* 文本 -> struct */
+int shrewd_basic_json_free(object, type);                              /* decode 的逆 */
+```
+
+### 映射规则(C ↔ JSON)
+
+| C 形态 | JSON |
+|---|---|
+| 标量 / 整数 / 浮点 | number(非有限值默认报错,`opt->allow_nan` → `null`) |
+| `ENUM` | 常量名字符串(未知值 → number);decode 名称/数字都收 |
+| `STRING` | string(NULL → `null`) |
+| `STRINGBUF` | string(内容到 NUL 为止;decode 至多 count 字符,恰满可不带 NUL) |
+| `CHAR` | 单字符 string(decode 也接受数字) |
+| `FIELD_BITS` | number(提取值;decode 读改写单元) |
+| 数组族(定长/动态/哨兵/FAM/多维行) | array,多维逐层嵌套 |
+| `F_PTR` | 跟随(NULL → `null`);**环图 encode 报错**(JSON 无法表达) |
+| `FIELD_UNION` | **F1 保形嵌套**(见下) |
+| 不透明 | `ops->render` → string;否则报错(decode 不支持) |
+
+**键 = 字段名,按描述符字段序输出**(策略层落地前无改名/省略)。
+
+### union 的 F1 形态
+
+```json
+{"kind": "MSG_POINT", "body": {"point": {"x": 1, "y": 2}}}
+```
+
+标签成员是普通字段(自己的键),union 成员是**活动变体字段**为键的对象;
+标签键在 JSON 中的位置无关(decode 先填标签再解 body)。未知标签:
+encode 默认报错(`opt->allow_unknown_union` → body 输出 `null`);
+decode 对 `null` body 放行、非 null 报错。
+
+### decode 规则
+
+- 目标**先清零**:缺失键保留零值默认;
+- **计数成员由数组长度驱动**(JSON 里的计数键被忽略);
+- 数组可**短于**槽位(尾部保持零),不可更长;字符串缓冲恰满可无 NUL,超长报错;
+- 未知键忽略;整数/浮点按值宽窄校验(越界报 `JSON_TYPE_MISMATCH`);
+- 每个错误都带 JSON 路径(`err->path`,如 `body.point.x`);
+- FAM 根的分配由调用方按 JSON 尾长预留:`sizeof(T) + n * sizeof(elem)`。
+
+### 映射层所有权
+
+decode 通过 `platform_alloc` 分配字符串、指针目标与动态表;
+`shrewd_basic_json_free()` 精确释放 decode 的全部分配(含普通字符串)。
+**根存储归调用方**(decode 不分配它)——栈上对象与堆上图同一套 free。
+
+## 6. 所有权(值模型层)
 
 - 解析/创建的值树归调用方,`shrewd_basic_json_value_free()` 释放整树;
 - `set`/`append` **接管** item;被替换/删除的子树由库释放;
 - `serialize` 分配的文本用 `shrewd_basic_json_text_free()` 释放(经
   `platform_alloc` 族分配)。
 
-## 6. 错误与日志
+## 7. 错误与日志
 
 错误码(`shrewd-basic/platform/error.h`):
 
@@ -112,9 +165,12 @@ void shrewd_basic_json_text_free(text);
 
 日志走共享 `"json"` 模块:WARN 参数错、TRACE 解析/序列化进度。
 
-## 7. 工程配套
+## 8. 工程配套
 
 - 测试 `shrewd-basic-json-tests`:文法严格性与宽松开关、数字保真、转义/代理对、
   DOM 访问与修改、紧凑/pretty 输出、文本级往返;
+- 测试 `shrewd-basic-json-map-tests`:全形态 encode/decode 往返(含 F1 union、
+  位组、多维行、FAM、动态数组、指针图)、decode 规则、错误路径与 json_free;
+- demo `programs/json_demo.c`:encode(紧凑/pretty)、decode、DOM 查询修改;
 - 构建随库源码自动 glob,子项目集成零污染;验证纪律同全库
   (GCC/Clang 严格告警、valgrind、ASan/UBSan)。

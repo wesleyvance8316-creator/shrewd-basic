@@ -35,6 +35,7 @@
 #include <stdint.h>
 
 #include "shrewd-basic/platform/error.h"
+#include "shrewd-basic/reflect/reflect.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -67,6 +68,8 @@ typedef struct shrewd_basic_json_options {
     int max_depth;            /**< parse/serialize: nesting limit (0 = 32). */
     int allow_comments;       /**< parse: accept // line and /_ block comments. */
     int allow_trailing_commas;/**< parse: accept [1,] and {"a":1,}. */
+    int allow_nan;            /**< encode: NaN/inf become null (default: error). */
+    int allow_unknown_union;  /**< encode: unknown union tag -> null body. */
 } shrewd_basic_json_options_t;
 
 /**
@@ -198,6 +201,73 @@ int shrewd_basic_json_serialize(const shrewd_basic_json_value_t *value,
 
 /** Release text produced by shrewd_basic_json_serialize(). */
 void shrewd_basic_json_text_free(char *text);
+
+/* --- struct mapping (reflect-described graphs) ------------------------ */
+
+/*
+ * Wire format for described structs (see docs/json.md):
+ *   - keys are member names, emitted in descriptor order;
+ *   - enums render as constant names (numbers accepted both ways);
+ *   - bit groups render as their extracted number;
+ *   - char members render as one-character strings;
+ *   - all array shapes render as JSON arrays; multi-dimension rows nest;
+ *   - pointers are followed (NULL -> null); cyclic graphs fail with
+ *     SHREWD_BASIC_ERR_JSON_UNSUPPORTED (JSON cannot express cycles);
+ *   - a tagged union renders as F1 "nest-preserving" form: the tag
+ *     member (a described field) is its own key, the union member is an
+ *     object with the active variant's fields as keys
+ *     ("body": {"point": {...}}). Unknown tags fail unless
+ *     options.allow_unknown_union (then the body is null);
+ *   - opaque targets render through ops->render as strings, else fail.
+ */
+
+/**
+ * Encode a described object into a new value tree. Errors carry the
+ * JSON path of the fault in @p error->path (e.g. "body.point.x").
+ */
+int shrewd_basic_json_encode_value(const void *object,
+                                   const shrewd_basic_reflect_type_t *type,
+                                   shrewd_basic_json_value_t **out,
+                                   const shrewd_basic_json_options_t *options,
+                                   shrewd_basic_json_error_t *error);
+
+/** Encode a described object straight to JSON text. */
+int shrewd_basic_json_encode(const void *object,
+                             const shrewd_basic_reflect_type_t *type,
+                             char **out_text,
+                             const shrewd_basic_json_options_t *options,
+                             shrewd_basic_json_error_t *error);
+
+/*
+ * Decode rules (see docs/json.md): @p object is zeroed first (missing
+ * keys keep zero defaults), then JSON members fill fields. Arrays may
+ * be shorter than a fixed slot (the tail stays zero) but not longer;
+ * count members are derived from array lengths (JSON count keys are
+ * ignored). Strings and pointer targets are allocated through
+ * platform_alloc; shrewd_basic_json_free() releases exactly what decode
+ * allocated - every string, pointer target and dynamic table. The
+ * storage of @p object itself belongs to the caller (decode never
+ * allocates it). Flexible-tailed roots must be sized by the caller for
+ * the JSON tail: sizeof(T) + n * sizeof(elem).
+ */
+int shrewd_basic_json_decode_value(const shrewd_basic_json_value_t *value,
+                                   void *object,
+                                   const shrewd_basic_reflect_type_t *type,
+                                   const shrewd_basic_json_options_t *options,
+                                   shrewd_basic_json_error_t *error);
+
+/** Parse text and decode it into @p object (zeroed first). */
+int shrewd_basic_json_decode(const char *text, size_t length, void *object,
+                             const shrewd_basic_reflect_type_t *type,
+                             const shrewd_basic_json_options_t *options,
+                             shrewd_basic_json_error_t *error);
+
+/**
+ * Release everything shrewd_basic_json_decode() allocated inside @p
+ * object (strings, pointer targets, dynamic tables). The storage of
+ * @p object itself belongs to the caller and is not freed.
+ */
+int shrewd_basic_json_free(void *object, const shrewd_basic_reflect_type_t *type);
 
 #ifdef __cplusplus
 }
