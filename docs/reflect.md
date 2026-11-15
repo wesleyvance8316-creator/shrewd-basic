@@ -148,6 +148,7 @@ shrewd_basic_reflect_void     /* 不透明目标(OPAQUE),size = 0 */
 | `FIELD_PTR_SENTINEL(struct_type, member, ref)` | NULL 槽终止的指针表 |
 | `FIELD_FLEX(struct_type, member, count_member, ref)` | 柔性尾部(尾部内联 + 计数联动) |
 | `FIELD_STRING_BUFFER(struct_type, member)` | `char[N]` 文本缓冲:按 C 字符串渲染/比较(dump 引号转义、equal/diff/hash 到 NUL 为止、visit 单 LEAF;get/set 仍是原始 N 字节) |
+| `FIELD_STRING_OWNED(struct_type, member)` | 图**拥有**的 `char *`:copy 克隆内容(共享串保持共享)、destroy 释放;NULL 保持 NULL;equal/hash/dump 不变 |
 | `FIELD_*_OPS`(全部形态各有变体) | 同上 + 字段级 ops 覆盖 |
 
 `ref`/`ops_ref` 参数**不带 `&`**(宏内部补 `&` 以保持地址常量)。
@@ -330,6 +331,7 @@ struct shrewd_basic_reflect_ops {
 | 结构体 | `platform_calloc` + 字段递归 | 递归 + `platform_free` |
 | 标量 | `platform_alloc` + 拷值(规范宽度) | `platform_free` |
 | 字符串(槽) | **别名**(借用语义) | 永不触碰 |
+| 字符串(`F_STRING_OWNED`) | **克隆内容**(共享串保持共享) | 释放内容(访问集保证一次) |
 | 不透明 | 拒绝(`ARG_INVALID`) | 跳过(非我方分配) |
 | 超深度钳制 | 别名(防御) | 跳过 |
 

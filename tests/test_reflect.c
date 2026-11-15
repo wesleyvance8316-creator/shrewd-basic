@@ -2941,6 +2941,106 @@ static void test_lookup_index(void)
                   SHREWD_BASIC_ERR_KEY_NOTFOUND);
 }
 
+/* --- owned string fixtures --------------------------------------------- */
+
+typedef struct {
+    char *title;
+    char *shared;
+    const char *borrowed; /* plain STRING: aliased on copy, never freed */
+} owned_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_owned_reflect, owned_t,
+    SHREWD_BASIC_REFLECT_FIELD_STRING_OWNED(owned_t, title),
+    SHREWD_BASIC_REFLECT_FIELD_STRING_OWNED(owned_t, shared),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(owned_t, borrowed));
+
+static void test_owned_strings(void)
+{
+    /* Descriptor shape. */
+    const shrewd_basic_reflect_field_t *field =
+        find_or_fail("owned", &g_owned_reflect, "title");
+    if (NULL != field) {
+        expect_true("owned shape",
+                    (&shrewd_basic_reflect_string == field->sb_refl_type)
+                    && (SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED
+                        == field->sb_refl_flags));
+    }
+
+    /* A heap-owned graph: two fields share one buffer, one is borrowed. */
+    void *block = NULL;
+    char *title = NULL;
+    char *shared = NULL;
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_alloc(&block, 6)) {
+        return;
+    }
+    title = block;
+    memcpy(title, "hello", 6);
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_alloc(&block, 4)) {
+        (void)shrewd_basic_platform_free((void **)&title);
+        return;
+    }
+    shared = block;
+    memcpy(shared, "dup", 4);
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_calloc(&block, 1, sizeof(owned_t))) {
+        (void)shrewd_basic_platform_free((void **)&title);
+        (void)shrewd_basic_platform_free((void **)&shared);
+        return;
+    }
+    owned_t *src = block;
+    src->title = title;
+    src->shared = shared;
+    src->borrowed = "static literal";
+
+    owned_t *twin = NULL;
+    expect_eq_int("owned copy",
+                  shrewd_basic_reflect_copy((void **)&twin, src, &g_owned_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("owned clone deep",
+                (NULL != twin) && (twin->title != src->title)
+                && (0 == strcmp(twin->title, "hello")));
+    expect_true("owned clone shared",
+                (twin->shared != src->shared)   /* own copy of the buffer ... */
+                && (0 == strcmp(twin->shared, "dup")));
+    expect_true("owned clone borrowed", twin->borrowed == src->borrowed);
+
+    bool same = false;
+    expect_eq_int("owned equal",
+                  shrewd_basic_reflect_equal(src, twin, &g_owned_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("owned equal yes", same);
+    size_t ha = 0;
+    size_t hb = 0;
+    expect_eq_int("owned hash src",
+                  shrewd_basic_reflect_hash(src, &g_owned_reflect, &ha),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("owned hash clone",
+                  shrewd_basic_reflect_hash(twin, &g_owned_reflect, &hb),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("owned hash same", ha == hb);
+
+    /* NULL owned strings stay NULL through the clone. */
+    (void)shrewd_basic_platform_free((void **)&title);
+    src->title = NULL;
+    owned_t *null_clone = NULL;
+    expect_eq_int("owned copy null",
+                  shrewd_basic_reflect_copy((void **)&null_clone, src,
+                                            &g_owned_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("owned null stays null",
+                (NULL != null_clone) && (NULL == null_clone->title));
+    expect_eq_int("owned destroy null clone",
+                  shrewd_basic_reflect_destroy(null_clone, &g_owned_reflect),
+                  SHREWD_BASIC_ERR_OK);
+
+    /* Destroy frees cloned content exactly once (valgrind asserts it). */
+    expect_eq_int("owned destroy clone",
+                  shrewd_basic_reflect_destroy(twin, &g_owned_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("owned destroy src",
+                  shrewd_basic_reflect_destroy(src, &g_owned_reflect),
+                  SHREWD_BASIC_ERR_OK);
+}
+
 int main(void)
 {
     test_describe();
@@ -2961,6 +3061,7 @@ int main(void)
     test_diff();
     test_hash();
     test_stringbuf();
+    test_owned_strings();
     test_graph_ops();
     test_equal();
     test_dynamic_arrays();

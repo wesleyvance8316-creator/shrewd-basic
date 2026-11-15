@@ -81,7 +81,12 @@
  * be copied. destroy is the inverse of copy and must only run on graphs
  * that own their pointer targets (clone outputs or platform_alloc-built
  * data); pointer targets into caller stack/static storage need ops (a
- * no-op destroy) or must not be destroyed.
+ * no-op destroy) or must not be destroyed. Owned STRING members use
+ * SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED: copy clones their content
+ * (strings shared between fields stay shared) and destroy frees them.
+ * For owned strings behind a pointer, provide ops->copy/ops->destroy on
+ * the field (the pointer-target hooks) - plain STRING values have no
+ * ops hook and need the flag.
  */
 
 #include <stdbool.h>
@@ -225,6 +230,16 @@ struct shrewd_basic_reflect_type {
  * and paths may index single characters ("title[2]").
  */
 #define SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF ((uint32_t)32u)
+
+/**
+ * Field flag: the graph OWNS the string a STRING field points at.
+ * shrewd_basic_reflect_copy() clones its content (strings shared between
+ * fields stay shared in the clone) and shrewd_basic_reflect_destroy()
+ * frees it - unlike the default borrowed-string semantics where copy
+ * aliases and destroy never touches strings. NULL strings stay NULL.
+ * Comparison, hashing and dump are unaffected (content semantics).
+ */
+#define SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED ((uint32_t)64u)
 
 /** Primitive descriptors; pass them to FIELD_ARRAY/FIELD_STRUCT by name. */
 extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_bool;
@@ -575,6 +590,36 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
         .sb_refl_stride = sizeof(((struct_type *)0)->member[0]),               \
         .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_ARRAY                    \
                 | SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF,                      \
+        .sb_refl_ops = &(ops_ref)                                              \
+    }
+
+/*
+ * Describe a STRING member whose content the graph owns: copy clones it
+ * (shared strings stay shared) and destroy frees it, instead of the
+ * default borrowed-string behavior. NULL stays NULL. Equal, hashing and
+ * dump are content-based and unchanged.
+ */
+#define SHREWD_BASIC_REFLECT_FIELD_STRING_OWNED(struct_type, member)           \
+    {                                                                          \
+        .sb_refl_name = #member,                                               \
+        .sb_refl_type = &shrewd_basic_reflect_string,                          \
+        .sb_refl_offset = offsetof(struct_type, member),                       \
+        .sb_refl_size = sizeof(((struct_type *)0)->member),                    \
+        .sb_refl_count = (size_t)1,                                            \
+        .sb_refl_stride = sizeof(((struct_type *)0)->member),                  \
+        .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED             \
+    }
+
+/* FIELD_STRING_OWNED with a field-level ops override. */
+#define SHREWD_BASIC_REFLECT_FIELD_STRING_OWNED_OPS(struct_type, member, ops_ref) \
+    {                                                                          \
+        .sb_refl_name = #member,                                               \
+        .sb_refl_type = &shrewd_basic_reflect_string,                          \
+        .sb_refl_offset = offsetof(struct_type, member),                       \
+        .sb_refl_size = sizeof(((struct_type *)0)->member),                    \
+        .sb_refl_count = (size_t)1,                                            \
+        .sb_refl_stride = sizeof(((struct_type *)0)->member),                  \
+        .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED,            \
         .sb_refl_ops = &(ops_ref)                                              \
     }
 

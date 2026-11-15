@@ -1090,6 +1090,42 @@ static int reflect_copy_value(const shrewd_basic_reflect_type_t *type,
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
                 }
+            } else if ((SHREWD_BASIC_REFLECT_KIND_STRING
+                        == field->sb_refl_type->sb_refl_kind)
+                       && (0u != (field->sb_refl_flags
+                                  & SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED))) {
+                /*
+                 * Owned string: clone the content through the clone map,
+                 * so strings shared between fields stay shared. NULL
+                 * stays NULL (the clone storage is zero-initialized).
+                 */
+                const char *text = reflect_load_str(src_elem);
+                if (NULL == text) {
+                    continue;
+                }
+                void *existing = NULL;
+                int found = 0;
+                int status = reflect_map_lookup(map, text, &existing, &found);
+                if (SHREWD_BASIC_ERR_OK != status) {
+                    return status;
+                }
+                if (0 != found) {
+                    memcpy(dst_elem, &existing, sizeof(existing));
+                    continue;
+                }
+                void *copy = NULL;
+                size_t length = strlen(text) + 1;
+                status = shrewd_basic_platform_alloc(&copy, length);
+                if (SHREWD_BASIC_ERR_OK != status) {
+                    return status;
+                }
+                memcpy(copy, text, length);
+                status = reflect_map_insert(map, text, copy, NULL);
+                if (SHREWD_BASIC_ERR_OK != status) {
+                    (void)shrewd_basic_platform_free(&copy);
+                    return status;
+                }
+                memcpy(dst_elem, &copy, sizeof(copy));
             } else {
                 memcpy(dst_elem, src_elem, view.stride);
             }
@@ -1248,6 +1284,25 @@ static int reflect_destroy_value(const shrewd_basic_reflect_type_t *type, void *
                                                    visited, depth + 1);
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
+                }
+            } else if ((SHREWD_BASIC_REFLECT_KIND_STRING
+                        == field->sb_refl_type->sb_refl_kind)
+                       && (0u != (field->sb_refl_flags
+                                  & SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED))) {
+                /* Owned string: freed once (shared strings are visited once). */
+                void *target = reflect_load_ptr(elem);
+                if (NULL != target) {
+                    int seen = 0;
+                    int status = reflect_visited_check(visited, target, &seen);
+                    if (SHREWD_BASIC_ERR_OK != status) {
+                        return status;
+                    }
+                    if (0 == seen) {
+                        status = shrewd_basic_platform_free(&target);
+                        if (SHREWD_BASIC_ERR_OK != status) {
+                            return status;
+                        }
+                    }
                 }
             }
         }

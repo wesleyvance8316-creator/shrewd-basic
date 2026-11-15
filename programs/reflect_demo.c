@@ -14,7 +14,8 @@
  * field_get/set, dump (incl. ops->render and cycle markers),
  * type_resolve, path_get/set, value_get/set, check, equal, copy,
  * destroy, dynamic arrays (F_DARRAY/F_SENTINEL), flexible tails
- * (F_FLEX), string buffers (F_STRINGBUF), the traversal accessors,
+ * (F_FLEX), string buffers (F_STRINGBUF), owned strings
+ * (F_STRING_OWNED), the traversal accessors,
  * visit (event-by-event walk) and diff/hash.
  * The 1 MiB dump body cap is covered by the test suite
  * instead - its output would flood the terminal here.
@@ -187,6 +188,16 @@ typedef struct {
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(text_type, text_t,
     SHREWD_BASIC_REFLECT_FIELD_STRING_BUFFER(text_t, title),
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(text_t, id));
+
+/* Owned strings: the graph owns the content (copy clones, destroy frees). */
+typedef struct {
+    char *title;
+    const char *borrowed;
+} owned_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(owned_type, owned_t,
+    SHREWD_BASIC_REFLECT_FIELD_STRING_OWNED(owned_t, title),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(owned_t, borrowed));
 
 /* An enum: int-compatible values with a name/value table. */
 typedef enum {
@@ -672,6 +683,40 @@ int main(void)
                  shrewd_basic_reflect_diff(&text_a, &text_b, &text_type,
                                            diff_path, sizeof(diff_path)));
     printf("  first difference at \"%s\"\n", diff_path);
+
+    banner("15. owned strings: copy clones content, destroy frees it");
+    void *text_block = NULL;
+    if (SHREWD_BASIC_ERR_OK == shrewd_basic_platform_alloc(&text_block, 6)) {
+        owned_t *owned = NULL;
+        void *owned_block = NULL;
+        (void)shrewd_basic_platform_calloc(&owned_block, 1, sizeof(owned_t));
+        owned = owned_block;
+        memcpy(text_block, "hello", 6);
+        owned->title = text_block;
+        owned->borrowed = "static literal";
+        (void)shrewd_basic_reflect_dump(&owned_type, owned, "owned");
+        owned_t *owned_clone = NULL;
+        print_status("copy(owned)",
+                     shrewd_basic_reflect_copy((void **)&owned_clone, owned,
+                                               &owned_type));
+        printf("  clone title=\"%s\" at %p (source at %p) -> deep copy\n",
+               owned_clone->title, (void *)owned_clone->title,
+               (void *)owned->title);
+        printf("  clone borrowed %s -> aliased\n",
+               (owned_clone->borrowed == owned->borrowed)
+                       ? "is the same pointer"
+                       : "differs (unexpected)");
+        bool owned_same = false;
+        print_status("equal(owned, clone)",
+                     shrewd_basic_reflect_equal(owned, owned_clone, &owned_type,
+                                                &owned_same));
+        printf("  -> %s (strings compare by content)\n",
+               owned_same ? "equal" : "different");
+        print_status("destroy(clone)",
+                     shrewd_basic_reflect_destroy(owned_clone, &owned_type));
+        print_status("destroy(owned)",
+                     shrewd_basic_reflect_destroy(owned, &owned_type));
+    }
 
     printf("\nDemo done. See docs/reflect.md for the full reference.\n");
     return 0;
