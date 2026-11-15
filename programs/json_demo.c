@@ -118,7 +118,7 @@ int main(void)
         printf("  kind=%d id=%d tag=\"%s\" name=\"%s\" body.text=\"%s\"\n",
                (int)decoded->kind, decoded->id, decoded->tag, decoded->name,
                decoded->body.text);
-        print_status("json_free", shrewd_basic_json_free(decoded, &msg_reflect));
+        print_status("json_free", shrewd_basic_json_free(decoded, &msg_reflect, NULL));
         (void)shrewd_basic_platform_free(&block);
     }
 
@@ -182,7 +182,7 @@ int main(void)
             printf("  msg_id -> id=%d body.text=\"%s\"\n", decoded->id,
                    decoded->body.text);
             print_status("json_free",
-                         shrewd_basic_json_free(decoded, &msg_reflect));
+                         shrewd_basic_json_free(decoded, &msg_reflect, NULL));
             (void)shrewd_basic_platform_free(&block);
         }
     }

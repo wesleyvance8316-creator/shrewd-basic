@@ -202,7 +202,7 @@ static void test_key_aliases(void)
         expect_true("policy alias value",
                     (0 == strcmp(target.name, "al")) && (3 == target.score));
         expect_eq_int("policy alias free",
-                      shrewd_basic_json_free(&target, &cfg_reflect),
+                      shrewd_basic_json_free(&target, &cfg_reflect, NULL),
                       SHREWD_BASIC_ERR_OK);
     }
     {
@@ -214,7 +214,7 @@ static void test_key_aliases(void)
                       SHREWD_BASIC_ERR_OK);
         expect_streq("policy member name value", target.name, "x");
         expect_eq_int("policy member name free",
-                      shrewd_basic_json_free(&target, &cfg_reflect),
+                      shrewd_basic_json_free(&target, &cfg_reflect, NULL),
                       SHREWD_BASIC_ERR_OK);
     }
 
@@ -228,7 +228,7 @@ static void test_key_aliases(void)
                       SHREWD_BASIC_ERR_OK);
         expect_streq("policy conflict last wins", target.name, "b");
         expect_eq_int("policy conflict free",
-                      shrewd_basic_json_free(&target, &cfg_reflect),
+                      shrewd_basic_json_free(&target, &cfg_reflect, NULL),
                       SHREWD_BASIC_ERR_OK);
     }
     {
@@ -243,7 +243,7 @@ static void test_key_aliases(void)
                                   &cfg_reflect, &cfg_json, &options, &error),
                       SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH);
         expect_eq_int("policy conflict strict free",
-                      shrewd_basic_json_free(&target, &cfg_reflect),
+                      shrewd_basic_json_free(&target, &cfg_reflect, NULL),
                       SHREWD_BASIC_ERR_OK);
     }
 
@@ -259,7 +259,7 @@ static void test_key_aliases(void)
                                   &cfg_reflect, &cfg_json, &options, NULL),
                       SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH);
         expect_eq_int("policy strict unknown free",
-                      shrewd_basic_json_free(&target, &cfg_reflect),
+                      shrewd_basic_json_free(&target, &cfg_reflect, NULL),
                       SHREWD_BASIC_ERR_OK);
     }
 }
@@ -277,7 +277,7 @@ static void test_required_range_check(void)
                       SHREWD_BASIC_ERR_KEY_NOTFOUND);
         expect_streq("policy required path", error.path, "name");
         expect_eq_int("policy required free",
-                      shrewd_basic_json_free(&target, &cfg_reflect),
+                      shrewd_basic_json_free(&target, &cfg_reflect, NULL),
                       SHREWD_BASIC_ERR_OK);
     }
 
@@ -292,7 +292,7 @@ static void test_required_range_check(void)
                       SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH);
         expect_streq("policy range path", error.path, "age");
         expect_eq_int("policy range free",
-                      shrewd_basic_json_free(&target, &cfg_reflect),
+                      shrewd_basic_json_free(&target, &cfg_reflect, NULL),
                       SHREWD_BASIC_ERR_OK);
     }
     {
@@ -319,7 +319,7 @@ static void test_required_range_check(void)
                       SHREWD_BASIC_ERR_ARG_INVALID);
         expect_streq("policy check path", error.path, "score");
         expect_eq_int("policy check free",
-                      shrewd_basic_json_free(&target, &cfg_reflect),
+                      shrewd_basic_json_free(&target, &cfg_reflect, NULL),
                       SHREWD_BASIC_ERR_OK);
     }
 
@@ -333,7 +333,7 @@ static void test_required_range_check(void)
                       SHREWD_BASIC_ERR_OK);
         expect_true("policy hidden stays zero", NULL == target.secret);
         expect_eq_int("policy hidden free",
-                      shrewd_basic_json_free(&target, &cfg_reflect),
+                      shrewd_basic_json_free(&target, &cfg_reflect, NULL),
                       SHREWD_BASIC_ERR_OK);
     }
 }
@@ -361,7 +361,7 @@ static void test_union_styles(void)
         expect_true("policy union flat value",
                     (MSG_POINT == target.kind) && (5 == target.body.point.x));
         expect_eq_int("policy union flat free",
-                      shrewd_basic_json_free(&target, &msg_reflect),
+                      shrewd_basic_json_free(&target, &msg_reflect, NULL),
                       SHREWD_BASIC_ERR_OK);
     }
 
@@ -382,7 +382,7 @@ static void test_union_styles(void)
                     (NULL != target.body.text)
                     && (0 == strcmp(target.body.text, "hi")));
         expect_eq_int("policy union unwrap free",
-                      shrewd_basic_json_free(&target, &msg_reflect),
+                      shrewd_basic_json_free(&target, &msg_reflect, NULL),
                       SHREWD_BASIC_ERR_OK);
     }
 
@@ -474,9 +474,163 @@ static void test_keys_export(void)
     }
 }
 
+/* --- custom pointer-target fixture ------------------------------------ */
+
+typedef struct {
+    int32_t *handle;
+} ext_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(ext_reflect, ext_t,
+    SHREWD_BASIC_REFLECT_FIELD_PTR(ext_t, handle, shrewd_basic_reflect_int32));
+
+static int g_handle_destroys = 0;
+
+static int handle_encode(const void *value, shrewd_basic_json_value_t **out)
+{
+    int32_t number = 0;
+    memcpy(&number, value, sizeof(number));
+    return shrewd_basic_json_new_i64(number, out);
+}
+
+static int handle_decode(const shrewd_basic_json_value_t *value, void *slot)
+{
+    int64_t wire = 0;
+    void *target = NULL;
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_json_to_i64(value, &wire)) {
+        return SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH;
+    }
+    if (SHREWD_BASIC_ERR_OK
+            != shrewd_basic_platform_alloc(&target, sizeof(int32_t))) {
+        return SHREWD_BASIC_ERR_MEM_NOMEM;
+    }
+    *(int32_t *)target = (int32_t)wire;
+    memcpy(slot, &target, sizeof(target));
+    return SHREWD_BASIC_ERR_OK;
+}
+
+static void handle_destroy(void *target)
+{
+    ++g_handle_destroys;
+    (void)shrewd_basic_platform_free(&target);
+}
+
+static const shrewd_basic_json_ops_t g_handle_json_ops = {
+    .encode = handle_encode,
+    .decode = handle_decode,
+    .destroy = handle_destroy };
+
+SHREWD_BASIC_JSON_DEFINE(ext_json, ext_reflect,
+    SHREWD_BASIC_JSON_OPS(handle, g_handle_json_ops));
+
+/* Loose-key collision: name_id and nameID are the same under LOOSE. */
+typedef struct {
+    int32_t name_id;
+    int32_t nameID;
+} collide_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(collide_reflect, collide_t,
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(collide_t, name_id),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(collide_t, nameID));
+
+static void test_keep_defaults(void)
+{
+    shrewd_basic_json_options_t options;
+    cfg_t target;
+    memset(&options, 0, sizeof(options));
+    options.keep_defaults = 1;
+    memset(&target, 0, sizeof(target));
+    target.age = 99;
+    target.name = "def"; /* static literal: never freed by json_free */
+
+    /* Missing keys keep the pre-set defaults. */
+    expect_eq_int("defaults decode",
+                  decode_into("{\"age\":1}", &target, &cfg_reflect, &cfg_json,
+                              &options, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("defaults kept",
+                (1 == target.age) && (target.name == (const char *)"def"
+                                      || 0 == strcmp(target.name, "def")));
+    expect_eq_int("defaults free",
+                  shrewd_basic_json_free(&target, &cfg_reflect, &cfg_json),
+                  SHREWD_BASIC_ERR_OK);
+
+    /* A refill releases what decode allocated, never the default. */
+    expect_eq_int("defaults refill",
+                  decode_into("{\"name_id\":\"a\",\"nameID\":\"b\"}", &target,
+                              &cfg_reflect, &cfg_json, &options, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_streq("defaults refill last wins", target.name, "b");
+    expect_eq_int("defaults refill free",
+                  shrewd_basic_json_free(&target, &cfg_reflect, &cfg_json),
+                  SHREWD_BASIC_ERR_OK);
+}
+
+static void test_loose_keys(void)
+{
+    shrewd_basic_json_options_t options;
+    cfg_t target;
+    memset(&options, 0, sizeof(options));
+    options.key_match = SHREWD_BASIC_JSON_KEY_MATCH_LOOSE;
+    memset(&target, 0, sizeof(target));
+
+    /* Case and underscores are ignored: AGE, NameID, SCORE all hit. */
+    expect_eq_int("loose decode",
+                  decode_into("{\"AGE\":7,\"NameID\":\"x\",\"score\":3}",
+                              &target, &cfg_reflect, &cfg_json, &options, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("loose values",
+                (7 == target.age) && (0 == strcmp(target.name, "x"))
+                && (2 == target.score));
+    expect_eq_int("loose free",
+                  shrewd_basic_json_free(&target, &cfg_reflect, &cfg_json),
+                  SHREWD_BASIC_ERR_OK);
+
+    /* Colliding members under loose matching are refused outright. */
+    {
+        collide_t collide;
+        memset(&collide, 0, sizeof(collide));
+        expect_eq_int("loose collision",
+                      decode_into("{\"name_id\":1}", &collide, &collide_reflect,
+                                  NULL, &options, NULL),
+                      SHREWD_BASIC_ERR_JSON_UNSUPPORTED);
+    }
+}
+
+static void test_ops_targets(void)
+{
+    ext_t probe;
+    void *block = NULL;
+    int32_t storage = 41;
+
+    /* Encode reads the pointee through the hook. */
+    probe.handle = &storage;
+    expect_encode("ops target encode", &probe, &ext_reflect, &ext_json,
+                  "{\"handle\":41}");
+
+    /* Decode lets the hook allocate the target; json_free releases it
+       through ops->destroy. */
+    g_handle_destroys = 0;
+    (void)shrewd_basic_platform_calloc(&block, 1, sizeof(ext_t));
+    expect_eq_int("ops target decode",
+                  decode_into("{\"handle\":7}", block, &ext_reflect, &ext_json,
+                              NULL, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("ops target value",
+                (NULL != ((ext_t *)block)->handle)
+                && (7 == *((ext_t *)block)->handle));
+    expect_eq_int("ops target free",
+                  shrewd_basic_json_free(block, &ext_reflect, &ext_json),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("ops target destroy called", 1 == g_handle_destroys);
+    (void)shrewd_basic_platform_free(&block);
+}
+
 int main(void)
 {
     test_key_aliases();
+    test_keep_defaults();
+    test_loose_keys();
+    test_ops_targets();
     test_required_range_check();
     test_union_styles();
     test_keys_export();

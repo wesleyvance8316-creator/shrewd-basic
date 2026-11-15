@@ -58,6 +58,19 @@ int json_object_add(shrewd_basic_json_value_t *object, const char *key,
                     shrewd_basic_json_value_t *item);
 
 /*
+ * Decode allocation registry: blocks allocated during decode are
+ * tracked per decoded root, so cleanup frees exactly what decode
+ * created (pre-set defaults - static literals or caller allocations -
+ * are never touched). Not synchronized; see docs/json.md.
+ */
+typedef struct json_owner json_owner_t;
+int json_owner_touch(const void *root);            /* ensure an owner exists */
+int json_owner_calloc(const void *root, void **out, size_t size); /* tracked */
+int json_owner_owns(const void *root, const void *block);
+int json_owner_release(const void *root, void **block); /* free one owned block */
+void json_owner_release_all(const void *root);
+
+/*
  * Merged policy view of one field: the identity view (member name as
  * the only key, no flags) when @p info is NULL or has no rows for it.
  */

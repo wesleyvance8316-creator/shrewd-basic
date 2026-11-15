@@ -132,7 +132,8 @@ decode 对 `null` body 放行、非 null 报错。
 
 ### decode 规则
 
-- 目标**先清零**:缺失键保留零值默认;
+- 目标**先清零**(除非 `opt->keep_defaults`:缺失键保留**预置默认值**,
+  REQUIRED 也由默认值满足——配置合并场景);
 - **计数成员由数组长度驱动**(JSON 里的计数键被忽略);
 - 数组可**短于**槽位(尾部保持零),不可更长;字符串缓冲恰满可无 NUL,超长报错;
 - 未知键忽略;整数/浮点按值宽窄校验(越界报 `JSON_TYPE_MISMATCH`);
@@ -141,9 +142,18 @@ decode 对 `null` body 放行、非 null 报错。
 
 ### 映射层所有权
 
-decode 通过 `platform_alloc` 分配字符串、指针目标与动态表;
-`shrewd_basic_json_free()` 精确释放 decode 的全部分配(含普通字符串)。
-**根存储归调用方**(decode 不分配它)——栈上对象与堆上图同一套 free。
+decode 的每个分配都记入**按根对象索引的登记表**;`shrewd_basic_json_free()`
+只释放登记在册的块(含普通字符串、指针目标、动态表)——**预置默认值
+(静态字面量或调用方分配)永远不会被误释放**,重复键/二次 merge 覆盖旧值
+时也只回收 decode 自己的分配。`ops->decode` 产出的目标由 `ops->destroy`
+释放。**根存储归调用方**(decode 不分配它)。登记表为静态侧表,与查找
+缓存一样**不支持多线程同时使用**。
+
+### 键匹配策略
+
+`opt->key_match = SHREWD_BASIC_JSON_KEY_MATCH_LOOSE`:decode 忽略大小写与
+下划线(`name_id`/`nameID`/`NameID` 等价);若两个字段在宽松规则下会撞名,
+decode 直接报 `JSON_UNSUPPORTED`(注册即拒绝)。
 
 ## 6. 策略注册(第 2 层)
 

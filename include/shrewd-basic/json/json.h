@@ -74,7 +74,13 @@ typedef struct shrewd_basic_json_options {
     int allow_nan;            /**< encode: NaN/inf become null (default: error). */
     int allow_unknown_union;  /**< encode: unknown union tag -> null body. */
     int strict;               /**< decode: unknown keys and alias conflicts error. */
+    int keep_defaults;        /**< decode: missing keys keep pre-set values. */
+    int key_match;            /**< decode: SHREWD_BASIC_JSON_KEY_MATCH_*. */
 } shrewd_basic_json_options_t;
+
+/** Key matching strategies for decode. */
+#define SHREWD_BASIC_JSON_KEY_MATCH_EXACT 0 /**< Accepted keys only (default). */
+#define SHREWD_BASIC_JSON_KEY_MATCH_LOOSE 1 /**< Also ignore case and '_'. */
 
 /**
  * Fault detail for parse/serialize calls: @c offset is the byte offset
@@ -273,9 +279,12 @@ int shrewd_basic_json_decode(const char *text, size_t length, void *object,
 /**
  * Release everything shrewd_basic_json_decode() allocated inside @p
  * object (strings, pointer targets, dynamic tables). The storage of
- * @p object itself belongs to the caller and is not freed.
+ * @p object itself belongs to the caller and is not freed. @p info (may
+ * be NULL) supplies the policy so ops->destroy hooks can release their
+ * custom pointer targets.
  */
-int shrewd_basic_json_free(void *object, const shrewd_basic_reflect_type_t *type);
+int shrewd_basic_json_free(void *object, const shrewd_basic_reflect_type_t *type,
+                           const shrewd_basic_json_info_t *info);
 
 /* --- policy layer (optional, per-type) ------------------------------- */
 
@@ -305,8 +314,15 @@ int shrewd_basic_json_free(void *object, const shrewd_basic_reflect_type_t *type
  */
 typedef struct shrewd_basic_json_ops {
     int (*encode)(const void *value, shrewd_basic_json_value_t **out);
+    /**
+     * Decode one value. For value fields @p target is the field storage;
+     * for pointer fields it is the pointer slot (the ops allocates the
+     * target and writes its address, mirroring encode's pointee view).
+     */
     int (*decode)(const shrewd_basic_json_value_t *value, void *target);
     int (*check)(const void *value);
+    /** Release a pointer target produced by @c decode (json_free uses it). */
+    void (*destroy)(void *target);
 } shrewd_basic_json_ops_t;
 
 /** One merged policy view of a field (also the json_keys() callback unit). */

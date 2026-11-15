@@ -519,7 +519,7 @@ int shrewd_basic_json_encode_value(const void *object,
                                    const shrewd_basic_json_options_t *options,
                                    shrewd_basic_json_error_t *error)
 {
-    static const shrewd_basic_json_options_t plain = {0, 0, 0, 0, 0, 0, 0, 0};
+    static const shrewd_basic_json_options_t plain = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     json_map_ctx_t ctx;
     int status = 0;
     if ((NULL == object) || (NULL == type) || (NULL == out)) {
