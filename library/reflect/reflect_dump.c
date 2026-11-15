@@ -166,13 +166,6 @@ static void dump_scalar(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
     case SHREWD_BASIC_REFLECT_KIND_UINT64:
         dump_append(ctx, "%llu", (unsigned long long)reflect_load_u64(bytes, nbytes));
         break;
-    case SHREWD_BASIC_REFLECT_KIND_FLOAT:
-    case SHREWD_BASIC_REFLECT_KIND_DOUBLE:
-        dump_append(ctx, "%g", reflect_load_f64(bytes, nbytes));
-        break;
-    case SHREWD_BASIC_REFLECT_KIND_STRING:
-        dump_string(ctx, reflect_load_str(bytes), str_max);
-        break;
     case SHREWD_BASIC_REFLECT_KIND_ENUM: {
         /* Render by constant name (inline lookup: no log noise while
            printing); unknown values show their number. */
@@ -191,6 +184,13 @@ static void dump_scalar(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
         }
         break;
     }
+    case SHREWD_BASIC_REFLECT_KIND_FLOAT:
+    case SHREWD_BASIC_REFLECT_KIND_DOUBLE:
+        dump_append(ctx, "%g", reflect_load_f64(bytes, nbytes));
+        break;
+    case SHREWD_BASIC_REFLECT_KIND_STRING:
+        dump_string(ctx, reflect_load_str(bytes), str_max);
+        break;
     default:
         dump_append(ctx, "<kind %d>", (int)type->sb_refl_kind);
         break;

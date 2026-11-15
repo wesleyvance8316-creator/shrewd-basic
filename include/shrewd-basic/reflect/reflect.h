@@ -95,12 +95,12 @@ typedef enum shrewd_basic_reflect_kind {
     SHREWD_BASIC_REFLECT_KIND_UINT32,
     SHREWD_BASIC_REFLECT_KIND_INT64,
     SHREWD_BASIC_REFLECT_KIND_UINT64,
+    SHREWD_BASIC_REFLECT_KIND_ENUM,   /**< Enumerated value (int-compatible, name/value table). */
     SHREWD_BASIC_REFLECT_KIND_FLOAT,
     SHREWD_BASIC_REFLECT_KIND_DOUBLE,
     SHREWD_BASIC_REFLECT_KIND_STRING, /**< char * / const char * member. */
     SHREWD_BASIC_REFLECT_KIND_STRUCT, /**< Aggregate with field descriptors. */
-    SHREWD_BASIC_REFLECT_KIND_OPAQUE, /**< Unknown pointee (shrewd_basic_reflect_void). */
-    SHREWD_BASIC_REFLECT_KIND_ENUM    /**< Enumerated value (name/value table). */
+    SHREWD_BASIC_REFLECT_KIND_OPAQUE  /**< Unknown pointee (shrewd_basic_reflect_void). */
 } shrewd_basic_reflect_kind_t;
 
 typedef struct shrewd_basic_reflect_type shrewd_basic_reflect_type_t;

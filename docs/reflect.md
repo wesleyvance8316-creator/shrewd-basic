@@ -80,13 +80,13 @@ person (person_t) {
 
 ### 3.1 kind(`shrewd_basic_reflect_kind_t`)
 
-`BOOL, CHAR, INT8, UINT8, INT16, UINT16, INT32, UINT32, INT64, UINT64,
-FLOAT, DOUBLE, STRING, STRUCT, OPAQUE, ENUM`
+`BOOL, CHAR, INT8, UINT8, INT16, UINT16, INT32, UINT32, INT64, UINT64, ENUM,
+FLOAT, DOUBLE, STRING, STRUCT, OPAQUE`
 
+- `ENUM`:枚举值(int 兼容,顺序排在整数族之后、浮点之前),`ENUM_DEFINE` 注册名/值表,dump 按常量名渲染,`enum_find_name/enum_find_value` 双向查表;
 - `STRING`:`char *` / `const char *` 成员,指针即值;
 - `STRUCT`:有字段表的聚合;
 - `OPAQUE`:不可描述的目标(`shrewd_basic_reflect_void` 或应用自定义),只能打地址/走 ops;
-- `ENUM`:枚举值,`ENUM_DEFINE` 注册名/值表,dump 按常量名渲染,`enum_find_name/enum_find_value` 双向查表;
 - 枚举可扩展(POINTER 等留待未来),所有 switch 都有 `default` 兜底为 `unknown`。
 
 `shrewd_basic_reflect_kind_name()` 返回小写名(`"int32"`、`"struct"` …)。

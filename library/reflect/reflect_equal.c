@@ -54,7 +54,6 @@ static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
     case SHREWD_BASIC_REFLECT_KIND_INT16:
     case SHREWD_BASIC_REFLECT_KIND_INT32:
     case SHREWD_BASIC_REFLECT_KIND_INT64:
-    case SHREWD_BASIC_REFLECT_KIND_ENUM:
         *out_equal = (reflect_load_i64(a, nbytes) == reflect_load_i64(b, nbytes));
         return SHREWD_BASIC_ERR_OK;
     case SHREWD_BASIC_REFLECT_KIND_UINT8:
@@ -62,6 +61,9 @@ static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
     case SHREWD_BASIC_REFLECT_KIND_UINT32:
     case SHREWD_BASIC_REFLECT_KIND_UINT64:
         *out_equal = (reflect_load_u64(a, nbytes) == reflect_load_u64(b, nbytes));
+        return SHREWD_BASIC_ERR_OK;
+    case SHREWD_BASIC_REFLECT_KIND_ENUM:
+        *out_equal = (reflect_load_i64(a, nbytes) == reflect_load_i64(b, nbytes));
         return SHREWD_BASIC_ERR_OK;
     case SHREWD_BASIC_REFLECT_KIND_FLOAT:
     case SHREWD_BASIC_REFLECT_KIND_DOUBLE:

@@ -87,6 +87,8 @@ const char *shrewd_basic_reflect_kind_name(shrewd_basic_reflect_kind_t kind)
         return "int64";
     case SHREWD_BASIC_REFLECT_KIND_UINT64:
         return "uint64";
+    case SHREWD_BASIC_REFLECT_KIND_ENUM:
+        return "enum";
     case SHREWD_BASIC_REFLECT_KIND_FLOAT:
         return "float";
     case SHREWD_BASIC_REFLECT_KIND_DOUBLE:
@@ -97,8 +99,6 @@ const char *shrewd_basic_reflect_kind_name(shrewd_basic_reflect_kind_t kind)
         return "struct";
     case SHREWD_BASIC_REFLECT_KIND_OPAQUE:
         return "opaque";
-    case SHREWD_BASIC_REFLECT_KIND_ENUM:
-        return "enum";
     default:
         return "unknown";
     }
