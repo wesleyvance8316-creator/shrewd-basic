@@ -145,14 +145,47 @@ decode 通过 `platform_alloc` 分配字符串、指针目标与动态表;
 `shrewd_basic_json_free()` 精确释放 decode 的全部分配(含普通字符串)。
 **根存储归调用方**(decode 不分配它)——栈上对象与堆上图同一套 free。
 
-## 6. 所有权(值模型层)
+## 6. 策略注册(第 2 层)
+
+Go 结构体标签的 C 等价物——**只管文本外观,结构仍以 reflect 描述符为唯一来源**:
+
+```c
+SHREWD_BASIC_JSON_DEFINE(cfg_json, cfg_reflect,
+    SHREWD_BASIC_JSON_KEY(name, "name_id", "nameID", "NameID"),  /* 规键 + 别名 */
+    SHREWD_BASIC_JSON_REQUIRED(name),                            /* decode 必填 */
+    SHREWD_BASIC_JSON_HIDDEN(secret),                            /* 双向隐藏 */
+    SHREWD_BASIC_JSON_OMIT_EMPTY(score),                         /* encode 省略零值 */
+    SHREWD_BASIC_JSON_RANGE(age, 0, 150),                        /* 数值范围 */
+    SHREWD_BASIC_JSON_OPS(score, g_score_ops),                   /* 自定义编解码/校验 */
+    SHREWD_BASIC_JSON_UNION_STYLE(body, SHREWD_BASIC_JSON_UNION_FLAT));
+```
+
+encode/decode 的 `info` 参数携带策略(NULL = 纯元数据,行为不变)。
+
+| 策略 | 语义 |
+|---|---|
+| `KEY(field, 规键, 别名...)` | encode 永远输出**规键**(第 1 个);decode 接受任意别名,**成员名本身始终可接受** |
+| `REQUIRED` | decode 时键必须出现(别名任一命中即可),缺失 → `KEY_NOTFOUND` 带路径 |
+| `HIDDEN` | 双向跳过 |
+| `OMIT_EMPTY` | encode 省略零值(false/0/""/NULL/空容器,按 **C 值**判断,不受 ops 变换影响) |
+| `RANGE(lo, hi)` | encode/decode 双向校验数值范围 |
+| `OPS(field, json_ops)` | `encode/decode/check` 三钩子替换该字段的映射(值语义按目标,指针字段取指目标;NULL 指针直接映射 null) |
+| `UNION_STYLE(field, s)` | `NESTED`(F1,默认)/ `FLAT`(F4,变体字段平铺到父对象,body 键消失)/ `UNWRAP`(F2,单字段变体直出其值) |
+
+- 同一字段的多行策略**按方面合并**(后行覆盖同行方面);
+- 别名冲突:**后者覆盖**(默认);`opt->strict` 下报错,且未知键也报错;
+- `shrewd_basic_json_keys(type, info, cb, ctx)` 按字段序导出合并视图(键清单/别名/
+  标志/范围)——JSON Schema、文档、前端类型的生成都从这里走;
+- 策略表是 const 数据(DEFINE/DECLARE 纪律,同 reflect 描述符)。
+
+## 7. 所有权(值模型层)
 
 - 解析/创建的值树归调用方,`shrewd_basic_json_value_free()` 释放整树;
 - `set`/`append` **接管** item;被替换/删除的子树由库释放;
 - `serialize` 分配的文本用 `shrewd_basic_json_text_free()` 释放(经
   `platform_alloc` 族分配)。
 
-## 7. 错误与日志
+## 8. 错误与日志
 
 错误码(`shrewd-basic/platform/error.h`):
 
@@ -165,12 +198,14 @@ decode 通过 `platform_alloc` 分配字符串、指针目标与动态表;
 
 日志走共享 `"json"` 模块:WARN 参数错、TRACE 解析/序列化进度。
 
-## 8. 工程配套
+## 9. 工程配套
 
 - 测试 `shrewd-basic-json-tests`:文法严格性与宽松开关、数字保真、转义/代理对、
   DOM 访问与修改、紧凑/pretty 输出、文本级往返;
 - 测试 `shrewd-basic-json-map-tests`:全形态 encode/decode 往返(含 F1 union、
   位组、多维行、FAM、动态数组、指针图)、decode 规则、错误路径与 json_free;
-- demo `programs/json_demo.c`:encode(紧凑/pretty)、decode、DOM 查询修改;
+- 测试 `shrewd-basic-json-policy-tests`:键别名/必填/隐藏/省略/范围/自定义钩子/
+  union 形态覆盖/键清单导出/严格模式;
+- demo `programs/json_demo.c`:encode(紧凑/pretty)、decode、DOM 查询修改、策略;
 - 构建随库源码自动 glob,子项目集成零污染;验证纪律同全库
   (GCC/Clang 严格告警、valgrind、ASan/UBSan)。

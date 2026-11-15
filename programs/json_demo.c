@@ -64,6 +64,12 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(msg_reflect, msg_t,
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(msg_t, name),
     SHREWD_BASIC_REFLECT_FIELD_UNION(msg_t, body, msg_body_reflect, kind));
 
+/* Policy: a key alias for id and a compact unwrapped union body. */
+SHREWD_BASIC_JSON_DEFINE(msg_json, msg_reflect,
+    SHREWD_BASIC_JSON_KEY(id, "msg_id"),
+    SHREWD_BASIC_JSON_OMIT_EMPTY(name),
+    SHREWD_BASIC_JSON_UNION_STYLE(body, SHREWD_BASIC_JSON_UNION_UNWRAP));
+
 static void print_status(const char *what, int status)
 {
     printf("  %-36s -> %s (%d)\n", what, shrewd_basic_error_name(status),
@@ -82,7 +88,7 @@ int main(void)
     msg.body.point.x = 1;
     msg.body.point.y = 2;
     char *text = NULL;
-    print_status("encode(msg)", shrewd_basic_json_encode(&msg, &msg_reflect,
+    print_status("encode(msg)", shrewd_basic_json_encode(&msg, &msg_reflect, NULL,
                                                          &text, NULL, NULL));
     printf("  compact: %s\n", text);
     shrewd_basic_json_text_free(text);
@@ -91,7 +97,7 @@ int main(void)
         memset(&options, 0, sizeof(options));
         options.pretty = 1;
         print_status("encode(msg, pretty)",
-                     shrewd_basic_json_encode(&msg, &msg_reflect, &text,
+                     shrewd_basic_json_encode(&msg, &msg_reflect, NULL, &text,
                                               &options, NULL));
         printf("%s\n", text);
         shrewd_basic_json_text_free(text);
@@ -107,7 +113,7 @@ int main(void)
         (void)shrewd_basic_platform_calloc(&block, 1, sizeof(msg_t));
         print_status("decode(text)",
                      shrewd_basic_json_decode(incoming, strlen(incoming), block,
-                                              &msg_reflect, NULL, &error));
+                                              &msg_reflect, NULL, NULL, &error));
         msg_t *decoded = block;
         printf("  kind=%d id=%d tag=\"%s\" name=\"%s\" body.text=\"%s\"\n",
                (int)decoded->kind, decoded->id, decoded->tag, decoded->name,
@@ -146,6 +152,39 @@ int main(void)
         printf("  -> %s\n", text);
         shrewd_basic_json_text_free(text);
         shrewd_basic_json_value_free(root);
+    }
+
+    printf("\n=== 4. policy: key aliases, omission, union styles ===\n");
+    {
+        char *policed = NULL;
+        msg_t tagged;
+        memset(&tagged, 0, sizeof(tagged));
+        tagged.kind = MSG_TEXT;
+        tagged.id = 9;
+        tagged.name = NULL; /* OMIT_EMPTY */
+        memcpy(tagged.tag, "ok", 3);
+        tagged.body.text = "hi";
+        print_status("encode(msg, policy)",
+                     shrewd_basic_json_encode(&tagged, &msg_reflect, &msg_json,
+                                              &policed, NULL, NULL));
+        printf("  -> %s\n", policed);
+        shrewd_basic_json_text_free(policed);
+        {
+            const char *aliased =
+                    "{\"msg_id\":5,\"kind\":\"MSG_TEXT\",\"body\":\"hello\"}";
+            void *block = NULL;
+            (void)shrewd_basic_platform_calloc(&block, 1, sizeof(msg_t));
+            print_status("decode(aliased)",
+                         shrewd_basic_json_decode(aliased, strlen(aliased), block,
+                                                  &msg_reflect, &msg_json, NULL,
+                                                  NULL));
+            msg_t *decoded = block;
+            printf("  msg_id -> id=%d body.text=\"%s\"\n", decoded->id,
+                   decoded->body.text);
+            print_status("json_free",
+                         shrewd_basic_json_free(decoded, &msg_reflect));
+            (void)shrewd_basic_platform_free(&block);
+        }
     }
 
     printf("\nDemo done. See docs/json.md for the full reference.\n");

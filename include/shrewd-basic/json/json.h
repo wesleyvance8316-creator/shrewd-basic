@@ -54,6 +54,9 @@ typedef enum shrewd_basic_json_kind {
 /** One node of a JSON value tree (opaque). */
 typedef struct shrewd_basic_json_value shrewd_basic_json_value_t;
 
+/** Per-type JSON policy (defined by SHREWD_BASIC_JSON_DEFINE; optional). */
+typedef struct shrewd_basic_json_info shrewd_basic_json_info_t;
+
 /** Default nesting limit for parse/serialize. */
 #define SHREWD_BASIC_JSON_DEPTH_DEFAULT 32
 
@@ -70,6 +73,7 @@ typedef struct shrewd_basic_json_options {
     int allow_trailing_commas;/**< parse: accept [1,] and {"a":1,}. */
     int allow_nan;            /**< encode: NaN/inf become null (default: error). */
     int allow_unknown_union;  /**< encode: unknown union tag -> null body. */
+    int strict;               /**< decode: unknown keys and alias conflicts error. */
 } shrewd_basic_json_options_t;
 
 /**
@@ -227,6 +231,7 @@ void shrewd_basic_json_text_free(char *text);
  */
 int shrewd_basic_json_encode_value(const void *object,
                                    const shrewd_basic_reflect_type_t *type,
+                                   const shrewd_basic_json_info_t *info,
                                    shrewd_basic_json_value_t **out,
                                    const shrewd_basic_json_options_t *options,
                                    shrewd_basic_json_error_t *error);
@@ -234,6 +239,7 @@ int shrewd_basic_json_encode_value(const void *object,
 /** Encode a described object straight to JSON text. */
 int shrewd_basic_json_encode(const void *object,
                              const shrewd_basic_reflect_type_t *type,
+                             const shrewd_basic_json_info_t *info,
                              char **out_text,
                              const shrewd_basic_json_options_t *options,
                              shrewd_basic_json_error_t *error);
@@ -253,12 +259,14 @@ int shrewd_basic_json_encode(const void *object,
 int shrewd_basic_json_decode_value(const shrewd_basic_json_value_t *value,
                                    void *object,
                                    const shrewd_basic_reflect_type_t *type,
+                                   const shrewd_basic_json_info_t *info,
                                    const shrewd_basic_json_options_t *options,
                                    shrewd_basic_json_error_t *error);
 
 /** Parse text and decode it into @p object (zeroed first). */
 int shrewd_basic_json_decode(const char *text, size_t length, void *object,
                              const shrewd_basic_reflect_type_t *type,
+                             const shrewd_basic_json_info_t *info,
                              const shrewd_basic_json_options_t *options,
                              shrewd_basic_json_error_t *error);
 
@@ -268,6 +276,169 @@ int shrewd_basic_json_decode(const char *text, size_t length, void *object,
  * @p object itself belongs to the caller and is not freed.
  */
 int shrewd_basic_json_free(void *object, const shrewd_basic_reflect_type_t *type);
+
+/* --- policy layer (optional, per-type) ------------------------------- */
+
+/*
+ * Go-struct-tag style configuration for the mapping layer, authored
+ * with the macros below and passed to encode/decode as @c info (NULL
+ * means "plain reflect metadata"). Policy rows are keyed by member
+ * name and merge per aspect (the later row wins); the structural truth
+ * always stays in the reflect descriptor - policy only shapes text.
+ */
+
+/** Union body styles for SHREWD_BASIC_JSON_UNION_STYLE(). */
+#define SHREWD_BASIC_JSON_UNION_NESTED 0 /**< F1: body = {"variant": {...}}. */
+#define SHREWD_BASIC_JSON_UNION_FLAT 1   /**< F4: variant fields at the parent. */
+#define SHREWD_BASIC_JSON_UNION_UNWRAP 2 /**< F2: single-field variant unwraps. */
+
+/** Field policy flags (combined across rows). */
+#define SHREWD_BASIC_JSON_F_OMIT_EMPTY ((uint32_t)1u) /**< encode: skip zero values. */
+#define SHREWD_BASIC_JSON_F_REQUIRED ((uint32_t)2u)   /**< decode: missing key errors. */
+#define SHREWD_BASIC_JSON_F_HIDDEN ((uint32_t)4u)     /**< never encoded or decoded. */
+#define SHREWD_BASIC_JSON_F_RANGE ((uint32_t)8u)      /**< value must sit in [min, max]. */
+
+/**
+ * Application callbacks for one field (JSON-flavored counterpart of the
+ * reflect ops). encode/decode replace the metadata-driven mapping of
+ * that field's value; check runs after decode (and before encode).
+ */
+typedef struct shrewd_basic_json_ops {
+    int (*encode)(const void *value, shrewd_basic_json_value_t **out);
+    int (*decode)(const shrewd_basic_json_value_t *value, void *target);
+    int (*check)(const void *value);
+} shrewd_basic_json_ops_t;
+
+/** One merged policy view of a field (also the json_keys() callback unit). */
+typedef struct shrewd_basic_json_key_info {
+    const char *field;          /**< Member name. */
+    const char *const *keys;    /**< Accepted keys, canonical first. */
+    size_t key_count;           /**< Length of @c keys (>= 1). */
+    uint32_t flags;             /**< SHREWD_BASIC_JSON_F_*. */
+    double min;                 /**< RANGE bounds (with F_RANGE). */
+    double max;
+    const shrewd_basic_json_ops_t *ops; /**< Custom hooks, or NULL. */
+    int union_style;            /**< SHREWD_BASIC_JSON_UNION_*. */
+} shrewd_basic_json_key_info_t;
+
+/** Per-field policy row (produced by the macros below). */
+typedef struct shrewd_basic_json_field_policy {
+    const char *field;
+    const char *const *keys;
+    size_t key_count;
+    uint32_t flags;
+    double min;
+    double max;
+    const shrewd_basic_json_ops_t *ops;
+    int union_style;
+    int has_union_style;
+} shrewd_basic_json_field_policy_t;
+
+/** Per-type policy: what SHREWD_BASIC_JSON_DEFINE() produces. */
+struct shrewd_basic_json_info {
+    const shrewd_basic_reflect_type_t *type;
+    const shrewd_basic_json_field_policy_t *fields;
+    size_t field_count;
+};
+
+/*
+ * Register a type's JSON policy: `var` embeds `type_ref` and the rows
+ * configure keys/flags/ranges/hooks per member. Define once per module,
+ * import with SHREWD_BASIC_REFLECT_TYPE_DECLARE-style extern (the
+ * object is extern like the reflect descriptors).
+ */
+#define SHREWD_BASIC_JSON_DEFINE(var, type_ref, ...)                           \
+    extern const shrewd_basic_json_info_t var;                                 \
+    static const shrewd_basic_json_field_policy_t var##_policies[] = {         \
+        __VA_ARGS__                                                            \
+    };                                                                         \
+    const shrewd_basic_json_info_t var = {                                     \
+        .type = &(type_ref),                                                   \
+        .fields = var##_policies,                                              \
+        .field_count = sizeof(var##_policies)                                  \
+                / sizeof(var##_policies[0])                                    \
+    }
+
+/** Import a policy defined by SHREWD_BASIC_JSON_DEFINE() elsewhere. */
+#define SHREWD_BASIC_JSON_DECLARE(var)                                         \
+    extern const shrewd_basic_json_info_t var
+
+/*
+ * Key aliases: the first name is the canonical key (encode emits it),
+ * the rest are accepted on decode. Later KEY rows for the same member
+ * replace earlier ones.
+ */
+#define SHREWD_BASIC_JSON_KEY(member, ...)                                      \
+    {                                                                          \
+        .field = #member,                                                       \
+        .keys = (const char *const[]){ __VA_ARGS__, NULL },                    \
+        .key_count = (sizeof((const char *const[]){ __VA_ARGS__, NULL })       \
+                      / sizeof(const char *)) - 1,                             \
+        .flags = 0, .min = 0.0, .max = 0.0,                                    \
+        .ops = NULL, .union_style = 0, .has_union_style = 0                    \
+    }
+
+/** Skip a zero-valued field on encode (false/0/""/NULL/empty containers). */
+#define SHREWD_BASIC_JSON_OMIT_EMPTY(member)                                    \
+    {                                                                          \
+        .field = #member, .keys = NULL, .key_count = 0,                         \
+        .flags = SHREWD_BASIC_JSON_F_OMIT_EMPTY, .min = 0.0, .max = 0.0,       \
+        .ops = NULL, .union_style = 0, .has_union_style = 0                    \
+    }
+
+/** The key must be present on decode. */
+#define SHREWD_BASIC_JSON_REQUIRED(member)                                      \
+    {                                                                          \
+        .field = #member, .keys = NULL, .key_count = 0,                         \
+        .flags = SHREWD_BASIC_JSON_F_REQUIRED, .min = 0.0, .max = 0.0,         \
+        .ops = NULL, .union_style = 0, .has_union_style = 0                    \
+    }
+
+/** The field never appears in JSON (neither direction). */
+#define SHREWD_BASIC_JSON_HIDDEN(member)                                        \
+    {                                                                          \
+        .field = #member, .keys = NULL, .key_count = 0,                         \
+        .flags = SHREWD_BASIC_JSON_F_HIDDEN, .min = 0.0, .max = 0.0,           \
+        .ops = NULL, .union_style = 0, .has_union_style = 0                    \
+    }
+
+/** Numeric bounds checked on encode and decode. */
+#define SHREWD_BASIC_JSON_RANGE(member, lo, hi)                                 \
+    {                                                                          \
+        .field = #member, .keys = NULL, .key_count = 0,                         \
+        .flags = SHREWD_BASIC_JSON_F_RANGE, .min = (double)(lo),               \
+        .max = (double)(hi),                                                   \
+        .ops = NULL, .union_style = 0, .has_union_style = 0                    \
+    }
+
+/** Custom encode/decode/check hooks for one field. */
+#define SHREWD_BASIC_JSON_OPS(member, ops_ref)                                  \
+    {                                                                          \
+        .field = #member, .keys = NULL, .key_count = 0, .flags = 0,             \
+        .min = 0.0, .max = 0.0, .ops = &(ops_ref),                             \
+        .union_style = 0, .has_union_style = 0                                 \
+    }
+
+/** Pick the union body style for one union field. */
+#define SHREWD_BASIC_JSON_UNION_STYLE(member, style)                            \
+    {                                                                          \
+        .field = #member, .keys = NULL, .key_count = 0, .flags = 0,             \
+        .min = 0.0, .max = 0.0, .ops = NULL,                                   \
+        .union_style = (int)(style), .has_union_style = 1                      \
+    }
+
+/** Callback of shrewd_basic_json_keys(); return non-zero to stop early. */
+typedef int (*shrewd_basic_json_keys_fn)(void *ctx,
+                                         const shrewd_basic_json_key_info_t *key);
+
+/**
+ * Enumerate the JSON keys of a type in descriptor order (the schema
+ * export): each callback receives one field's merged policy view -
+ * key aliases, flags, range and hooks. @p info may be NULL.
+ */
+int shrewd_basic_json_keys(const shrewd_basic_reflect_type_t *type,
+                           const shrewd_basic_json_info_t *info,
+                           shrewd_basic_json_keys_fn fn, void *ctx);
 
 #ifdef __cplusplus
 }

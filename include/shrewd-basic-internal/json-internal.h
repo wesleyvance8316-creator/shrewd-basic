@@ -57,6 +57,14 @@ int json_value_new_number(const char *raw, size_t n,
 int json_object_add(shrewd_basic_json_value_t *object, const char *key,
                     shrewd_basic_json_value_t *item);
 
+/*
+ * Merged policy view of one field: the identity view (member name as
+ * the only key, no flags) when @p info is NULL or has no rows for it.
+ */
+void json_policy_view(const shrewd_basic_json_info_t *info,
+                      const shrewd_basic_reflect_field_t *field,
+                      shrewd_basic_json_key_info_t *out);
+
 static inline int json_opt_depth(const shrewd_basic_json_options_t *options)
 {
     return ((NULL != options) && (0 < options->max_depth))

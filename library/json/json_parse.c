@@ -480,7 +480,7 @@ int shrewd_basic_json_parse(const char *text, size_t length,
                             const shrewd_basic_json_options_t *options,
                             shrewd_basic_json_error_t *error)
 {
-    static const shrewd_basic_json_options_t strict = {0, 0, 0, 0, 0, 0, 0};
+    static const shrewd_basic_json_options_t strict = {0, 0, 0, 0, 0, 0, 0, 0};
     json_parser_t parser;
     int status = 0;
     if ((NULL == text) || (NULL == out)) {
