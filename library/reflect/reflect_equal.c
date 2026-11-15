@@ -91,6 +91,11 @@ static void diff_path_index(diff_path_t *diff, size_t index)
     diff_path_append(diff, text);
 }
 
+static int reflect_equal_fields(const shrewd_basic_reflect_field_t *fields, size_t count,
+                                const unsigned char *a, const unsigned char *b,
+                                equal_pair_t *path, size_t depth,
+                                diff_path_t *diff, bool *out_equal);
+
 static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
                                const unsigned char *a, const unsigned char *b,
                                size_t nbytes,
@@ -173,8 +178,18 @@ static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
         *out_equal = (0 == memcmp(a, b, nbytes));
         return SHREWD_BASIC_ERR_OK;
     }
-    for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
-        const shrewd_basic_reflect_field_t *field = &type->sb_refl_fields[i];
+    return reflect_equal_fields(type->sb_refl_fields, type->sb_refl_field_count,
+                                a, b, path, depth, diff, out_equal);
+}
+
+/* Compare one field list - a struct's fields or an active union variant's. */
+static int reflect_equal_fields(const shrewd_basic_reflect_field_t *fields, size_t count,
+                                const unsigned char *a, const unsigned char *b,
+                                equal_pair_t *path, size_t depth,
+                                diff_path_t *diff, bool *out_equal)
+{
+    for (size_t i = 0; i < count; ++i) {
+        const shrewd_basic_reflect_field_t *field = &fields[i];
         const shrewd_basic_reflect_ops_t *field_ops = reflect_field_ops(field);
         reflect_array_view_t view_a = reflect_array_view(a, field);
         reflect_array_view_t view_b = reflect_array_view(b, field);
@@ -183,6 +198,42 @@ static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
                               & (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY
                                  | SHREWD_BASIC_REFLECT_FIELD_F_DARRAY)));
         diff_path_member(diff, field->sb_refl_name);
+        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_UNION)) {
+            /*
+             * Tagged union: the tags must match and only the active
+             * variant compares. An unknown tag has no semantics to walk,
+             * so its raw bytes stand in.
+             */
+            const unsigned char *ua = a + field->sb_refl_offset;
+            const unsigned char *ub = b + field->sb_refl_offset;
+            int64_t tag_a = reflect_load_i64(a + field->sb_refl_limit_offset,
+                                             field->sb_refl_limit_size);
+            int64_t tag_b = reflect_load_i64(b + field->sb_refl_limit_offset,
+                                             field->sb_refl_limit_size);
+            const shrewd_basic_reflect_variant_t *variant = NULL;
+            if (tag_a != tag_b) {
+                *out_equal = false;
+                return SHREWD_BASIC_ERR_OK;
+            }
+            variant = reflect_union_variant(field, ua);
+            if (NULL == variant) {
+                if (0 != memcmp(ua, ub, field->sb_refl_stride)) {
+                    *out_equal = false;
+                    return SHREWD_BASIC_ERR_OK;
+                }
+            } else {
+                bool same = true;
+                int status = reflect_equal_fields(
+                        variant->sb_refl_fields, variant->sb_refl_field_count,
+                        ua, ub, path, depth + 1, diff, &same);
+                if ((SHREWD_BASIC_ERR_OK != status) || !same) {
+                    *out_equal = false;
+                    return status;
+                }
+            }
+            diff_path_restore(diff, mark);
+            continue;
+        }
         if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
             /* Text buffers compare by content up to the first NUL. */
             const char *text_a = (const char *)(a + field->sb_refl_offset);
@@ -281,6 +332,8 @@ int shrewd_basic_reflect_equal(const void *a, const void *b,
     }
     equal_pair_t path[EQUAL_MAX_DEPTH];
     bool same = true;
+    /* Zeroed pairs: walks may skip levels (union variants). */
+    memset(path, 0, sizeof(path));
     int status = reflect_equal_value(type, (const unsigned char *)a,
                                      (const unsigned char *)b, type->sb_refl_size,
                                      type->sb_refl_ops, path, 0, NULL, &same);
@@ -314,6 +367,8 @@ int shrewd_basic_reflect_diff(const void *a, const void *b,
     }
     equal_pair_t path[EQUAL_MAX_DEPTH];
     bool same = true;
+    /* Zeroed pairs: walks may skip levels (union variants). */
+    memset(path, 0, sizeof(path));
     int status = reflect_equal_value(type, (const unsigned char *)a,
                                      (const unsigned char *)b, type->sb_refl_size,
                                      type->sb_refl_ops, path, 0, trace, &same);

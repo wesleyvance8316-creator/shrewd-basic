@@ -297,6 +297,24 @@ static int reflect_lookup_query(const shrewd_basic_reflect_type_t *type,
 }
 
 /*
+ * Linear find over a bare field list (a union variant's fields, which
+ * have no type-level index).
+ */
+static const shrewd_basic_reflect_field_t *reflect_fields_find(
+        const shrewd_basic_reflect_field_t *fields, size_t count,
+        const char *name, size_t name_len)
+{
+    for (size_t i = 0; i < count; ++i) {
+        const char *candidate = fields[i].sb_refl_name;
+        if ((strlen(candidate) == name_len)
+                && (0 == memcmp(candidate, name, name_len))) {
+            return &fields[i];
+        }
+    }
+    return NULL;
+}
+
+/*
  * Find a field by name (not necessarily NUL-terminated at @p name_len),
  * through the sorted index when available and a linear scan otherwise -
  * building the index either way so the next lookup is cheap.
@@ -431,6 +449,8 @@ static int reflect_path_walk(const unsigned char *object,
     const unsigned char *base = object;
     size_t offset = 0;
     const shrewd_basic_reflect_type_t *cur = type;
+    const shrewd_basic_reflect_field_t *fields = type->sb_refl_fields;
+    size_t field_count = type->sb_refl_field_count;
     const shrewd_basic_reflect_field_t *field = NULL;
     size_t size = 0;
     const char *p = path;
@@ -445,10 +465,14 @@ static int reflect_path_walk(const unsigned char *object,
             ++p;
         }
         size_t name_len = (size_t)(p - name);
-        if (SHREWD_BASIC_REFLECT_KIND_STRUCT != cur->sb_refl_kind) {
-            return SHREWD_BASIC_ERR_KEY_NOTFOUND;
+        if (SHREWD_BASIC_REFLECT_KIND_STRUCT == cur->sb_refl_kind) {
+            field = reflect_field_find(cur, name, name_len);
+        } else if (SHREWD_BASIC_REFLECT_KIND_UNION == cur->sb_refl_kind) {
+            /* Inside a union: the active variant's field list. */
+            field = reflect_fields_find(fields, field_count, name, name_len);
+        } else {
+            field = NULL;
         }
-        field = reflect_field_find(cur, name, name_len);
         if (NULL == field) {
             return SHREWD_BASIC_ERR_KEY_NOTFOUND;
         }
@@ -548,6 +572,22 @@ static int reflect_path_walk(const unsigned char *object,
                     && (0 == indexed)) {
                 return SHREWD_BASIC_ERR_ARG_INVALID;
             }
+            if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_UNION)) {
+                /* Union: the active variant is a run-time choice (the
+                   tag is data), so resolve's static walk refuses it. */
+                const shrewd_basic_reflect_variant_t *variant = NULL;
+                if (0 == follow) {
+                    return SHREWD_BASIC_ERR_ARG_INVALID;
+                }
+                variant = reflect_union_variant(field, base + offset);
+                if (NULL == variant) {
+                    return SHREWD_BASIC_ERR_KEY_NOTFOUND;
+                }
+                fields = variant->sb_refl_fields;
+                field_count = variant->sb_refl_field_count;
+                cur = field->sb_refl_type;
+                continue;
+            }
             if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
                 if (0 == follow) {
                     return SHREWD_BASIC_ERR_ARG_INVALID;
@@ -561,6 +601,10 @@ static int reflect_path_walk(const unsigned char *object,
                 offset = 0;
             }
             cur = row;
+            fields = (SHREWD_BASIC_REFLECT_KIND_STRUCT == row->sb_refl_kind)
+                    ? row->sb_refl_fields : NULL;
+            field_count = (SHREWD_BASIC_REFLECT_KIND_STRUCT == row->sb_refl_kind)
+                    ? row->sb_refl_field_count : 0;
             continue;
         }
         if ('\0' != *p) {
@@ -911,34 +955,32 @@ static void reflect_map_release(shrewd_basic_rbtree_t *map, int free_dst)
 
 static int reflect_check_node(const shrewd_basic_reflect_type_t *type, const void *value,
                               const shrewd_basic_reflect_ops_t *ops,
-                              shrewd_basic_rbtree_t *visited, size_t depth)
+                              shrewd_basic_rbtree_t *visited, size_t depth);
+
+/* Check one field list - a struct's fields or an active union variant's. */
+static int reflect_check_fields(const shrewd_basic_reflect_field_t *fields, size_t count,
+                                const unsigned char *base,
+                                shrewd_basic_rbtree_t *visited, size_t depth)
 {
-    if (REFLECT_MAX_DEPTH <= depth) {
-        return SHREWD_BASIC_ERR_OK;
-    }
-    if ((NULL != ops) && (NULL != ops->check)) {
-        return ops->check(value);
-    }
-    if (SHREWD_BASIC_REFLECT_KIND_ARRAY == type->sb_refl_kind) {
-        for (size_t i = 0; i < type->sb_refl_elem_count; ++i) {
-            int status = reflect_check_node(
-                    type->sb_refl_elem,
-                    (const unsigned char *)value + (i * type->sb_refl_elem_stride),
-                    type->sb_refl_elem->sb_refl_ops, visited, depth + 1);
-            if (SHREWD_BASIC_ERR_OK != status) {
-                return status;
-            }
-        }
-        return SHREWD_BASIC_ERR_OK;
-    }
-    if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
-        return SHREWD_BASIC_ERR_OK;
-    }
-    const unsigned char *base = (const unsigned char *)value;
-    for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
-        const shrewd_basic_reflect_field_t *field = &type->sb_refl_fields[i];
+    for (size_t i = 0; i < count; ++i) {
+        const shrewd_basic_reflect_field_t *field = &fields[i];
         const shrewd_basic_reflect_ops_t *field_ops = reflect_field_ops(field);
         reflect_array_view_t view = reflect_array_view(base, field);
+        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_UNION)) {
+            /* Only the active variant takes part. */
+            const shrewd_basic_reflect_variant_t *variant =
+                    reflect_union_variant(field, base + field->sb_refl_offset);
+            if (NULL != variant) {
+                int status = reflect_check_fields(variant->sb_refl_fields,
+                                                  variant->sb_refl_field_count,
+                                                  base + field->sb_refl_offset,
+                                                  visited, depth + 1);
+                if (SHREWD_BASIC_ERR_OK != status) {
+                    return status;
+                }
+            }
+            continue;
+        }
         for (size_t j = 0; j < view.count; ++j) {
             const unsigned char *elem = view.base + (j * view.stride);
             const void *target = elem;
@@ -966,6 +1008,35 @@ static int reflect_check_node(const shrewd_basic_reflect_type_t *type, const voi
         }
     }
     return SHREWD_BASIC_ERR_OK;
+}
+
+static int reflect_check_node(const shrewd_basic_reflect_type_t *type, const void *value,
+                              const shrewd_basic_reflect_ops_t *ops,
+                              shrewd_basic_rbtree_t *visited, size_t depth)
+{
+    if (REFLECT_MAX_DEPTH <= depth) {
+        return SHREWD_BASIC_ERR_OK;
+    }
+    if ((NULL != ops) && (NULL != ops->check)) {
+        return ops->check(value);
+    }
+    if (SHREWD_BASIC_REFLECT_KIND_ARRAY == type->sb_refl_kind) {
+        for (size_t i = 0; i < type->sb_refl_elem_count; ++i) {
+            int status = reflect_check_node(
+                    type->sb_refl_elem,
+                    (const unsigned char *)value + (i * type->sb_refl_elem_stride),
+                    type->sb_refl_elem->sb_refl_ops, visited, depth + 1);
+            if (SHREWD_BASIC_ERR_OK != status) {
+                return status;
+            }
+        }
+        return SHREWD_BASIC_ERR_OK;
+    }
+    if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
+        return SHREWD_BASIC_ERR_OK;
+    }
+    return reflect_check_fields(type->sb_refl_fields, type->sb_refl_field_count,
+                                (const unsigned char *)value, visited, depth + 1);
 }
 
 int shrewd_basic_reflect_check(const void *object,
@@ -1087,40 +1158,36 @@ static int reflect_clone_target(const shrewd_basic_reflect_type_t *type, const v
     return SHREWD_BASIC_ERR_OK;
 }
 
-/* Copy a value's contents into existing dst storage (zero-initialized). */
-static int reflect_copy_value(const shrewd_basic_reflect_type_t *type,
-                              const unsigned char *src, unsigned char *dst,
-                              shrewd_basic_rbtree_t *map, size_t depth)
+/* Copy one field list - a struct's fields or an active union variant's. */
+static int reflect_copy_fields(const shrewd_basic_reflect_field_t *fields, size_t count,
+                               const unsigned char *src, unsigned char *dst,
+                               shrewd_basic_rbtree_t *map, size_t depth)
 {
-    if (SHREWD_BASIC_REFLECT_KIND_ARRAY == type->sb_refl_kind) {
-        /* A fixed array value (a row): element-wise like a field array. */
-        for (size_t i = 0; i < type->sb_refl_elem_count; ++i) {
-            const unsigned char *src_elem =
-                    src + (i * type->sb_refl_elem_stride);
-            unsigned char *dst_elem = dst + (i * type->sb_refl_elem_stride);
-            if ((SHREWD_BASIC_REFLECT_KIND_STRUCT == type->sb_refl_elem->sb_refl_kind)
-                    || (SHREWD_BASIC_REFLECT_KIND_ARRAY
-                        == type->sb_refl_elem->sb_refl_kind)) {
-                int status = reflect_copy_value(type->sb_refl_elem, src_elem,
-                                                dst_elem, map, depth + 1);
-                if (SHREWD_BASIC_ERR_OK != status) {
-                    return status;
-                }
-            } else {
-                memcpy(dst_elem, src_elem, type->sb_refl_elem_stride);
-            }
-        }
-        return SHREWD_BASIC_ERR_OK;
-    }
-    if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
-        memcpy(dst, src, type->sb_refl_size);
-        return SHREWD_BASIC_ERR_OK;
-    }
-    for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
-        const shrewd_basic_reflect_field_t *field = &type->sb_refl_fields[i];
+    for (size_t i = 0; i < count; ++i) {
+        const shrewd_basic_reflect_field_t *field = &fields[i];
         unsigned char *dst_at = dst + field->sb_refl_offset;
         reflect_array_view_t view = reflect_array_view(src, field);
         unsigned char *dst_base = dst_at;
+        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_UNION)) {
+            /*
+             * Union: copy the raw storage first (unowned bytes stay
+             * byte-identical), then clone the active variant's fields in
+             * place. Inactive slots may hold stale pointers that are
+             * never followed - destroy only walks the active variant.
+             */
+            const shrewd_basic_reflect_variant_t *variant =
+                    reflect_union_variant(field, src + field->sb_refl_offset);
+            memcpy(dst_at, src + field->sb_refl_offset, field->sb_refl_stride);
+            if (NULL != variant) {
+                int status = reflect_copy_fields(
+                        variant->sb_refl_fields, variant->sb_refl_field_count,
+                        src + field->sb_refl_offset, dst_at, map, depth + 1);
+                if (SHREWD_BASIC_ERR_OK != status) {
+                    return status;
+                }
+            }
+            continue;
+        }
         if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_DARRAY)) {
             /*
              * Dynamic array: the table itself is a heap block and joins
@@ -1159,8 +1226,8 @@ static int reflect_copy_value(const shrewd_basic_reflect_type_t *type,
             /* Keep the clone self-consistent even when the count member
                is not described as a field of its own. */
             if (0 != field->sb_refl_limit_size) {
-                uint64_t count = (uint64_t)view.count;
-                memcpy(dst + field->sb_refl_limit_offset, &count,
+                uint64_t bound = (uint64_t)view.count;
+                memcpy(dst + field->sb_refl_limit_offset, &bound,
                        field->sb_refl_limit_size);
             }
         }
@@ -1231,6 +1298,39 @@ static int reflect_copy_value(const shrewd_basic_reflect_type_t *type,
         }
     }
     return SHREWD_BASIC_ERR_OK;
+}
+
+/* Copy a value's contents into existing dst storage (zero-initialized). */
+static int reflect_copy_value(const shrewd_basic_reflect_type_t *type,
+                              const unsigned char *src, unsigned char *dst,
+                              shrewd_basic_rbtree_t *map, size_t depth)
+{
+    if (SHREWD_BASIC_REFLECT_KIND_ARRAY == type->sb_refl_kind) {
+        /* A fixed array value (a row): element-wise like a field array. */
+        for (size_t i = 0; i < type->sb_refl_elem_count; ++i) {
+            const unsigned char *src_elem =
+                    src + (i * type->sb_refl_elem_stride);
+            unsigned char *dst_elem = dst + (i * type->sb_refl_elem_stride);
+            if ((SHREWD_BASIC_REFLECT_KIND_STRUCT == type->sb_refl_elem->sb_refl_kind)
+                    || (SHREWD_BASIC_REFLECT_KIND_ARRAY
+                        == type->sb_refl_elem->sb_refl_kind)) {
+                int status = reflect_copy_value(type->sb_refl_elem, src_elem,
+                                                dst_elem, map, depth + 1);
+                if (SHREWD_BASIC_ERR_OK != status) {
+                    return status;
+                }
+            } else {
+                memcpy(dst_elem, src_elem, type->sb_refl_elem_stride);
+            }
+        }
+        return SHREWD_BASIC_ERR_OK;
+    }
+    if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
+        memcpy(dst, src, type->sb_refl_size);
+        return SHREWD_BASIC_ERR_OK;
+    }
+    return reflect_copy_fields(type->sb_refl_fields, type->sb_refl_field_count,
+                               src, dst, map, depth);
 }
 
 int shrewd_basic_reflect_copy(void **out, const void *object,
@@ -1335,37 +1435,31 @@ static int reflect_destroy_target(const shrewd_basic_reflect_type_t *type, void 
     return shrewd_basic_platform_free(&pointee);
 }
 
-/* Release the pointer targets of a value; the value storage is untouched. */
-static int reflect_destroy_value(const shrewd_basic_reflect_type_t *type, void *value,
-                                 shrewd_basic_rbtree_t *visited, size_t depth)
+/* Release one field list's targets - a struct's or a union variant's. */
+static int reflect_destroy_fields(const shrewd_basic_reflect_field_t *fields, size_t count,
+                                  void *value, shrewd_basic_rbtree_t *visited, size_t depth)
 {
-    if (SHREWD_BASIC_REFLECT_KIND_ARRAY == type->sb_refl_kind) {
-        for (size_t i = 0; i < type->sb_refl_elem_count; ++i) {
-            if ((SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_elem->sb_refl_kind)
-                    && (SHREWD_BASIC_REFLECT_KIND_ARRAY
-                        != type->sb_refl_elem->sb_refl_kind)) {
-                break;
-            }
-            int status = reflect_destroy_value(
-                    type->sb_refl_elem,
-                    (unsigned char *)value + (i * type->sb_refl_elem_stride),
-                    visited, depth + 1);
-            if (SHREWD_BASIC_ERR_OK != status) {
-                return status;
-            }
-        }
-        return SHREWD_BASIC_ERR_OK;
-    }
-    if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
-        return SHREWD_BASIC_ERR_OK;
-    }
     unsigned char *base = (unsigned char *)value;
-    for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
-        const shrewd_basic_reflect_field_t *field = &type->sb_refl_fields[i];
+    for (size_t i = 0; i < count; ++i) {
+        const shrewd_basic_reflect_field_t *field = &fields[i];
         unsigned char *at = base + field->sb_refl_offset;
         const shrewd_basic_reflect_ops_t *field_ops = reflect_field_ops(field);
         reflect_array_view_t view = reflect_array_view(value, field);
         unsigned char *table = NULL;
+        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_UNION)) {
+            /* Only the active variant's targets are ours to release. */
+            const shrewd_basic_reflect_variant_t *variant =
+                    reflect_union_variant(field, at);
+            if (NULL != variant) {
+                int status = reflect_destroy_fields(variant->sb_refl_fields,
+                                                    variant->sb_refl_field_count,
+                                                    at, visited, depth + 1);
+                if (SHREWD_BASIC_ERR_OK != status) {
+                    return status;
+                }
+            }
+            continue;
+        }
         if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_DARRAY)) {
             if (NULL == view.base) {
                 continue;
@@ -1432,6 +1526,34 @@ static int reflect_destroy_value(const shrewd_basic_reflect_type_t *type, void *
         }
     }
     return SHREWD_BASIC_ERR_OK;
+}
+
+/* Release the pointer targets of a value; the value storage is untouched. */
+static int reflect_destroy_value(const shrewd_basic_reflect_type_t *type, void *value,
+                                 shrewd_basic_rbtree_t *visited, size_t depth)
+{
+    if (SHREWD_BASIC_REFLECT_KIND_ARRAY == type->sb_refl_kind) {
+        for (size_t i = 0; i < type->sb_refl_elem_count; ++i) {
+            if ((SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_elem->sb_refl_kind)
+                    && (SHREWD_BASIC_REFLECT_KIND_ARRAY
+                        != type->sb_refl_elem->sb_refl_kind)) {
+                break;
+            }
+            int status = reflect_destroy_value(
+                    type->sb_refl_elem,
+                    (unsigned char *)value + (i * type->sb_refl_elem_stride),
+                    visited, depth + 1);
+            if (SHREWD_BASIC_ERR_OK != status) {
+                return status;
+            }
+        }
+        return SHREWD_BASIC_ERR_OK;
+    }
+    if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
+        return SHREWD_BASIC_ERR_OK;
+    }
+    return reflect_destroy_fields(type->sb_refl_fields, type->sb_refl_field_count,
+                                  value, visited, depth);
 }
 
 int shrewd_basic_reflect_destroy(void *object,

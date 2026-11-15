@@ -87,6 +87,9 @@ FLOAT, DOUBLE, STRING, STRUCT, ARRAY, OPAQUE`
 - `STRING`:`char *` / `const char *` 成员,指针即值;
 - `STRUCT`:有字段表的聚合;
 - `ARRAY`:定长数组值(多维数组的一行),`ARRAY_DEFINE` 注册元素/计数/步长,行可嵌套(3D+);
+- `UNION`:带标签联合,`UNION_DEFINE` + `UNION_VARIANT` 注册变体表,`FIELD_UNION` 联动
+  标签成员;遍历按标签选中**活动变体**(dump/equal/hash/copy/destroy/visit),标签无匹配
+  时按原始字节比较、copy 只拷存储、destroy 不触碰(**失效槽位的野指针永不释放**);
 - `OPAQUE`:不可描述的目标(`shrewd_basic_reflect_void` 或应用自定义),只能打地址/走 ops;
 - 枚举可扩展(POINTER 等留待未来),所有 switch 都有 `default` 兜底为 `unknown`。
 
@@ -151,6 +154,7 @@ shrewd_basic_reflect_void     /* 不透明目标(OPAQUE),size = 0 */
 | `FIELD_STRING_BUFFER(struct_type, member)` | `char[N]` 文本缓冲:按 C 字符串渲染/比较(dump 引号转义、equal/diff/hash 到 NUL 为止、visit 单 LEAF;get/set 仍是原始 N 字节) |
 | `FIELD_STRING_OWNED(struct_type, member)` | 图**拥有**的 `char *`:copy 克隆内容(共享串保持共享)、destroy 释放;NULL 保持 NULL;equal/hash/dump 不变 |
 | `FIELD_BITS(struct_type, unit, name, bit_offset, bit_width)` | 真实整数单元内的位组(寄存器位段/协议头):get/set 读改写单元(值零扩展到单元宽度),equal/diff/hash/dump 只看该组的位;**C 位域成员无法描述**(布局实现定义) |
+| `FIELD_UNION(struct_type, member, union_var, tag_member)` | 带标签联合成员:标签在运行时选变体,只有活动变体参与比较/拷贝/释放/渲染 |
 | `FIELD_*_OPS`(全部形态各有变体) | 同上 + 字段级 ops 覆盖 |
 
 `ref`/`ops_ref` 参数**不带 `&`**(宏内部补 `&` 以保持地址常量)。
@@ -161,6 +165,8 @@ shrewd_basic_reflect_void     /* 不透明目标(OPAQUE),size = 0 */
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(var, struct_type, field, ...)        /* 结构体类型 */
 SHREWD_BASIC_REFLECT_TYPE_DEFINE_OPS(var, struct_type, ops_ref, ...)  /* 结构体 + 类型级 ops */
 SHREWD_BASIC_REFLECT_ARRAY_DEFINE(var, elem_ref, elem_type, count)    /* 数组值(一行) */
+SHREWD_BASIC_REFLECT_UNION_DEFINE(var, union_type, variant, ...)      /* 带标签联合 */
+SHREWD_BASIC_REFLECT_UNION_VARIANT(tag_value, field, ...)             /* 一个变体(≥1 字段) */
 SHREWD_BASIC_REFLECT_OPAQUE_DEFINE(var, "name", ops_ref)              /* 不透明类型 + ops */
 SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                /* 跨 TU 引入 */
 ```

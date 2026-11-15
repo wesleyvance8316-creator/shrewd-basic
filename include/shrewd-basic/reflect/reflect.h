@@ -120,6 +120,7 @@ typedef enum shrewd_basic_reflect_kind {
     SHREWD_BASIC_REFLECT_KIND_STRING, /**< char * / const char * member. */
     SHREWD_BASIC_REFLECT_KIND_STRUCT, /**< Aggregate with field descriptors. */
     SHREWD_BASIC_REFLECT_KIND_ARRAY,  /**< Fixed array value: one row of a multi-dimension array. */
+    SHREWD_BASIC_REFLECT_KIND_UNION,  /**< Tagged union: one variant active per tag value. */
     SHREWD_BASIC_REFLECT_KIND_OPAQUE  /**< Unknown pointee (shrewd_basic_reflect_void). */
 } shrewd_basic_reflect_kind_t;
 
@@ -187,6 +188,18 @@ typedef struct shrewd_basic_reflect_enum_entry {
     int64_t sb_refl_value;     /**< The constant's value. */
 } shrewd_basic_reflect_enum_entry_t;
 
+/**
+ * One variant of a tagged union: the field list describing the union
+ * members that are live when the tag member holds @c sb_refl_tag. The
+ * field offsets are relative to the union storage.
+ */
+typedef struct shrewd_basic_reflect_variant {
+    int64_t sb_refl_tag;                          /**< Tag value selecting this variant. */
+    const char *sb_refl_name;                     /**< Variant label (the tag constant). */
+    size_t sb_refl_field_count;                   /**< Fields live in this variant. */
+    const shrewd_basic_reflect_field_t *sb_refl_fields;
+} shrewd_basic_reflect_variant_t;
+
 /** A described type: a struct layout, a primitive/string kind, or an enum. */
 struct shrewd_basic_reflect_type {
     shrewd_basic_reflect_kind_t sb_refl_kind;             /**< STRUCT for aggregates. */
@@ -200,6 +213,8 @@ struct shrewd_basic_reflect_type {
     const shrewd_basic_reflect_type_t *sb_refl_elem;       /**< ARRAY: element descriptor. */
     size_t sb_refl_elem_count;                            /**< ARRAY: elements in one row. */
     size_t sb_refl_elem_stride;                           /**< ARRAY: real width of one element. */
+    const shrewd_basic_reflect_variant_t *sb_refl_variants; /**< UNION: variant table. */
+    size_t sb_refl_variant_count;                         /**< UNION: variants. */
 };
 
 /** Field flag: the field is a fixed-size array of @c count elements. */
@@ -258,6 +273,16 @@ struct shrewd_basic_reflect_type {
  * explicit unit + bit position instead.
  */
 #define SHREWD_BASIC_REFLECT_FIELD_F_BITS ((uint32_t)128u)
+
+/**
+ * Field flag: a tagged union member. The variant is selected at walk
+ * time through the linked tag member (sb_refl_limit_* carries its
+ * location in the owner); only the active variant's fields are compared,
+ * copied, destroyed and rendered. A tag with no variant renders as
+ * unknown and compares by raw union bytes; shrewd_basic_reflect_copy()
+ * copies the raw storage in that case (nothing to descend into).
+ */
+#define SHREWD_BASIC_REFLECT_FIELD_F_UNION ((uint32_t)256u)
 
 /** Primitive descriptors; pass them to FIELD_ARRAY/FIELD_STRUCT by name. */
 extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_bool;
@@ -690,6 +715,64 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
         .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_BITS,                    \
         .sb_refl_bit_offset = (size_t)(bit_offset),                            \
         .sb_refl_bit_width = (size_t)(bit_width)                               \
+    }
+
+/*
+ * One variant of a tagged union: @p tag_value (an integer constant, e.g.
+ * an enum constant) selects it and the fields describe the union members
+ * that are live in that variant (at least one). Combine into
+ * SHREWD_BASIC_REFLECT_UNION_DEFINE.
+ */
+#define SHREWD_BASIC_REFLECT_UNION_VARIANT(tag_value, ...)                     \
+    {                                                                          \
+        .sb_refl_tag = (int64_t)(tag_value),                                   \
+        .sb_refl_name = #tag_value,                                            \
+        .sb_refl_field_count = (sizeof((const shrewd_basic_reflect_field_t[])  \
+                                      { __VA_ARGS__ })                         \
+                                / sizeof(shrewd_basic_reflect_field_t)),       \
+        .sb_refl_fields = (const shrewd_basic_reflect_field_t[]){ __VA_ARGS__ }\
+    }
+
+/*
+ * Compile-time registration of a tagged union type: `var` describes
+ * union_type as a set of variants; every UNION_VARIANT field list uses
+ * the FIELD_* macros on the union's members (offsets relative to the
+ * union). Define once per module, import with TYPE_DECLARE.
+ */
+#define SHREWD_BASIC_REFLECT_UNION_DEFINE(var, union_type, ...)                \
+    extern const shrewd_basic_reflect_type_t var;                              \
+    static const shrewd_basic_reflect_variant_t var##_variants[] = {           \
+        __VA_ARGS__                                                            \
+    };                                                                         \
+    const shrewd_basic_reflect_type_t var = {                                  \
+        .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_UNION,                               \
+        .sb_refl_name = #union_type,                                                   \
+        .sb_refl_size = sizeof(union_type),                                            \
+        .sb_refl_field_count = 0,                                                      \
+        .sb_refl_fields = NULL,                                                        \
+        .sb_refl_variants = var##_variants,                                            \
+        .sb_refl_variant_count = sizeof(var##_variants)                                \
+                / sizeof(var##_variants[0])                                            \
+    }
+
+/*
+ * Describe a tagged union member: @p member is the union storage inside
+ * the owner struct, @p union_var its UNION_DEFINE descriptor (without
+ * '&') and @p tag_member the owner's integer member selecting the active
+ * variant. The tag is read at walk time; only the active variant's
+ * fields take part in compare/copy/destroy/dump/visit.
+ */
+#define SHREWD_BASIC_REFLECT_FIELD_UNION(struct_type, member, union_var, tag_member) \
+    {                                                                          \
+        .sb_refl_name = #member,                                               \
+        .sb_refl_type = &(union_var),                                          \
+        .sb_refl_offset = offsetof(struct_type, member),                       \
+        .sb_refl_size = sizeof(((struct_type *)0)->member),                    \
+        .sb_refl_count = (size_t)1,                                            \
+        .sb_refl_stride = sizeof(((struct_type *)0)->member),                  \
+        .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_UNION,                   \
+        .sb_refl_limit_offset = offsetof(struct_type, tag_member),             \
+        .sb_refl_limit_size = sizeof(((struct_type *)0)->tag_member)           \
     }
 
 /* FIELD_STRUCT with a field-level ops override (takes precedence over type ops). */

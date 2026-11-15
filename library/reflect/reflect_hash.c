@@ -60,6 +60,10 @@ static int hash_target_seen(const hash_frame_t *stack, size_t depth,
     return 0;
 }
 
+static int hash_fields(const shrewd_basic_reflect_field_t *fields, size_t count,
+                       const unsigned char *value,
+                       hash_frame_t *stack, size_t depth, uint64_t *h);
+
 static int hash_value(const shrewd_basic_reflect_type_t *type,
                       const unsigned char *value, size_t nbytes,
                       const shrewd_basic_reflect_ops_t *ops,
@@ -156,9 +160,38 @@ static int hash_value(const shrewd_basic_reflect_type_t *type,
     }
     stack[depth].object = value;
     stack[depth].type = type;
-    for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
-        const shrewd_basic_reflect_field_t *field = &type->sb_refl_fields[i];
+    return hash_fields(type->sb_refl_fields, type->sb_refl_field_count,
+                       value, stack, depth, h);
+}
+
+/* Fold one field list - a struct's fields or an active union variant's. */
+static int hash_fields(const shrewd_basic_reflect_field_t *fields, size_t count,
+                       const unsigned char *value,
+                       hash_frame_t *stack, size_t depth, uint64_t *h)
+{
+    for (size_t i = 0; i < count; ++i) {
+        const shrewd_basic_reflect_field_t *field = &fields[i];
         const shrewd_basic_reflect_ops_t *field_ops = reflect_field_ops(field);
+        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_UNION)) {
+            /* Tagged union: fold the tag, then the active variant. */
+            const unsigned char *storage = value + field->sb_refl_offset;
+            int64_t tag = reflect_load_i64(value + field->sb_refl_limit_offset,
+                                           field->sb_refl_limit_size);
+            const shrewd_basic_reflect_variant_t *variant =
+                    reflect_union_variant(field, storage);
+            *h = hash_u64(*h, (uint64_t)tag);
+            if (NULL == variant) {
+                *h = hash_bytes(*h, storage, field->sb_refl_stride);
+            } else {
+                int status = hash_fields(variant->sb_refl_fields,
+                                         variant->sb_refl_field_count,
+                                         storage, stack, depth + 1, h);
+                if (SHREWD_BASIC_ERR_OK != status) {
+                    return status;
+                }
+            }
+            continue;
+        }
         if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
             /* Text buffers fold by content up to the first NUL. */
             const char *text = (const char *)(value + field->sb_refl_offset);
@@ -217,6 +250,8 @@ int shrewd_basic_reflect_hash(const void *object,
     }
     hash_frame_t stack[HASH_MAX_DEPTH];
     uint64_t h = HASH_OFFSET;
+    /* Zeroed frames: walks may skip levels (union variants). */
+    memset(stack, 0, sizeof(stack));
     int status = hash_value(type, (const unsigned char *)object, type->sb_refl_size,
                             type->sb_refl_ops, stack, 0, &h);
     if (SHREWD_BASIC_ERR_OK != status) {

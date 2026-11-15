@@ -16,7 +16,8 @@
  * destroy, dynamic arrays (F_DARRAY/F_SENTINEL), flexible tails
  * (F_FLEX), string buffers (F_STRINGBUF), owned strings
  * (F_STRING_OWNED), bit groups (F_BITS), multi-dimension arrays
- * (ARRAY_DEFINE), the traversal accessors,
+ * (ARRAY_DEFINE), tagged unions (UNION_DEFINE/FIELD_UNION),
+ * the traversal accessors,
  * visit (event-by-event walk) and diff/hash.
  * The 1 MiB dump body cap is covered by the test suite
  * instead - its output would flood the terminal here.
@@ -222,6 +223,38 @@ SHREWD_BASIC_REFLECT_ARRAY_DEFINE(row3_type, shrewd_basic_reflect_int32, int32_t
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(matrix_type, matrix_t,
     SHREWD_BASIC_REFLECT_FIELD_ARRAY(matrix_t, m, row3_type),
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(matrix_t, id));
+
+/* A tagged union: the payload shape follows the kind member. */
+typedef enum {
+    MSG_TEXT = 0,
+    MSG_POINT = 1,
+    MSG_RAW = 2
+} msg_kind_t;
+
+typedef union {
+    char *text;
+    point_t point;
+} msg_body_t;
+
+typedef struct {
+    msg_kind_t kind;
+    msg_body_t body;
+} msg_t;
+
+SHREWD_BASIC_REFLECT_ENUM_DEFINE(msg_kind_enum, msg_kind_t,
+    SHREWD_BASIC_REFLECT_ENUM_VALUE(MSG_TEXT),
+    SHREWD_BASIC_REFLECT_ENUM_VALUE(MSG_POINT),
+    SHREWD_BASIC_REFLECT_ENUM_VALUE(MSG_RAW));
+
+SHREWD_BASIC_REFLECT_UNION_DEFINE(msg_body_type, msg_body_t,
+    SHREWD_BASIC_REFLECT_UNION_VARIANT(MSG_TEXT,
+        SHREWD_BASIC_REFLECT_FIELD_STRING_OWNED(msg_body_t, text)),
+    SHREWD_BASIC_REFLECT_UNION_VARIANT(MSG_POINT,
+        SHREWD_BASIC_REFLECT_FIELD_STRUCT(msg_body_t, point, point_type)));
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(msg_type, msg_t,
+    SHREWD_BASIC_REFLECT_FIELD_ENUM(msg_t, kind, msg_kind_enum),
+    SHREWD_BASIC_REFLECT_FIELD_UNION(msg_t, body, msg_body_type, kind));
 
 /* An enum: int-compatible values with a name/value table. */
 typedef enum {
@@ -792,6 +825,43 @@ int main(void)
                  shrewd_basic_reflect_diff(&mx, &mx_clone, &matrix_type,
                                            diff_path, sizeof(diff_path)));
     printf("  first difference at \"%s\"\n", diff_path);
+
+    banner("18. tagged unions: one variant active per tag");
+    void *msg_block = NULL;
+    if (SHREWD_BASIC_ERR_OK == shrewd_basic_platform_calloc(&msg_block, 1,
+                                                            sizeof(msg_t))) {
+        msg_t *msg = msg_block;
+        msg->kind = MSG_POINT;
+        msg->body.point.x = 1;
+        msg->body.point.y = 2;
+        printf("  active variant MSG_POINT:\n");
+        (void)shrewd_basic_reflect_dump(&msg_type, msg, "msg");
+        msg->kind = MSG_RAW; /* no variant describes this tag */
+        printf("  a tag without a variant:\n");
+        (void)shrewd_basic_reflect_dump(&msg_type, msg, "msg");
+        msg->kind = MSG_TEXT;
+        void *text_block = NULL;
+        (void)shrewd_basic_platform_alloc(&text_block, 6);
+        memcpy(text_block, "hello", 6);
+        msg->body.text = text_block;
+        printf("  active variant MSG_TEXT (owned string):\n");
+        (void)shrewd_basic_reflect_dump(&msg_type, msg, "msg");
+        msg_t *msg_clone = NULL;
+        print_status("copy(msg)",
+                     shrewd_basic_reflect_copy((void **)&msg_clone, msg, &msg_type));
+        printf("  clone text=\"%s\" at %p (source at %p) -> deep copy\n",
+               msg_clone->body.text, (void *)msg_clone->body.text,
+               (void *)msg->body.text);
+        bool msg_same = false;
+        print_status("equal(msg, clone)",
+                     shrewd_basic_reflect_equal(msg, msg_clone, &msg_type, &msg_same));
+        printf("  -> %s (only the active variant compares)\n",
+               msg_same ? "equal" : "different");
+        print_status("destroy(clone)",
+                     shrewd_basic_reflect_destroy(msg_clone, &msg_type));
+        print_status("destroy(msg)",
+                     shrewd_basic_reflect_destroy(msg, &msg_type));
+    }
 
     printf("\nDemo done. See docs/reflect.md for the full reference.\n");
     return 0;

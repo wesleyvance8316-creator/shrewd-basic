@@ -226,6 +226,26 @@ static void visit_field(visit_ctx_t *ctx, const shrewd_basic_reflect_field_t *fi
         /* Text buffer: one string leaf, not an element list. */
         (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_LEAF, field,
                          object + field->sb_refl_offset, field->sb_refl_type, 0);
+    } else if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_UNION)) {
+        /* Tagged union: expand the active variant (LEAF when unknown). */
+        const unsigned char *storage = object + field->sb_refl_offset;
+        const shrewd_basic_reflect_variant_t *variant =
+                reflect_union_variant(field, storage);
+        if (NULL == variant) {
+            (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_LEAF, field, storage,
+                             field->sb_refl_type, 0);
+        } else if (SHREWD_BASIC_REFLECT_VISIT_PRUNE
+                   != visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_ENTER, field,
+                                 storage, field->sb_refl_type, 0)) {
+            for (size_t k = 0; k < variant->sb_refl_field_count; ++k) {
+                if (0 != ctx->stopped) {
+                    break;
+                }
+                visit_field(ctx, &variant->sb_refl_fields[k], storage, depth + 1);
+            }
+            (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_EXIT, field, storage,
+                             field->sb_refl_type, 0);
+        }
     } else if (0 != (field->sb_refl_flags
               & (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY | SHREWD_BASIC_REFLECT_FIELD_F_DARRAY))) {
         visit_array(ctx, field, object, depth);

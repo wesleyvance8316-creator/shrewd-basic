@@ -3440,6 +3440,310 @@ static void test_multidim(void)
                   SHREWD_BASIC_ERR_OK);
 }
 
+/* --- tagged union fixtures --------------------------------------------- */
+
+typedef enum {
+    PAYLOAD_NONE = 0,
+    PAYLOAD_INT = 1,
+    PAYLOAD_POINT = 2
+} payload_kind_t;
+
+typedef union {
+    int32_t number;
+    point_t point;
+} payload_t;
+
+typedef struct {
+    payload_kind_t kind;
+    payload_t payload;
+} message_t;
+
+SHREWD_BASIC_REFLECT_ENUM_DEFINE(g_payload_kind_reflect, payload_kind_t,
+    SHREWD_BASIC_REFLECT_ENUM_VALUE(PAYLOAD_NONE),
+    SHREWD_BASIC_REFLECT_ENUM_VALUE(PAYLOAD_INT),
+    SHREWD_BASIC_REFLECT_ENUM_VALUE(PAYLOAD_POINT));
+
+SHREWD_BASIC_REFLECT_UNION_DEFINE(g_payload_reflect, payload_t,
+    SHREWD_BASIC_REFLECT_UNION_VARIANT(PAYLOAD_INT,
+        SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(payload_t, number)),
+    SHREWD_BASIC_REFLECT_UNION_VARIANT(PAYLOAD_POINT,
+        SHREWD_BASIC_REFLECT_FIELD_STRUCT(payload_t, point, g_point_reflect)));
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_message_reflect, message_t,
+    SHREWD_BASIC_REFLECT_FIELD_ENUM(message_t, kind, g_payload_kind_reflect),
+    SHREWD_BASIC_REFLECT_FIELD_UNION(message_t, payload, g_payload_reflect, kind));
+
+/*
+ * A union whose variants lay out differently: switching tags leaves
+ * stale pointer bits in the inactive slot - destroy must never touch
+ * them. rich_t's link sits past the int32 of variant "number".
+ */
+typedef struct {
+    int32_t pad;
+    point_t *link;
+} rich_t;
+
+typedef union {
+    rich_t rich;
+    int32_t number;
+} mixed_t;
+
+typedef struct {
+    int32_t tag;
+    mixed_t mixed;
+} mixed_msg_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_rich_reflect, rich_t,
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(rich_t, pad),
+    SHREWD_BASIC_REFLECT_FIELD_PTR(rich_t, link, g_point_reflect));
+
+SHREWD_BASIC_REFLECT_UNION_DEFINE(g_mixed_reflect, mixed_t,
+    SHREWD_BASIC_REFLECT_UNION_VARIANT(1,
+        SHREWD_BASIC_REFLECT_FIELD_STRUCT(mixed_t, rich, g_rich_reflect)),
+    SHREWD_BASIC_REFLECT_UNION_VARIANT(2,
+        SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(mixed_t, number)));
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_mixed_msg_reflect, mixed_msg_t,
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(mixed_msg_t, tag),
+    SHREWD_BASIC_REFLECT_FIELD_UNION(mixed_msg_t, mixed, g_mixed_reflect, tag));
+
+static void test_union(void)
+{
+    /* Union descriptor shape. */
+    expect_true("union type kind",
+                SHREWD_BASIC_REFLECT_KIND_UNION == g_payload_reflect.sb_refl_kind);
+    expect_true("union variants",
+                ((size_t)2 == g_payload_reflect.sb_refl_variant_count)
+                && (0 == strcmp(g_payload_reflect.sb_refl_variants[0].sb_refl_name,
+                                "PAYLOAD_INT"))
+                && ((int64_t)PAYLOAD_POINT
+                    == g_payload_reflect.sb_refl_variants[1].sb_refl_tag)
+                && ((size_t)1 == g_payload_reflect.sb_refl_variants[1].sb_refl_field_count));
+    const shrewd_basic_reflect_field_t *field =
+        find_or_fail("union", &g_message_reflect, "payload");
+    if (NULL != field) {
+        expect_true("union field shape",
+                    (SHREWD_BASIC_REFLECT_FIELD_F_UNION == field->sb_refl_flags)
+                    && (offsetof(message_t, kind) == field->sb_refl_limit_offset)
+                    && (sizeof(payload_kind_t) == field->sb_refl_limit_size));
+    }
+
+    message_t msg;
+    memset(&msg, 0, sizeof(msg));
+
+    /* dump: the active variant renders as a tagged block. */
+    shrewd_basic_log_module_t *module = NULL;
+    expect_eq_int("union find module",
+                  shrewd_basic_log_module_find("reflect", &module),
+                  SHREWD_BASIC_ERR_OK);
+    FILE *stream = tmpfile();
+    expect_true("union tmpfile", NULL != stream);
+    if (NULL == stream) {
+        return;
+    }
+    shrewd_basic_log_module_set_stream(module, stream);
+    msg.kind = PAYLOAD_INT;
+    msg.payload.number = 42;
+    expect_eq_int("union dump int",
+                  shrewd_basic_reflect_dump(&g_message_reflect, &msg, "msg"),
+                  SHREWD_BASIC_ERR_OK);
+    char buf[4096] = {0};
+    slurp(stream, buf, sizeof(buf));
+    expect_true("union dump int variant",
+                (NULL != strstr(buf, "payload = (PAYLOAD_INT) {"))
+                && (NULL != strstr(buf, "number = 42"))
+                && (NULL == strstr(buf, "point =")));
+    msg.kind = PAYLOAD_POINT;
+    msg.payload.point.x = 1;
+    msg.payload.point.y = 2;
+    expect_eq_int("union dump point",
+                  shrewd_basic_reflect_dump(&g_message_reflect, &msg, "msg"),
+                  SHREWD_BASIC_ERR_OK);
+    memset(buf, 0, sizeof(buf));
+    slurp(stream, buf, sizeof(buf));
+    expect_true("union dump point variant",
+                (NULL != strstr(buf, "payload = (PAYLOAD_POINT) {"))
+                && (NULL != strstr(buf, "point = {"))
+                && (NULL != strstr(buf, "    x = 1")));
+    msg.kind = PAYLOAD_NONE;
+    expect_eq_int("union dump unknown",
+                  shrewd_basic_reflect_dump(&g_message_reflect, &msg, "msg"),
+                  SHREWD_BASIC_ERR_OK);
+    memset(buf, 0, sizeof(buf));
+    slurp(stream, buf, sizeof(buf));
+    expect_true("union dump unknown tag",
+                NULL != strstr(buf, "payload = (tag 0: unknown)"));
+    shrewd_basic_log_module_set_stream(module, stderr);
+    fclose(stream);
+
+    /* equal/diff/hash follow the active variant. */
+    message_t twin;
+    memset(&twin, 0, sizeof(twin));
+    msg.kind = PAYLOAD_POINT;
+    msg.payload.point.x = 1;
+    msg.payload.point.y = 2;
+    twin = msg;
+    bool same = false;
+    expect_eq_int("union equal",
+                  shrewd_basic_reflect_equal(&msg, &twin, &g_message_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("union equal yes", same);
+    size_t ha = 0;
+    size_t hb = 0;
+    expect_eq_int("union hash a",
+                  shrewd_basic_reflect_hash(&msg, &g_message_reflect, &ha),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("union hash b",
+                  shrewd_basic_reflect_hash(&twin, &g_message_reflect, &hb),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("union hash same", ha == hb);
+    twin.payload.point.y = 3;
+    char path[64];
+    expect_eq_int("union diff inner",
+                  shrewd_basic_reflect_diff(&msg, &twin, &g_message_reflect,
+                                            path, sizeof(path)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("union diff inner path", 0 == strcmp(path, "payload.point.y"));
+    twin.payload.point.y = 2;
+    twin.kind = PAYLOAD_INT;
+    expect_eq_int("union diff tag",
+                  shrewd_basic_reflect_diff(&msg, &twin, &g_message_reflect,
+                                            path, sizeof(path)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    /* The described tag member comes first in the field list, so it is
+       the first difference; the union's own tag check is covered by the
+       unknown-tag byte compare below. */
+    expect_true("union diff tag path", 0 == strcmp(path, "kind"));
+
+    /* Unknown tags compare by raw union bytes. */
+    msg.kind = PAYLOAD_NONE;
+    twin.kind = PAYLOAD_NONE;
+    memset(&msg.payload, 0, sizeof(msg.payload));
+    memset(&twin.payload, 0, sizeof(twin.payload));
+    expect_eq_int("union equal unknown",
+                  shrewd_basic_reflect_equal(&msg, &twin, &g_message_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("union equal unknown yes", same);
+    twin.payload.number = 1;
+    expect_eq_int("union equal unknown differs",
+                  shrewd_basic_reflect_equal(&msg, &twin, &g_message_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("union equal unknown differs no", !same);
+    expect_eq_int("union diff unknown",
+                  shrewd_basic_reflect_diff(&msg, &twin, &g_message_reflect,
+                                            path, sizeof(path)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("union diff unknown path", 0 == strcmp(path, "payload"));
+    twin.payload.number = 0;
+
+    /* Paths resolve through the active variant at walk time. */
+    msg.kind = PAYLOAD_POINT;
+    msg.payload.point.x = 7;
+    int32_t at = 0;
+    expect_eq_int("union path_get",
+                  shrewd_basic_reflect_path_get(&msg, &g_message_reflect,
+                                                "payload.point.x", &at, sizeof(at)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("union path value", 7 == at);
+    at = 9;
+    expect_eq_int("union path_set",
+                  shrewd_basic_reflect_path_set(&msg, &g_message_reflect,
+                                                "payload.point.y", &at, sizeof(at)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("union path wrote", 9 == msg.payload.point.y);
+    msg.kind = PAYLOAD_NONE;
+    expect_eq_int("union path unknown tag",
+                  shrewd_basic_reflect_path_get(&msg, &g_message_reflect,
+                                                "payload.point.x", &at, sizeof(at)),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+
+    /* resolve refuses union descent (static walk cannot know the tag). */
+    const shrewd_basic_reflect_field_t *rfield = NULL;
+    size_t roffset = 0;
+    size_t rsize = 0;
+    expect_eq_int("union resolve refuses",
+                  shrewd_basic_reflect_type_resolve(&g_message_reflect,
+                                                    "payload.point.x", &rfield,
+                                                    &roffset, &rsize),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+
+    /* visit expands the active variant (LEAF for unknown tags). */
+    msg.kind = PAYLOAD_INT;
+    msg.payload.number = 42;
+    visit_rec_t rec;
+    memset(&rec, 0, sizeof(rec));
+    expect_eq_int("union visit",
+                  shrewd_basic_reflect_visit(&msg, &g_message_reflect, visit_collect, &rec),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("union visit variant",
+                (visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, "payload")
+                 < visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "payload.number"))
+                && (visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "payload.number")
+                    < visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_EXIT, "payload")));
+    msg.kind = PAYLOAD_NONE;
+    memset(&rec, 0, sizeof(rec));
+    expect_eq_int("union visit unknown",
+                  shrewd_basic_reflect_visit(&msg, &g_message_reflect, visit_collect, &rec),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("union visit unknown leaf",
+                (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "payload"))
+                && (0 > visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, "payload")));
+
+    /* copy/destroy touch only the active variant's pointers. */
+    void *block = NULL;
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_alloc(&block, sizeof(point_t))) {
+        return;
+    }
+    point_t *heap_point = block;
+    heap_point->x = 5;
+    heap_point->y = 6;
+    mixed_msg_t src;
+    memset(&src, 0, sizeof(src));
+    src.tag = 2;
+    src.mixed.number = 5;
+    src.mixed.rich.link = heap_point; /* stale bits in the inactive slot */
+    mixed_msg_t *clone = NULL;
+    expect_eq_int("union copy stale",
+                  shrewd_basic_reflect_copy((void **)&clone, &src, &g_mixed_msg_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("union stale aliased",
+                (NULL != clone) && (clone->mixed.rich.link == heap_point));
+    expect_eq_int("union destroy stale",
+                  shrewd_basic_reflect_destroy(clone, &g_mixed_msg_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    /* destroy(clone) must not have freed heap_point - free it here. */
+    expect_true("union stale intact", (5 == heap_point->x) && (6 == heap_point->y));
+    expect_eq_int("union stale cleanup",
+                  shrewd_basic_platform_free((void **)&heap_point),
+                  SHREWD_BASIC_ERR_OK);
+
+    /* The active variant's pointers are cloned deeply and released. */
+    memset(&src, 0, sizeof(src));
+    src.tag = 1;
+    src.mixed.rich.pad = 3;
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_alloc(&block, sizeof(point_t))) {
+        return;
+    }
+    src.mixed.rich.link = block;
+    src.mixed.rich.link->x = 8;
+    src.mixed.rich.link->y = 9;
+    clone = NULL;
+    expect_eq_int("union copy active",
+                  shrewd_basic_reflect_copy((void **)&clone, &src, &g_mixed_msg_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("union active cloned",
+                (NULL != clone) && (clone->mixed.rich.link != src.mixed.rich.link)
+                && (8 == clone->mixed.rich.link->x));
+    expect_eq_int("union destroy clone",
+                  shrewd_basic_reflect_destroy(clone, &g_mixed_msg_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    /* src is stack storage: release its target by hand (destroy would
+       free the root too). */
+    expect_eq_int("union src cleanup",
+                  shrewd_basic_platform_free((void **)&src.mixed.rich.link),
+                  SHREWD_BASIC_ERR_OK);
+}
+
 int main(void)
 {
     test_describe();
@@ -3463,6 +3767,7 @@ int main(void)
     test_owned_strings();
     test_bits();
     test_multidim();
+    test_union();
     test_graph_ops();
     test_equal();
     test_dynamic_arrays();

@@ -177,6 +177,26 @@ static inline void reflect_bits_insert(uint64_t *unit, size_t offset,
 }
 
 /*
+ * Select the active variant of a F_UNION field. @p storage is the union
+ * value itself; the tag member lives in the owner at a fixed
+ * displacement from it. NULL means the tag names no known variant.
+ */
+static inline const shrewd_basic_reflect_variant_t *reflect_union_variant(
+        const shrewd_basic_reflect_field_t *field, const unsigned char *storage)
+{
+    int64_t tag = reflect_load_i64(storage - field->sb_refl_offset
+                                   + field->sb_refl_limit_offset,
+                                   field->sb_refl_limit_size);
+    const shrewd_basic_reflect_type_t *type = field->sb_refl_type;
+    for (size_t i = 0; i < type->sb_refl_variant_count; ++i) {
+        if (type->sb_refl_variants[i].sb_refl_tag == tag) {
+            return &type->sb_refl_variants[i];
+        }
+    }
+    return NULL;
+}
+
+/*
  * Element storage of an array-shaped field, inline or dynamic. For a
  * F_DARRAY field the table pointer is followed: a NULL table yields an
  * empty view, a F_SENTINEL table is bounded by its NULL slot, and any

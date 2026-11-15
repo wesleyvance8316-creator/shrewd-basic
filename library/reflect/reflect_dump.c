@@ -64,6 +64,9 @@ static int dump_init(dump_ctx_t *ctx)
     ctx->pos = 0;
     ctx->truncated = 0;
     ctx->nomem = 0;
+    /* Zeroed frames: walks may skip levels (union variants), and
+       target_seen must not read uninitialised slots. */
+    memset(ctx->path, 0, sizeof(ctx->path));
     if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_alloc(&block, DUMP_BODY_MIN)) {
         return SHREWD_BASIC_ERR_MEM_NOMEM;
     }
@@ -323,16 +326,51 @@ static int dump_render_target(const shrewd_basic_reflect_field_t *field,
     return (SHREWD_BASIC_ERR_OK == ops->render(pointer, buf, buf_size)) ? 1 : 0;
 }
 
+static void dump_field_list(dump_ctx_t *ctx, const shrewd_basic_reflect_field_t *fields,
+                            size_t count, const unsigned char *object, size_t depth);
+
 static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type,
                         const unsigned char *object, size_t depth)
 {
-    size_t level = (depth < DUMP_MAX_DEPTH) ? depth : DUMP_MAX_DEPTH;
     ctx->path[depth - 1].object = object;
     ctx->path[depth - 1].type = type;
-    int pad = (int)(level * DUMP_INDENT);
-    for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
-        const shrewd_basic_reflect_field_t *field = &type->sb_refl_fields[i];
+    dump_field_list(ctx, type->sb_refl_fields, type->sb_refl_field_count,
+                    object, depth);
+}
+
+/* Render one field list - a struct's fields or an active union variant's. */
+static void dump_field_list(dump_ctx_t *ctx, const shrewd_basic_reflect_field_t *fields,
+                            size_t count, const unsigned char *object, size_t depth)
+{
+    int pad = (int)(((depth < DUMP_MAX_DEPTH) ? depth : DUMP_MAX_DEPTH) * DUMP_INDENT);
+    for (size_t i = 0; i < count; ++i) {
+        const shrewd_basic_reflect_field_t *field = &fields[i];
         const unsigned char *at = object + field->sb_refl_offset;
+        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_UNION)) {
+            /*
+             * Tagged union: the active variant's fields render as a block
+             * annotated with the tag constant (raw tag when unknown).
+             */
+            const shrewd_basic_reflect_variant_t *variant =
+                    reflect_union_variant(field, at);
+            if (NULL == variant) {
+                long long tag = (long long)reflect_load_i64(
+                        object + field->sb_refl_limit_offset,
+                        field->sb_refl_limit_size);
+                dump_append(ctx, "%*s%s = (tag %lld: unknown)", pad, "",
+                            field->sb_refl_name, tag);
+                dump_emit(ctx);
+                continue;
+            }
+            dump_append(ctx, "%*s%s = (%s) {", pad, "", field->sb_refl_name,
+                        variant->sb_refl_name);
+            dump_emit(ctx);
+            dump_field_list(ctx, variant->sb_refl_fields,
+                            variant->sb_refl_field_count, at, depth + 1);
+            dump_append(ctx, "%*s}", pad, "");
+            dump_emit(ctx);
+            continue;
+        }
         int is_array = (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_ARRAY));
         int is_darray = (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_DARRAY));
         int is_ptr = (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR));
