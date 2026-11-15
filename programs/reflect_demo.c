@@ -13,7 +13,9 @@
  * variants), kind_name, type_find_field, enum_find_name/value,
  * field_get/set, dump (incl. ops->render and cycle markers),
  * type_resolve, path_get/set, value_get/set, check, equal, copy,
- * destroy.
+ * destroy, dynamic arrays (F_DARRAY/F_SENTINEL) and the traversal
+ * accessors. The 1 MiB dump body cap is covered by the test suite
+ * instead - its output would flood the terminal here.
  */
 
 #include <stdint.h>
@@ -145,6 +147,24 @@ static const shrewd_basic_reflect_ops_t g_scale_ops = {
     .copy = handle_copy,
     .destroy = handle_destroy };
 
+/* Dynamic arrays: a pointer table, a value vector and an argv-style
+   NULL-terminated string table. */
+typedef struct {
+    point_t **grid;
+    size_t grid_count;
+    int32_t *values;
+    size_t value_count;
+    char **argv;
+} dyn_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(dyn_type, dyn_t,
+    SHREWD_BASIC_REFLECT_FIELD_PTR_DARRAY(dyn_t, grid, grid_count, point_type),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dyn_t, grid_count),
+    SHREWD_BASIC_REFLECT_FIELD_DARRAY(dyn_t, values, value_count,
+                                      shrewd_basic_reflect_int32),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dyn_t, value_count),
+    SHREWD_BASIC_REFLECT_FIELD_SENTINEL(dyn_t, argv, shrewd_basic_reflect_string));
+
 /* An enum: int-compatible values with a name/value table. */
 typedef enum {
     MODE_OFF = 0,
@@ -230,6 +250,19 @@ int main(void)
         (void)shrewd_basic_log_module_set_level(log_module, SHREWD_BASIC_LOG_LEVEL_INFO);
     }
 
+    /* The clone map of copy rides on the ds rbtree: silence that module
+       too so the demo stays readable (a tiny warm-up copy registers it
+       before the lookup). */
+    dyn_t warmup;
+    dyn_t *warmup_clone = NULL;
+    memset(&warmup, 0, sizeof(warmup));
+    (void)shrewd_basic_reflect_copy((void **)&warmup_clone, &warmup, &dyn_type);
+    (void)shrewd_basic_reflect_destroy(warmup_clone, &dyn_type);
+    shrewd_basic_log_module_t *ds_module = NULL;
+    if (SHREWD_BASIC_ERR_OK == shrewd_basic_log_module_find("ds", &ds_module)) {
+        (void)shrewd_basic_log_module_set_level(ds_module, SHREWD_BASIC_LOG_LEVEL_NONE);
+    }
+
     person_t person;
     memset(&person, 0, sizeof(person));
     person.name = "Alice";
@@ -261,6 +294,13 @@ int main(void)
     describe_field("home");
     describe_field("ptr");
     describe_field("nope");
+
+    printf("  iterating the %zu fields with type_field_at:",
+           shrewd_basic_reflect_type_field_count(&person_type));
+    for (size_t i = 0; i < shrewd_basic_reflect_type_field_count(&person_type); ++i) {
+        printf(" %s", shrewd_basic_reflect_type_field_at(&person_type, i)->sb_refl_name);
+    }
+    printf("\n");
 
     banner("2. field_get/field_set: raw-byte access");
     const shrewd_basic_reflect_field_t *age_field = NULL;
@@ -417,6 +457,14 @@ int main(void)
     print_status("enum_find_name(mode_type, 1)",
                  shrewd_basic_reflect_enum_find_name(&mode_type, 1, &mode_name));
     printf("  -> %s\n", mode_name);
+    printf("  the %zu constants via enum_at:",
+           shrewd_basic_reflect_enum_count(&mode_type));
+    for (size_t i = 0; i < shrewd_basic_reflect_enum_count(&mode_type); ++i) {
+        printf(" %s=%lld",
+               shrewd_basic_reflect_enum_at(&mode_type, i)->sb_refl_name,
+               (long long)shrewd_basic_reflect_enum_at(&mode_type, i)->sb_refl_value);
+    }
+    printf("\n");
     int64_t mode_value = 0;
     print_status("enum_find_value(\"MODE_AUTO\")",
                  shrewd_basic_reflect_enum_find_value(&mode_type, "MODE_AUTO",
@@ -451,6 +499,51 @@ int main(void)
     print_status("check(clone)", shrewd_basic_reflect_check(cycle, &node_type));
     print_status("destroy(clone)",
                  shrewd_basic_reflect_destroy(cycle, &node_type));
+
+    banner("10. dynamic arrays: vectors, pointer tables, argv-style");
+    void *block = NULL;
+    if (SHREWD_BASIC_ERR_OK == shrewd_basic_platform_calloc(&block, 1, sizeof(dyn_t))) {
+        dyn_t *dyn = block;
+        for (size_t i = 0; i < 2; ++i) {
+            void *cell = NULL;
+            if (SHREWD_BASIC_ERR_OK == shrewd_basic_platform_alloc(&cell, sizeof(point_t))) {
+                ((point_t *)cell)->x = (int32_t)(i + 1);
+                ((point_t *)cell)->y = (int32_t)(i + 2);
+            }
+            if (0 == i) {
+                void *table = NULL;
+                (void)shrewd_basic_platform_alloc(&table, 2 * sizeof(point_t *));
+                dyn->grid = table;
+            }
+            dyn->grid[i] = cell;
+        }
+        dyn->grid_count = 2;
+        (void)shrewd_basic_platform_alloc(&block, 3 * sizeof(int32_t));
+        dyn->values = block;
+        dyn->values[0] = 7;
+        dyn->values[1] = 8;
+        dyn->values[2] = 9;
+        dyn->value_count = 3;
+        (void)shrewd_basic_platform_alloc(&block, 3 * sizeof(char *));
+        dyn->argv = block;
+        dyn->argv[0] = (char *)"ls";
+        dyn->argv[1] = (char *)"-l";
+        dyn->argv[2] = NULL;
+        (void)shrewd_basic_reflect_dump(&dyn_type, dyn, "dyn");
+
+        dyn_t *dyn_clone = NULL;
+        print_status("copy(dyn)",
+                     shrewd_basic_reflect_copy((void **)&dyn_clone, dyn, &dyn_type));
+        bool dyn_same = false;
+        print_status("equal(dyn, clone)",
+                     shrewd_basic_reflect_equal(dyn, dyn_clone, &dyn_type, &dyn_same));
+        printf("  -> %s (tables cloned, strings borrowed)\n",
+               dyn_same ? "equal" : "different");
+        print_status("destroy(clone)",
+                     shrewd_basic_reflect_destroy(dyn_clone, &dyn_type));
+        print_status("destroy(dyn)",
+                     shrewd_basic_reflect_destroy(dyn, &dyn_type));
+    }
 
     printf("\nDemo done. See docs/reflect.md for the full reference.\n");
     return 0;
