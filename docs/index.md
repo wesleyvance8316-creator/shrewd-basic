@@ -9,6 +9,9 @@ compile-time reflection module.
 - [reflect reference](reflect.md) - the full reflect guide: data model,
   authoring macros, API, dump output, pointer/ops semantics and the
   optional code generator.
+- [reflect overview](reflect-overview.md) - a summary of everything the
+  reflect module supports today: type system, field shapes, API list,
+  semantics and tooling.
 
 ## Modules
 
