@@ -2730,10 +2730,222 @@ static void test_stringbuf(void)
     expect_true("stringbuf path index", 'Z' == got);
 }
 
+/* --- lookup index fixtures --------------------------------------------- */
+
+/*
+ * More fields than the find_field lookup index holds (64): exercises the
+ * linear-scan fallback for oversized types.
+ */
+typedef struct {
+    int32_t f0;
+    int32_t f1;
+    int32_t f2;
+    int32_t f3;
+    int32_t f4;
+    int32_t f5;
+    int32_t f6;
+    int32_t f7;
+    int32_t f8;
+    int32_t f9;
+    int32_t f10;
+    int32_t f11;
+    int32_t f12;
+    int32_t f13;
+    int32_t f14;
+    int32_t f15;
+    int32_t f16;
+    int32_t f17;
+    int32_t f18;
+    int32_t f19;
+    int32_t f20;
+    int32_t f21;
+    int32_t f22;
+    int32_t f23;
+    int32_t f24;
+    int32_t f25;
+    int32_t f26;
+    int32_t f27;
+    int32_t f28;
+    int32_t f29;
+    int32_t f30;
+    int32_t f31;
+    int32_t f32;
+    int32_t f33;
+    int32_t f34;
+    int32_t f35;
+    int32_t f36;
+    int32_t f37;
+    int32_t f38;
+    int32_t f39;
+    int32_t f40;
+    int32_t f41;
+    int32_t f42;
+    int32_t f43;
+    int32_t f44;
+    int32_t f45;
+    int32_t f46;
+    int32_t f47;
+    int32_t f48;
+    int32_t f49;
+    int32_t f50;
+    int32_t f51;
+    int32_t f52;
+    int32_t f53;
+    int32_t f54;
+    int32_t f55;
+    int32_t f56;
+    int32_t f57;
+    int32_t f58;
+    int32_t f59;
+    int32_t f60;
+    int32_t f61;
+    int32_t f62;
+    int32_t f63;
+    int32_t f64;
+    int32_t f65;
+    int32_t f66;
+    int32_t f67;
+    int32_t f68;
+    int32_t f69;
+} many_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_many_reflect, many_t,
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f0),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f1),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f2),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f3),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f4),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f5),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f6),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f7),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f8),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f9),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f10),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f11),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f12),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f13),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f14),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f15),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f16),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f17),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f18),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f19),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f20),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f21),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f22),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f23),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f24),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f25),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f26),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f27),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f28),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f29),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f30),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f31),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f32),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f33),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f34),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f35),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f36),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f37),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f38),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f39),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f40),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f41),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f42),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f43),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f44),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f45),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f46),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f47),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f48),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f49),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f50),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f51),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f52),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f53),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f54),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f55),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f56),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f57),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f58),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f59),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f60),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f61),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f62),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f63),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f64),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f65),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f66),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f67),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f68),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f69));
+
+static void test_lookup_index(void)
+{
+    /* The sorted index is built lazily: every person field must resolve
+       to the very same descriptor as the raw table. */
+    for (size_t i = 0; i < g_person_reflect.sb_refl_field_count; ++i) {
+        const shrewd_basic_reflect_field_t *field = NULL;
+        const shrewd_basic_reflect_field_t *want =
+                &g_person_reflect.sb_refl_fields[i];
+        expect_eq_int("lookup hit",
+                      shrewd_basic_reflect_type_find_field(
+                              &g_person_reflect, want->sb_refl_name, &field),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("lookup hit pointer", field == want);
+    }
+    const shrewd_basic_reflect_field_t *field = NULL;
+    expect_eq_int("lookup miss",
+                  shrewd_basic_reflect_type_find_field(&g_person_reflect, "nope",
+                                                       &field),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+
+    /* More types than lookup slots: results stay correct across
+       round-robin eviction and rebuild. */
+    const shrewd_basic_reflect_type_t *types[] = {
+        &g_point_reflect, &g_node_reflect, &g_refs_reflect, &g_wide_reflect,
+        &g_huge_reflect, &g_dyn_reflect, &g_flex_reflect, &g_zflex_reflect,
+        &g_text_reflect, &g_ops_refs_reflect, &g_graph_reflect };
+    for (size_t i = 0; i < (sizeof(types) / sizeof(types[0])); ++i) {
+        const shrewd_basic_reflect_field_t *first =
+                shrewd_basic_reflect_type_field_at(types[i], 0);
+        expect_eq_int("lookup churn",
+                      shrewd_basic_reflect_type_find_field(
+                              types[i], first->sb_refl_name, &field),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("lookup churn pointer", field == first);
+    }
+    /* person_t may have been evicted by now: it must still resolve. */
+    expect_eq_int("lookup rebuilt",
+                  shrewd_basic_reflect_type_find_field(&g_person_reflect, "age",
+                                                       &field),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("lookup rebuilt pointer",
+                field == &g_person_reflect.sb_refl_fields[3]);
+
+    /* Oversized type (70 fields): the linear fallback finds every one. */
+    expect_true("lookup oversized count",
+                (size_t)70 == g_many_reflect.sb_refl_field_count);
+    for (size_t i = 0; i < g_many_reflect.sb_refl_field_count; ++i) {
+        const shrewd_basic_reflect_field_t *want = &g_many_reflect.sb_refl_fields[i];
+        expect_eq_int("lookup fallback",
+                      shrewd_basic_reflect_type_find_field(
+                              &g_many_reflect, want->sb_refl_name, &field),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("lookup fallback pointer", field == want);
+    }
+    expect_eq_int("lookup fallback miss",
+                  shrewd_basic_reflect_type_find_field(&g_many_reflect, "nope",
+                                                       &field),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+}
+
 int main(void)
 {
     test_describe();
     test_find_field();
+    test_lookup_index();
     test_get_set_scalars();
     test_get_set_string();
     test_nested();

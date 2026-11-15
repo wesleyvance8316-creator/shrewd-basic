@@ -189,6 +189,135 @@ int shrewd_basic_reflect_enum_find_value(const shrewd_basic_reflect_type_t *type
     return SHREWD_BASIC_ERR_KEY_NOTFOUND;
 }
 
+/*
+ * find_field acceleration: a small static side table of sorted field
+ * indexes, keyed by type pointer. Descriptors are const and never
+ * freed, so an index never goes stale. The index is built lazily on the
+ * first lookup of a type; types with more fields than one slot holds,
+ * or once every slot is busy and one is recycled (round-robin), fall
+ * back to the plain linear scan - which also rebuilds the index. Like
+ * log module registration the cache is not synchronized: first use from
+ * several threads at once is unsupported.
+ */
+#define REFLECT_LOOKUP_SLOTS 8
+#define REFLECT_LOOKUP_FIELDS 64
+
+typedef struct reflect_lookup {
+    const shrewd_basic_reflect_type_t *type;
+    size_t count;
+    const shrewd_basic_reflect_field_t *sorted[REFLECT_LOOKUP_FIELDS];
+} reflect_lookup_t;
+
+static reflect_lookup_t g_lookup[REFLECT_LOOKUP_SLOTS];
+static size_t g_lookup_next = 0;
+
+/* Order two names when the left one is not NUL-terminated. */
+static int reflect_name_cmp(const char *name, size_t name_len,
+                            const char *field_name)
+{
+    size_t field_len = strlen(field_name);
+    size_t shared = (name_len < field_len) ? name_len : field_len;
+    int result = memcmp(name, field_name, shared);
+    if (0 != result) {
+        return result;
+    }
+    return (name_len < field_len) ? -1 : ((name_len > field_len) ? 1 : 0);
+}
+
+/* Build the sorted index of @p type (no-op when unsuitable or present). */
+static void reflect_lookup_build(const shrewd_basic_reflect_type_t *type)
+{
+    reflect_lookup_t *slot = NULL;
+    if ((SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind)
+            || (type->sb_refl_field_count > REFLECT_LOOKUP_FIELDS)) {
+        return;
+    }
+    for (size_t i = 0; i < REFLECT_LOOKUP_SLOTS; ++i) {
+        if (type == g_lookup[i].type) {
+            return;
+        }
+        if ((NULL == g_lookup[i].type) && (NULL == slot)) {
+            slot = &g_lookup[i];
+        }
+    }
+    if (NULL == slot) {
+        slot = &g_lookup[g_lookup_next];
+        g_lookup_next = (g_lookup_next + 1) % REFLECT_LOOKUP_SLOTS;
+    }
+    slot->type = type;
+    slot->count = type->sb_refl_field_count;
+    for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
+        const shrewd_basic_reflect_field_t *field = &type->sb_refl_fields[i];
+        size_t j = i;
+        while ((0 < j) && (0 > strcmp(field->sb_refl_name,
+                                      slot->sorted[j - 1]->sb_refl_name))) {
+            slot->sorted[j] = slot->sorted[j - 1];
+            --j;
+        }
+        slot->sorted[j] = field;
+    }
+}
+
+/*
+ * Query the sorted index: 1 in *out_indexed when @p type has one, with
+ * *out_field the hit (NULL when the name is absent). 0 means "not
+ * indexed" and *out_field is untouched.
+ */
+static int reflect_lookup_query(const shrewd_basic_reflect_type_t *type,
+                                const char *name, size_t name_len,
+                                const shrewd_basic_reflect_field_t **out_field)
+{
+    for (size_t i = 0; i < REFLECT_LOOKUP_SLOTS; ++i) {
+        const reflect_lookup_t *slot = &g_lookup[i];
+        if (type != slot->type) {
+            continue;
+        }
+        size_t low = 0;
+        size_t high = slot->count;
+        *out_field = NULL;
+        while (low < high) {
+            size_t mid = low + ((high - low) / 2);
+            int result = reflect_name_cmp(name, name_len,
+                                          slot->sorted[mid]->sb_refl_name);
+            if (0 == result) {
+                *out_field = slot->sorted[mid];
+                break;
+            }
+            if (0 > result) {
+                high = mid;
+            } else {
+                low = mid + 1;
+            }
+        }
+        return 1;
+    }
+    return 0;
+}
+
+/*
+ * Find a field by name (not necessarily NUL-terminated at @p name_len),
+ * through the sorted index when available and a linear scan otherwise -
+ * building the index either way so the next lookup is cheap.
+ */
+static const shrewd_basic_reflect_field_t *reflect_field_find(
+        const shrewd_basic_reflect_type_t *type, const char *name, size_t name_len)
+{
+    const shrewd_basic_reflect_field_t *field = NULL;
+    if (0 != reflect_lookup_query(type, name, name_len, &field)) {
+        return field;
+    }
+    for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
+        const shrewd_basic_reflect_field_t *candidate = &type->sb_refl_fields[i];
+        if ((strlen(candidate->sb_refl_name) == name_len)
+                && (0 == memcmp(candidate->sb_refl_name, name, name_len))) {
+            reflect_lookup_build(type);
+            return candidate;
+        }
+    }
+    reflect_lookup_build(type);
+    return NULL;
+}
+
 int shrewd_basic_reflect_type_find_field(const shrewd_basic_reflect_type_t *type,
                                          const char *name,
                                          const shrewd_basic_reflect_field_t **out)
@@ -198,11 +327,11 @@ int shrewd_basic_reflect_type_find_field(const shrewd_basic_reflect_type_t *type
                          "field", "find_field: type, name or out is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
-    for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
-        if (0 == strcmp(type->sb_refl_fields[i].sb_refl_name, name)) {
-            *out = &type->sb_refl_fields[i];
-            return SHREWD_BASIC_ERR_OK;
-        }
+    const shrewd_basic_reflect_field_t *field =
+            reflect_field_find(type, name, strlen(name));
+    if (NULL != field) {
+        *out = field;
+        return SHREWD_BASIC_ERR_OK;
     }
     shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
                      "field", "find_field: no field \"%s\"\n", name);
@@ -299,15 +428,7 @@ static int reflect_path_walk(const unsigned char *object,
         if (SHREWD_BASIC_REFLECT_KIND_STRUCT != cur->sb_refl_kind) {
             return SHREWD_BASIC_ERR_KEY_NOTFOUND;
         }
-        field = NULL;
-        for (size_t i = 0; i < cur->sb_refl_field_count; ++i) {
-            const char *candidate = cur->sb_refl_fields[i].sb_refl_name;
-            if ((strlen(candidate) == name_len)
-                    && (0 == memcmp(candidate, name, name_len))) {
-                field = &cur->sb_refl_fields[i];
-                break;
-            }
-        }
+        field = reflect_field_find(cur, name, name_len);
         if (NULL == field) {
             return SHREWD_BASIC_ERR_KEY_NOTFOUND;
         }

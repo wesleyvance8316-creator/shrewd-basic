@@ -181,7 +181,7 @@ SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                /* 跨 TU 
 | `kind_name(kind)` | kind 的名字 | — |
 | `enum_find_name(type, value, &name)` | 枚举值→常量名 | `KEY_NOTFOUND` / `ARG_INVALID` |
 | `enum_find_value(type, name, &value)` | 常量名→枚举值 | `KEY_NOTFOUND` / `ARG_INVALID` |
-| `type_find_field(type, name, &field)` | 扁平按名查字段 | `KEY_NOTFOUND` / `ARG_INVALID` |
+| `type_find_field(type, name, &field)` | 扁平按名查字段(排序索引加速) | `KEY_NOTFOUND` / `ARG_INVALID` |
 | `field_get(obj, field, out, n)` | 原始字节读字段(`n == field->sb_refl_size`) | `REFLECT_MISMATCH` / `ARG_INVALID` |
 | `field_set(obj, field, in, n)` | 原始字节写字段 | 同上 |
 | `dump(type, obj, label)` 宏 | 递归打印(type 需为 STRUCT):单条 log 记录、记录调用位置 | `ARG_INVALID` / `MEM_NOMEM` |
@@ -198,7 +198,14 @@ SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                /* 跨 TU 
 | `destroy(obj, type)` | 深释放(copy 的逆) | `REFLECT_NOT_SUPPORTED` / `ARG_INVALID` |
 | `visit(obj, type, fn, ctx)` | 事件流遍历(ENTER/LEAF/EXIT/…,跟随指针,环→CYCLE) | `ARG_INVALID` |
 
-### 5.1 get/set 的尺寸规则
+### 5.1 查找加速与 get/set 的尺寸规则
+
+字段查找(`find_field` 以及 `resolve`/`path_get`/`path_set` 的路径段查找)经过按类型缓存的
+**排序索引**二分加速:描述符保持纯 const,索引是惰性构建的运行时侧表(静态、零分配,
+8 槽 × 64 字段,槽满后轮转回收)。超过 64 字段的类型回落线性扫描(结果不受影响);
+与 log 模块注册一样**不支持多线程同时首次使用**。
+
+#### get/set 的尺寸规则
 
 `value_size` 必须等于目标的字节宽度(`field->sb_refl_size` 或 `ops->value_size`),否则
 `REFLECT_MISMATCH`;数组整体读写时 `n` 为总字节,路径以索引结尾时为单元素宽度
