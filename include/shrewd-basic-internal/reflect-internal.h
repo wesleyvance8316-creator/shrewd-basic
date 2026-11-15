@@ -121,6 +121,61 @@ static inline size_t reflect_strn_len(const char *text, size_t max)
     return n;
 }
 
+/* Width-matched store: the write-side twin of reflect_load_u64(). */
+static inline void reflect_store_u64(unsigned char *bytes, size_t nbytes,
+                                     uint64_t value)
+{
+    switch (nbytes) {
+    case 1: {
+        uint8_t narrowed = (uint8_t)value;
+        memcpy(bytes, &narrowed, sizeof(narrowed));
+        break;
+    }
+    case 2: {
+        uint16_t narrowed = (uint16_t)value;
+        memcpy(bytes, &narrowed, sizeof(narrowed));
+        break;
+    }
+    case 4: {
+        uint32_t narrowed = (uint32_t)value;
+        memcpy(bytes, &narrowed, sizeof(narrowed));
+        break;
+    }
+    case 8:
+        memcpy(bytes, &value, sizeof(value));
+        break;
+    default:
+        break;
+    }
+}
+
+/*
+ * Bit-group helpers for F_BITS fields. Out-of-range positions (bad
+ * author input) extract as 0 and leave the unit untouched on insert -
+ * defined behavior either way.
+ */
+static inline uint64_t reflect_bits_extract(uint64_t unit, size_t offset,
+                                            size_t width)
+{
+    uint64_t mask = 0;
+    if ((0 == width) || (64 < width) || (64 <= offset) || (64 < (offset + width))) {
+        return 0;
+    }
+    mask = (64 == width) ? UINT64_MAX : ((UINT64_C(1) << width) - 1);
+    return (unit >> offset) & mask;
+}
+
+static inline void reflect_bits_insert(uint64_t *unit, size_t offset,
+                                       size_t width, uint64_t value)
+{
+    uint64_t mask = 0;
+    if ((0 == width) || (64 < width) || (64 <= offset) || (64 < (offset + width))) {
+        return;
+    }
+    mask = (64 == width) ? UINT64_MAX : ((UINT64_C(1) << width) - 1);
+    *unit = (*unit & ~(mask << offset)) | ((value & mask) << offset);
+}
+
 /*
  * Element storage of an array-shaped field, inline or dynamic. For a
  * F_DARRAY field the table pointer is followed: a NULL table yields an

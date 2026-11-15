@@ -176,6 +176,8 @@ typedef struct shrewd_basic_reflect_field {
     const shrewd_basic_reflect_ops_t *sb_refl_ops;   /**< Field-level override; NULL = type ops. */
     size_t sb_refl_limit_offset;                     /**< F_DARRAY: owner offset of the count member. */
     size_t sb_refl_limit_size;                       /**< Its width; both 0 without a count member. */
+    size_t sb_refl_bit_offset;                       /**< F_BITS: first bit inside the unit. */
+    size_t sb_refl_bit_width;                        /**< F_BITS: number of bits in the group. */
 } shrewd_basic_reflect_field_t;
 
 /** One name/value pair of a reflected enum. */
@@ -240,6 +242,18 @@ struct shrewd_basic_reflect_type {
  * Comparison, hashing and dump are unaffected (content semantics).
  */
 #define SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED ((uint32_t)64u)
+
+/**
+ * Field flag: a bit group inside a real integer unit member (register
+ * bit-fields, protocol headers). The field's value is the group's bits
+ * zero-extended to the unit's width: get/set exchange that value
+ * (n == sizeof(unit), read-modify-write on the unit) and
+ * equal/diff/hash/dump use the bits only - other bits of the unit are
+ * ignored. C bit-fields cannot be described (their layout is
+ * implementation-defined and not introspectable); this flag covers
+ * explicit unit + bit position instead.
+ */
+#define SHREWD_BASIC_REFLECT_FIELD_F_BITS ((uint32_t)128u)
 
 /** Primitive descriptors; pass them to FIELD_ARRAY/FIELD_STRUCT by name. */
 extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_bool;
@@ -621,6 +635,30 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
         .sb_refl_stride = sizeof(((struct_type *)0)->member),                  \
         .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED,            \
         .sb_refl_ops = &(ops_ref)                                              \
+    }
+
+/*
+ * Describe a bit group inside a real integer unit member. @p unit is the
+ * compile-time member holding the bits (offsetof works on it); @p name
+ * is the group's label - it need not be a member - and bit_offset/
+ * bit_width come from the register map or protocol spec. Multiple
+ * groups may share one unit. get/set exchange the group zero-extended to
+ * the unit's width (read-modify-write); equal/diff/hash compare the
+ * group's bits only. C bit-field members themselves cannot be described
+ * (implementation-defined layout) - this macro covers explicit units.
+ */
+#define SHREWD_BASIC_REFLECT_FIELD_BITS(struct_type, unit, name, bit_offset, bit_width) \
+    {                                                                          \
+        .sb_refl_name = #name,                                                 \
+        .sb_refl_type = SHREWD_BASIC_REFLECT_PRIM_TYPE(                        \
+                ((struct_type *)0)->unit),                                     \
+        .sb_refl_offset = offsetof(struct_type, unit),                         \
+        .sb_refl_size = sizeof(((struct_type *)0)->unit),                      \
+        .sb_refl_count = (size_t)1,                                            \
+        .sb_refl_stride = sizeof(((struct_type *)0)->unit),                    \
+        .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_BITS,                    \
+        .sb_refl_bit_offset = (size_t)(bit_offset),                            \
+        .sb_refl_bit_width = (size_t)(bit_width)                               \
     }
 
 /* FIELD_STRUCT with a field-level ops override (takes precedence over type ops). */

@@ -15,7 +15,7 @@
  * type_resolve, path_get/set, value_get/set, check, equal, copy,
  * destroy, dynamic arrays (F_DARRAY/F_SENTINEL), flexible tails
  * (F_FLEX), string buffers (F_STRINGBUF), owned strings
- * (F_STRING_OWNED), the traversal accessors,
+ * (F_STRING_OWNED), bit groups (F_BITS), the traversal accessors,
  * visit (event-by-event walk) and diff/hash.
  * The 1 MiB dump body cap is covered by the test suite
  * instead - its output would flood the terminal here.
@@ -198,6 +198,18 @@ typedef struct {
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(owned_type, owned_t,
     SHREWD_BASIC_REFLECT_FIELD_STRING_OWNED(owned_t, title),
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(owned_t, borrowed));
+
+/* A register-style unit: named bit groups share one uint32 word. */
+typedef struct {
+    uint32_t cfg;
+    int32_t value;
+} reg_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(reg_type, reg_t,
+    SHREWD_BASIC_REFLECT_FIELD_BITS(reg_t, cfg, ready, 0, 1),
+    SHREWD_BASIC_REFLECT_FIELD_BITS(reg_t, cfg, mode, 1, 3),
+    SHREWD_BASIC_REFLECT_FIELD_BITS(reg_t, cfg, divider, 8, 16),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(reg_t, value));
 
 /* An enum: int-compatible values with a name/value table. */
 typedef enum {
@@ -717,6 +729,35 @@ int main(void)
         print_status("destroy(owned)",
                      shrewd_basic_reflect_destroy(owned, &owned_type));
     }
+
+    banner("16. bit groups: named bits inside a register word");
+    reg_t reg;
+    memset(&reg, 0, sizeof(reg));
+    reg.cfg = (1u << 0) | (5u << 1) | (100u << 8) | 0xf0u | 0xab000000u;
+    reg.value = 7;
+    printf("  raw unit cfg = 0x%08x (unused bits carry garbage)\n", reg.cfg);
+    (void)shrewd_basic_reflect_dump(&reg_type, &reg, "reg");
+    uint32_t mode = 0;
+    print_status("field_get \"mode\"",
+                 shrewd_basic_reflect_field_get(
+                         &reg, shrewd_basic_reflect_type_field_at(&reg_type, 1),
+                         &mode, sizeof(mode)));
+    printf("  -> mode = %u\n", mode);
+    mode = 3;
+    print_status("field_set \"mode\" = 3",
+                 shrewd_basic_reflect_field_set(
+                         &reg, shrewd_basic_reflect_type_field_at(&reg_type, 1),
+                         &mode, sizeof(mode)));
+    printf("  cfg after write = 0x%08x (only bits 1-3 changed)\n", reg.cfg);
+    reg_t reg_other;
+    memset(&reg_other, 0, sizeof(reg_other));
+    reg_other.cfg = (reg.cfg & 0xffffu) | 0x07000000u; /* same groups, other garbage */
+    reg_other.value = 7;
+    bool reg_same = false;
+    print_status("equal(reg, other)",
+                 shrewd_basic_reflect_equal(&reg, &reg_other, &reg_type, &reg_same));
+    printf("  -> %s (unused unit bits are invisible)\n",
+           reg_same ? "equal" : "different");
 
     printf("\nDemo done. See docs/reflect.md for the full reference.\n");
     return 0;

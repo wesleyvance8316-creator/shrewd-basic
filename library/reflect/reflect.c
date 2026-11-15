@@ -359,6 +359,13 @@ int shrewd_basic_reflect_field_get(const void *object,
         return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
     }
     memcpy(out_value, (const unsigned char *)object + field->sb_refl_offset, bytes);
+    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_BITS)) {
+        /* Bit group: exchange the extracted value, zero-extended. */
+        uint64_t unit = reflect_load_u64(out_value, bytes);
+        uint64_t value = reflect_bits_extract(unit, field->sb_refl_bit_offset,
+                                              field->sb_refl_bit_width);
+        reflect_store_u64(out_value, bytes, value);
+    }
     shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
                      "field", "field_get ok (%s, %zu bytes)\n",
                      field->sb_refl_name, bytes);
@@ -385,7 +392,18 @@ int shrewd_basic_reflect_field_set(void *object,
                          value_size, bytes);
         return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
     }
-    memcpy((unsigned char *)object + field->sb_refl_offset, value, bytes);
+    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_BITS)) {
+        /* Bit group: read-modify-write the unit. */
+        uint64_t unit = reflect_load_u64((const unsigned char *)object
+                                         + field->sb_refl_offset, bytes);
+        reflect_bits_insert(&unit, field->sb_refl_bit_offset,
+                            field->sb_refl_bit_width,
+                            reflect_load_u64((const unsigned char *)value, bytes));
+        reflect_store_u64((unsigned char *)(uintptr_t)object + field->sb_refl_offset,
+                          bytes, unit);
+    } else {
+        memcpy((unsigned char *)object + field->sb_refl_offset, value, bytes);
+    }
     shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
                      "field", "field_set ok (%s, %zu bytes)\n",
                      field->sb_refl_name, bytes);
@@ -589,6 +607,12 @@ int shrewd_basic_reflect_path_get(const void *object,
         return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
     }
     memcpy(out_value, at, size);
+    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_BITS)) {
+        uint64_t unit = reflect_load_u64(out_value, size);
+        uint64_t value = reflect_bits_extract(unit, field->sb_refl_bit_offset,
+                                              field->sb_refl_bit_width);
+        reflect_store_u64(out_value, size, value);
+    }
     reflect_path_log(SHREWD_BASIC_ERR_OK, "path_get", path, size);
     return SHREWD_BASIC_ERR_OK;
 }
@@ -617,7 +641,15 @@ int shrewd_basic_reflect_path_set(void *object,
                          value_size, size);
         return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
     }
-    memcpy((unsigned char *)(uintptr_t)at, value, size);
+    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_BITS)) {
+        uint64_t unit = reflect_load_u64(at, size);
+        reflect_bits_insert(&unit, field->sb_refl_bit_offset,
+                            field->sb_refl_bit_width,
+                            reflect_load_u64((const unsigned char *)value, size));
+        reflect_store_u64((unsigned char *)(uintptr_t)at, size, unit);
+    } else {
+        memcpy((unsigned char *)(uintptr_t)at, value, size);
+    }
     reflect_path_log(SHREWD_BASIC_ERR_OK, "path_set", path, size);
     return SHREWD_BASIC_ERR_OK;
 }

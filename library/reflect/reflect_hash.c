@@ -154,6 +154,15 @@ static int hash_value(const shrewd_basic_reflect_type_t *type,
             *h = hash_bytes(*h, text, len);
             continue;
         }
+        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_BITS)) {
+            /* Bit groups fold their extracted bits. */
+            uint64_t unit = reflect_load_u64(value + field->sb_refl_offset,
+                                             field->sb_refl_size);
+            *h = hash_u64(*h, reflect_bits_extract(unit,
+                                                   field->sb_refl_bit_offset,
+                                                   field->sb_refl_bit_width));
+            continue;
+        }
         reflect_array_view_t view = reflect_array_view(value, field);
         *h = hash_u64(*h, (uint64_t)view.count);
         for (size_t j = 0; j < view.count; ++j) {

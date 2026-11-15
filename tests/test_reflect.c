@@ -3041,6 +3041,167 @@ static void test_owned_strings(void)
                   SHREWD_BASIC_ERR_OK);
 }
 
+/* --- bit-group fixtures ------------------------------------------------ */
+
+/* A register-style unit: three named groups share one uint32 word. */
+typedef struct {
+    uint32_t cfg;
+    int32_t value;
+} reg_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_reg_reflect, reg_t,
+    SHREWD_BASIC_REFLECT_FIELD_BITS(reg_t, cfg, ready, 0, 1),
+    SHREWD_BASIC_REFLECT_FIELD_BITS(reg_t, cfg, mode, 1, 3),
+    SHREWD_BASIC_REFLECT_FIELD_BITS(reg_t, cfg, divider, 8, 16),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(reg_t, value));
+
+static void test_bits(void)
+{
+    /* Descriptor shape: unit offsets plus bit position/width. */
+    const shrewd_basic_reflect_field_t *field =
+        find_or_fail("bits", &g_reg_reflect, "mode");
+    if (NULL == field) {
+        return;
+    }
+    expect_true("bits shape",
+                (SHREWD_BASIC_REFLECT_FIELD_F_BITS == field->sb_refl_flags)
+                && (offsetof(reg_t, cfg) == field->sb_refl_offset)
+                && (sizeof(uint32_t) == field->sb_refl_size)
+                && ((size_t)1 == field->sb_refl_bit_offset)
+                && ((size_t)3 == field->sb_refl_bit_width)
+                && (&shrewd_basic_reflect_uint32 == field->sb_refl_type));
+
+    /* Extract: unused unit bits are invisible to get. Garbage lives in
+       bits 4-7 and 24-31 (the groups cover bits 0 and 1-3 and 8-23). */
+    reg_t reg;
+    memset(&reg, 0, sizeof(reg));
+    reg.cfg = (1u << 0) | (5u << 1) | (100u << 8) | 0xf0u | 0xab000000u;
+    reg.value = 7;
+    uint32_t word = 0;
+    field = find_or_fail("bits", &g_reg_reflect, "ready");
+    if (NULL != field) {
+        expect_eq_int("bits get ready",
+                      shrewd_basic_reflect_field_get(&reg, field, &word, sizeof(word)),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("bits ready value", 1u == word);
+    }
+    field = find_or_fail("bits", &g_reg_reflect, "mode");
+    if (NULL != field) {
+        expect_eq_int("bits get mode",
+                      shrewd_basic_reflect_field_get(&reg, field, &word, sizeof(word)),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("bits mode value", 5u == word);
+    }
+    field = find_or_fail("bits", &g_reg_reflect, "divider");
+    if (NULL != field) {
+        expect_eq_int("bits get divider",
+                      shrewd_basic_reflect_field_get(&reg, field, &word, sizeof(word)),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("bits divider value", 100u == word);
+    }
+
+    /* Insert: only the group's bits change (read-modify-write). */
+    word = 3;
+    field = find_or_fail("bits", &g_reg_reflect, "mode");
+    if (NULL != field) {
+        expect_eq_int("bits set mode",
+                      shrewd_basic_reflect_field_set(&reg, field, &word, sizeof(word)),
+                      SHREWD_BASIC_ERR_OK);
+    }
+    expect_true("bits set only group",
+                reg.cfg == ((1u << 0) | (3u << 1) | (100u << 8) | 0xf0u | 0xab000000u));
+
+    /* Paths resolve to groups too. */
+    word = 0;
+    expect_eq_int("bits path_get",
+                  shrewd_basic_reflect_path_get(&reg, &g_reg_reflect, "divider",
+                                                &word, sizeof(word)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("bits path value", 100u == word);
+    word = 0;
+    expect_eq_int("bits path_set",
+                  shrewd_basic_reflect_path_set(&reg, &g_reg_reflect, "ready",
+                                                &word, sizeof(word)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("bits path wrote", 0u == (reg.cfg & 1u));
+
+    /* equal/hash use the groups only: garbage in unused bits is equal. */
+    reg_t other;
+    memset(&other, 0, sizeof(other));
+    other.cfg = (0u << 0) | (3u << 1) | (100u << 8) | 0x30u | 0x07000000u;
+    other.value = 7;
+    bool same = false;
+    expect_eq_int("bits equal",
+                  shrewd_basic_reflect_equal(&reg, &other, &g_reg_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("bits equal yes", same);
+    size_t ha = 0;
+    size_t hb = 0;
+    expect_eq_int("bits hash a",
+                  shrewd_basic_reflect_hash(&reg, &g_reg_reflect, &ha),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("bits hash b",
+                  shrewd_basic_reflect_hash(&other, &g_reg_reflect, &hb),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("bits hash same", ha == hb);
+
+    /* A group difference is a first-class difference. */
+    other.cfg |= (1u << 8); /* divider 100 -> 101 */
+    char path[64];
+    expect_eq_int("bits diff",
+                  shrewd_basic_reflect_diff(&reg, &other, &g_reg_reflect,
+                                            path, sizeof(path)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("bits diff path", 0 == strcmp(path, "divider"));
+
+    /* dump shows the extracted numbers, not the whole unit. */
+    shrewd_basic_log_module_t *module = NULL;
+    expect_eq_int("bits find module",
+                  shrewd_basic_log_module_find("reflect", &module),
+                  SHREWD_BASIC_ERR_OK);
+    FILE *stream = tmpfile();
+    expect_true("bits tmpfile", NULL != stream);
+    if (NULL == stream) {
+        return;
+    }
+    shrewd_basic_log_module_set_stream(module, stream);
+    reg.cfg = (1u << 0) | (3u << 1) | (100u << 8) | 0xf0u | 0xab000000u;
+    expect_eq_int("bits dump",
+                  shrewd_basic_reflect_dump(&g_reg_reflect, &reg, "reg"),
+                  SHREWD_BASIC_ERR_OK);
+    char buf[4096] = {0};
+    slurp(stream, buf, sizeof(buf));
+    expect_true("bits dump groups",
+                (NULL != strstr(buf, "  ready = 1"))
+                && (NULL != strstr(buf, "  mode = 3"))
+                && (NULL != strstr(buf, "  divider = 100")));
+    expect_true("bits dump hides unit", NULL == strstr(buf, "2868903936")); /* 0xab000000 */
+    shrewd_basic_log_module_set_stream(module, stderr);
+    fclose(stream);
+
+    /* visit reports each group as one LEAF. */
+    visit_rec_t rec;
+    memset(&rec, 0, sizeof(rec));
+    expect_eq_int("bits visit",
+                  shrewd_basic_reflect_visit(&reg, &g_reg_reflect, visit_collect, &rec),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("bits visit leaves",
+                (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "ready"))
+                && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "mode"))
+                && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "divider")));
+
+    /* copy carries the unit bytes; equal stays group-based. */
+    reg_t *clone = NULL;
+    expect_eq_int("bits copy",
+                  shrewd_basic_reflect_copy((void **)&clone, &reg, &g_reg_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("bits clone unit",
+                (NULL != clone) && (clone->cfg == reg.cfg) && (clone->value == reg.value));
+    expect_eq_int("bits destroy clone",
+                  shrewd_basic_reflect_destroy(clone, &g_reg_reflect),
+                  SHREWD_BASIC_ERR_OK);
+}
+
 int main(void)
 {
     test_describe();
@@ -3062,6 +3223,7 @@ int main(void)
     test_hash();
     test_stringbuf();
     test_owned_strings();
+    test_bits();
     test_graph_ops();
     test_equal();
     test_dynamic_arrays();

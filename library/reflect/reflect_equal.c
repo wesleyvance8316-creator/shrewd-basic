@@ -174,6 +174,23 @@ static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
             diff_path_restore(diff, mark);
             continue;
         }
+        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_BITS)) {
+            /* Bit groups compare their bits only; other unit bits are
+               invisible. */
+            uint64_t unit_a = reflect_load_u64(a + field->sb_refl_offset,
+                                               field->sb_refl_size);
+            uint64_t unit_b = reflect_load_u64(b + field->sb_refl_offset,
+                                               field->sb_refl_size);
+            if (reflect_bits_extract(unit_a, field->sb_refl_bit_offset,
+                                     field->sb_refl_bit_width)
+                    != reflect_bits_extract(unit_b, field->sb_refl_bit_offset,
+                                            field->sb_refl_bit_width)) {
+                *out_equal = false;
+                return SHREWD_BASIC_ERR_OK;
+            }
+            diff_path_restore(diff, mark);
+            continue;
+        }
         if (view_a.count != view_b.count) {
             *out_equal = false;
             return SHREWD_BASIC_ERR_OK;

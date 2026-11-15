@@ -303,6 +303,16 @@ static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
             dump_emit(ctx);
             continue;
         }
+        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_BITS)) {
+            /* Bit group: the extracted bits, not the whole unit. */
+            uint64_t unit = reflect_load_u64(at, field->sb_refl_size);
+            dump_append(ctx, "%*s%s = %llu", pad, "", field->sb_refl_name,
+                        (unsigned long long)reflect_bits_extract(
+                                unit, field->sb_refl_bit_offset,
+                                field->sb_refl_bit_width));
+            dump_emit(ctx);
+            continue;
+        }
         if ((0 != is_array) || (0 != is_darray)) {
             /* Inline or dynamic array of values or of pointers. */
             reflect_array_view_t view = reflect_array_view(object, field);

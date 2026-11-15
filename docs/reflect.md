@@ -149,6 +149,7 @@ shrewd_basic_reflect_void     /* 不透明目标(OPAQUE),size = 0 */
 | `FIELD_FLEX(struct_type, member, count_member, ref)` | 柔性尾部(尾部内联 + 计数联动) |
 | `FIELD_STRING_BUFFER(struct_type, member)` | `char[N]` 文本缓冲:按 C 字符串渲染/比较(dump 引号转义、equal/diff/hash 到 NUL 为止、visit 单 LEAF;get/set 仍是原始 N 字节) |
 | `FIELD_STRING_OWNED(struct_type, member)` | 图**拥有**的 `char *`:copy 克隆内容(共享串保持共享)、destroy 释放;NULL 保持 NULL;equal/hash/dump 不变 |
+| `FIELD_BITS(struct_type, unit, name, bit_offset, bit_width)` | 真实整数单元内的位组(寄存器位段/协议头):get/set 读改写单元(值零扩展到单元宽度),equal/diff/hash/dump 只看该组的位;**C 位域成员无法描述**(布局实现定义) |
 | `FIELD_*_OPS`(全部形态各有变体) | 同上 + 字段级 ops 覆盖 |
 
 `ref`/`ops_ref` 参数**不带 `&`**(宏内部补 `&` 以保持地址常量)。
