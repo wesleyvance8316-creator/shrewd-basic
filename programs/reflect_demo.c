@@ -8,10 +8,12 @@
  * through the "reflect" log module - colored on a terminal - while the
  * section banners use plain printf.
  *
- * Covered: TYPE_DEFINE/DECLARE/DEFINE_OPS/OPAQUE_DEFINE, FIELD/FIELD_
- * STRUCT/FIELD_ARRAY/FIELD_PTR/FIELD_PTR_ARRAY (+ _OPS variants),
- * kind_name, type_find_field, field_get/set, dump, type_resolve,
- * path_get/set, value_get/set, check, copy, destroy.
+ * Covered: TYPE_DEFINE/DECLARE/DEFINE_OPS/OPAQUE_DEFINE/ENUM_DEFINE,
+ * FIELD_PRIMITIVE/STRUCT/ARRAY/PTR/PTR_ARRAY/FIELD_ENUM (+ _OPS
+ * variants), kind_name, type_find_field, enum_find_name/value,
+ * field_get/set, dump (incl. ops->render and cycle markers),
+ * type_resolve, path_get/set, value_get/set, check, equal, copy,
+ * destroy.
  */
 
 #include <stdint.h>
@@ -103,12 +105,22 @@ static void handle_destroy(void *pointee)
     (void)shrewd_basic_platform_free(&pointee);
 }
 
+/* Custom dump text for a followed handle instead of a raw address. */
+static int handle_render(const void *pointee, char *buf, size_t buf_size)
+{
+    int32_t value = 0;
+    memcpy(&value, pointee, sizeof(value));
+    (void)snprintf(buf, buf_size, "handle#%d", value);
+    return SHREWD_BASIC_ERR_OK;
+}
+
 static const shrewd_basic_reflect_ops_t g_handle_ops = {
     .value_size = sizeof(int32_t),
     .get = handle_get,
     .set = handle_set,
     .check = handle_check,
     .copy = handle_copy,
+    .render = handle_render,
     .destroy = handle_destroy };
 
 SHREWD_BASIC_REFLECT_OPAQUE_DEFINE(handle_type, "handle", g_handle_ops);
@@ -133,6 +145,18 @@ static const shrewd_basic_reflect_ops_t g_scale_ops = {
     .copy = handle_copy,
     .destroy = handle_destroy };
 
+/* An enum: int-compatible values with a name/value table. */
+typedef enum {
+    MODE_OFF = 0,
+    MODE_ON = 1,
+    MODE_AUTO = 2
+} mode_t;
+
+SHREWD_BASIC_REFLECT_ENUM_DEFINE(mode_type, mode_t,
+    SHREWD_BASIC_REFLECT_ENUM_VALUE(MODE_OFF),
+    SHREWD_BASIC_REFLECT_ENUM_VALUE(MODE_ON),
+    SHREWD_BASIC_REFLECT_ENUM_VALUE(MODE_AUTO));
+
 /* A rich struct exercising every field flavor. */
 typedef struct {
     const char *name;
@@ -142,6 +166,7 @@ typedef struct {
     uint64_t big;
     float ratio;
     double precise;
+    mode_t mode;
     char tag[4];
     int32_t scores[3];
     point_t home;
@@ -161,6 +186,7 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(person_type, person_t,
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, big),
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, ratio),
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, precise),
+    SHREWD_BASIC_REFLECT_FIELD_ENUM(person_t, mode, mode_type),
     SHREWD_BASIC_REFLECT_FIELD_ARRAY(person_t, tag, shrewd_basic_reflect_char),
     SHREWD_BASIC_REFLECT_FIELD_ARRAY(person_t, scores, shrewd_basic_reflect_int32),
     SHREWD_BASIC_REFLECT_FIELD_STRUCT(person_t, home, point_type),
@@ -260,6 +286,8 @@ int main(void)
     person.ptr = &point;
     person.p_str = &text;
     person.ctx = &marker; /* opaque: dump shows the address */
+    int32_t handle_value = 42;
+    person.handle = &handle_value; /* ops->render: dump shows handle#42 */
     (void)shrewd_basic_reflect_dump(&person_type, &person, "person");
 
     node_t tail;
@@ -383,6 +411,46 @@ int main(void)
     printf("  shrewd_demo_reflect_ext_sum(&point) -> %d\n",
            shrewd_demo_reflect_ext_sum(&point));
     shrewd_demo_reflect_ext_dump(&point);
+
+    banner("8. enums and deep comparison");
+    const char *mode_name = NULL;
+    print_status("enum_find_name(mode_type, 1)",
+                 shrewd_basic_reflect_enum_find_name(&mode_type, 1, &mode_name));
+    printf("  -> %s\n", mode_name);
+    int64_t mode_value = 0;
+    print_status("enum_find_value(\"MODE_AUTO\")",
+                 shrewd_basic_reflect_enum_find_value(&mode_type, "MODE_AUTO",
+                                                      &mode_value));
+    printf("  -> %lld\n", (long long)mode_value);
+
+    person_t other;
+    memset(&other, 0, sizeof(other));
+    other = person;
+    other.name = "Alice"; /* same content, different pointer */
+    bool same = false;
+    print_status("equal(person, other)",
+                 shrewd_basic_reflect_equal(&person, &other, &person_type, &same));
+    printf("  -> %s (strings compare by content)\n",
+           same ? "equal" : "different");
+    other.age = 0;
+    person.mode = MODE_AUTO;
+    other.mode = MODE_ON;
+    print_status("equal(after changes)",
+                 shrewd_basic_reflect_equal(&person, &other, &person_type, &same));
+    printf("  -> %s\n", same ? "equal" : "different");
+
+    banner("9. cyclic graphs: dump, check, copy, destroy");
+    loop.data = 1; /* the self-cycle node from section 4, reused here */
+    printf("  self-cycle dump (note the ...(cyclic) marker):\n");
+    (void)shrewd_basic_reflect_dump(&node_type, &loop, "node");
+    node_t *cycle = NULL;
+    print_status("copy(self-cycle)",
+                 shrewd_basic_reflect_copy((void **)&cycle, &loop, &node_type));
+    printf("  clone keeps the cycle: %s\n",
+           ((cycle != &loop) && (cycle->next == cycle)) ? "yes" : "no");
+    print_status("check(clone)", shrewd_basic_reflect_check(cycle, &node_type));
+    print_status("destroy(clone)",
+                 shrewd_basic_reflect_destroy(cycle, &node_type));
 
     printf("\nDemo done. See docs/reflect.md for the full reference.\n");
     return 0;
