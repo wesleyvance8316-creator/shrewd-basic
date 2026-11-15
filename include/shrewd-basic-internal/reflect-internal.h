@@ -109,6 +109,19 @@ static inline const char *reflect_load_str(const unsigned char *bytes)
 }
 
 /*
+ * Bounded strlen for string buffers (strnlen is POSIX, not C11): scans
+ * at most @p max bytes and stops at the first NUL.
+ */
+static inline size_t reflect_strn_len(const char *text, size_t max)
+{
+    size_t n = 0;
+    while ((n < max) && ('\0' != text[n])) {
+        ++n;
+    }
+    return n;
+}
+
+/*
  * Element storage of an array-shaped field, inline or dynamic. For a
  * F_DARRAY field the table pointer is followed: a NULL table yields an
  * empty view, a F_SENTINEL table is bounded by its NULL slot, and any

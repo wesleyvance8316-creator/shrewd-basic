@@ -14,8 +14,8 @@
  * field_get/set, dump (incl. ops->render and cycle markers),
  * type_resolve, path_get/set, value_get/set, check, equal, copy,
  * destroy, dynamic arrays (F_DARRAY/F_SENTINEL), flexible tails
- * (F_FLEX), the traversal accessors, visit (event-by-event walk) and
- * diff/hash.
+ * (F_FLEX), string buffers (F_STRINGBUF), the traversal accessors,
+ * visit (event-by-event walk) and diff/hash.
  * The 1 MiB dump body cap is covered by the test suite
  * instead - its output would flood the terminal here.
  */
@@ -177,6 +177,16 @@ typedef struct {
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(packet_type, packet_t,
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(packet_t, len),
     SHREWD_BASIC_REFLECT_FIELD_FLEX(packet_t, data, len, shrewd_basic_reflect_int32));
+
+/* A char[N] text buffer: C-string semantics on inline storage. */
+typedef struct {
+    char title[12];
+    int32_t id;
+} text_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(text_type, text_t,
+    SHREWD_BASIC_REFLECT_FIELD_STRING_BUFFER(text_t, title),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(text_t, id));
 
 /* An enum: int-compatible values with a name/value table. */
 typedef enum {
@@ -639,6 +649,29 @@ int main(void)
     (void)shrewd_basic_reflect_hash(&other, &person_type, &other_hash);
     printf("  after changing one string: person=0x%zx other=0x%zx\n",
            person_hash, other_hash);
+
+    banner("14. string buffers: char[N] with C-string semantics");
+    text_t text_a;
+    text_t text_b;
+    memset(&text_a, 0, sizeof(text_a));
+    memset(&text_b, 0, sizeof(text_b));
+    memcpy(text_a.title, "hello", 6);
+    memcpy(text_b.title, "hello", 6);
+    text_b.title[6] = 'x'; /* bytes past the NUL are ignored */
+    text_a.id = 1;
+    text_b.id = 1;
+    printf("  text_a and text_b differ only past the NUL:\n");
+    (void)shrewd_basic_reflect_dump(&text_type, &text_a, "text_a");
+    (void)shrewd_basic_reflect_dump(&text_type, &text_b, "text_b");
+    bool text_same = false;
+    print_status("equal(text_a, text_b)",
+                 shrewd_basic_reflect_equal(&text_a, &text_b, &text_type, &text_same));
+    printf("  -> %s\n", text_same ? "equal" : "different");
+    memcpy(text_b.title, "world", 6);
+    print_status("diff(text_a, text_b)",
+                 shrewd_basic_reflect_diff(&text_a, &text_b, &text_type,
+                                           diff_path, sizeof(diff_path)));
+    printf("  first difference at \"%s\"\n", diff_path);
 
     printf("\nDemo done. See docs/reflect.md for the full reference.\n");
     return 0;

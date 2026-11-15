@@ -161,6 +161,19 @@ static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
                               & (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY
                                  | SHREWD_BASIC_REFLECT_FIELD_F_DARRAY)));
         diff_path_member(diff, field->sb_refl_name);
+        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
+            /* Text buffers compare by content up to the first NUL. */
+            const char *text_a = (const char *)(a + field->sb_refl_offset);
+            const char *text_b = (const char *)(b + field->sb_refl_offset);
+            size_t len_a = reflect_strn_len(text_a, field->sb_refl_count);
+            size_t len_b = reflect_strn_len(text_b, field->sb_refl_count);
+            if ((len_a != len_b) || (0 != memcmp(text_a, text_b, len_a))) {
+                *out_equal = false;
+                return SHREWD_BASIC_ERR_OK;
+            }
+            diff_path_restore(diff, mark);
+            continue;
+        }
         if (view_a.count != view_b.count) {
             *out_equal = false;
             return SHREWD_BASIC_ERR_OK;

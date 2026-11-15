@@ -176,7 +176,11 @@ static void visit_field(visit_ctx_t *ctx, const shrewd_basic_reflect_field_t *fi
 {
     size_t mark = ctx->path_len;
     visit_path_member(ctx, field->sb_refl_name);
-    if (0 != (field->sb_refl_flags
+    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
+        /* Text buffer: one string leaf, not an element list. */
+        (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_LEAF, field,
+                         object + field->sb_refl_offset, field->sb_refl_type, 0);
+    } else if (0 != (field->sb_refl_flags
               & (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY | SHREWD_BASIC_REFLECT_FIELD_F_DARRAY))) {
         visit_array(ctx, field, object, depth);
     } else if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {

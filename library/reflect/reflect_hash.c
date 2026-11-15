@@ -146,6 +146,14 @@ static int hash_value(const shrewd_basic_reflect_type_t *type,
     for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
         const shrewd_basic_reflect_field_t *field = &type->sb_refl_fields[i];
         const shrewd_basic_reflect_ops_t *field_ops = reflect_field_ops(field);
+        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
+            /* Text buffers fold by content up to the first NUL. */
+            const char *text = (const char *)(value + field->sb_refl_offset);
+            size_t len = reflect_strn_len(text, field->sb_refl_count);
+            *h = hash_u64(*h, 1);
+            *h = hash_bytes(*h, text, len);
+            continue;
+        }
         reflect_array_view_t view = reflect_array_view(value, field);
         *h = hash_u64(*h, (uint64_t)view.count);
         for (size_t j = 0; j < view.count; ++j) {

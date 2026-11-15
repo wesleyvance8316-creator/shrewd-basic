@@ -121,21 +121,11 @@ static void dump_emit(dump_ctx_t *ctx)
 }
 
 
-static void dump_string(dump_ctx_t *ctx, const char *text, size_t str_max)
+/* Escape @p len raw bytes into the body (shared by strings and buffers). */
+static void dump_escaped(dump_ctx_t *ctx, const unsigned char *text, size_t len)
 {
-    if (NULL == text) {
-        dump_append(ctx, "(null)");
-        return;
-    }
-    dump_append(ctx, "\"");
-    size_t used = 0;
-    for (const unsigned char *p = (const unsigned char *)text; '\0' != *p; ++p) {
-        if (used >= str_max) {
-            dump_append(ctx, "...(truncated)");
-            break;
-        }
-        ++used;
-        switch (*p) {
+    for (size_t i = 0; i < len; ++i) {
+        switch (text[i]) {
         case '\\':
             dump_append(ctx, "\\\\");
             break;
@@ -152,14 +142,40 @@ static void dump_string(dump_ctx_t *ctx, const char *text, size_t str_max)
             dump_append(ctx, "\\t");
             break;
         default:
-            if ((' ' <= *p) && ('~' >= *p)) {
-                dump_append(ctx, "%c", *p);
+            if ((' ' <= text[i]) && ('~' >= text[i])) {
+                dump_append(ctx, "%c", text[i]);
             } else {
-                dump_append(ctx, "\\x%02x", (unsigned int)*p);
+                dump_append(ctx, "\\x%02x", (unsigned int)text[i]);
             }
             break;
         }
     }
+}
+
+static void dump_string(dump_ctx_t *ctx, const char *text, size_t str_max)
+{
+    if (NULL == text) {
+        dump_append(ctx, "(null)");
+        return;
+    }
+    size_t len = reflect_strn_len(text, str_max);
+    dump_append(ctx, "\"");
+    dump_escaped(ctx, (const unsigned char *)text, len);
+    if ((len >= str_max) && ('\0' != text[len])) {
+        dump_append(ctx, "...(truncated)");
+    }
+    dump_append(ctx, "\"");
+}
+
+/*
+ * Render a string buffer (a F_STRINGBUF char[N]): quoted and escaped up
+ * to the first NUL, or the whole buffer when unterminated.
+ */
+static void dump_string_buf(dump_ctx_t *ctx, const char *buf, size_t size)
+{
+    size_t len = reflect_strn_len(buf, size);
+    dump_append(ctx, "\"");
+    dump_escaped(ctx, (const unsigned char *)buf, len);
     dump_append(ctx, "\"");
 }
 
@@ -279,6 +295,14 @@ static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
         int is_struct = (SHREWD_BASIC_REFLECT_KIND_STRUCT == field->sb_refl_type->sb_refl_kind);
         int is_opaque = (SHREWD_BASIC_REFLECT_KIND_OPAQUE == field->sb_refl_type->sb_refl_kind);
 
+        if ((0 != is_array)
+                && (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF))) {
+            /* Text buffer: a quoted C string, not an element list. */
+            dump_append(ctx, "%*s%s = ", pad, "", field->sb_refl_name);
+            dump_string_buf(ctx, (const char *)at, field->sb_refl_count);
+            dump_emit(ctx);
+            continue;
+        }
         if ((0 != is_array) || (0 != is_darray)) {
             /* Inline or dynamic array of values or of pointers. */
             reflect_array_view_t view = reflect_array_view(object, field);

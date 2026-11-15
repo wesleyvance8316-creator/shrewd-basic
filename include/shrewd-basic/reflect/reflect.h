@@ -32,9 +32,10 @@
  *     or pointers described with SHREWD_BASIC_REFLECT_FIELD_PTR;
  *     bit-fields, unions, flexible array members, multi-dimension arrays
  *     and function pointers are not described;
- *   - a char buffer must use SHREWD_BASIC_REFLECT_FIELD_ARRAY(struct_type,
- *     buf, shrewd_basic_reflect_char): plain FIELD_PRIMITIVE would treat it as a
- *     string pointer (arrays decay to pointers in _Generic);
+ *   - a char buffer must use SHREWD_BASIC_REFLECT_FIELD_STRING_BUFFER
+ *     (text semantics) or SHREWD_BASIC_REFLECT_FIELD_ARRAY(struct_type,
+ *     buf, shrewd_basic_reflect_char) (raw bytes): plain FIELD_PRIMITIVE would
+ *     treat it as a string pointer (arrays decay to pointers in _Generic);
  *   - a type needs at least one field;
  *   - the macros require C11 (_Generic) and expand to declarations, so
  *     they belong at file scope. The C API itself is C++-friendly.
@@ -43,6 +44,13 @@
  * the pointer and ownership stays with the caller. All value access is
  * raw memcpy of field->sb_refl_size, never a dereference of offset-derived
  * typed pointers (packed and odd alignments stay well-defined).
+ *
+ * String buffers: a char[N] member described with
+ * SHREWD_BASIC_REFLECT_FIELD_STRING_BUFFER carries C-string semantics -
+ * dump renders it quoted and escaped, equal/diff/hash work on its
+ * content up to the first NUL (bytes past the terminator are ignored)
+ * and visit reports one LEAF. get/set still move the raw N bytes and
+ * paths may index single characters ("title[2]").
  *
  * Pointers: a FIELD_PTR member holds a pointer to its declared target
  * type (shrewd_basic_reflect_void for opaque targets). get/set copy the
@@ -207,6 +215,16 @@ struct shrewd_basic_reflect_type {
  * walk time - a dynamic array without the extra indirection.
  */
 #define SHREWD_BASIC_REFLECT_FIELD_F_FLEX ((uint32_t)16u)
+
+/**
+ * Field flag: an inline char array holding a NUL-terminated string (a
+ * text buffer). Rendered and compared as a C string - dump quotes and
+ * escapes it, equal/diff/hash work on its content up to the first NUL
+ * (bytes past the terminator are ignored), visit reports one LEAF. The
+ * storage is still an array of count chars: get/set move the raw bytes
+ * and paths may index single characters ("title[2]").
+ */
+#define SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF ((uint32_t)32u)
 
 /** Primitive descriptors; pass them to FIELD_ARRAY/FIELD_STRUCT by name. */
 extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_bool;
@@ -522,6 +540,41 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
                 / sizeof(((struct_type *)0)->member[0]),                       \
         .sb_refl_stride = sizeof(((struct_type *)0)->member[0]),                       \
         .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_ARRAY,                   \
+        .sb_refl_ops = &(ops_ref)                                              \
+    }
+
+/*
+ * Describe a char[N] text buffer: an inline char array with C-string
+ * semantics (F_ARRAY | F_STRINGBUF). dump renders it quoted and escaped,
+ * equal/diff/hash use its content up to the first NUL, visit reports one
+ * LEAF; get/set move the raw N bytes. Use FIELD_ARRAY for raw byte
+ * buffers whose padding bytes must compare too.
+ */
+#define SHREWD_BASIC_REFLECT_FIELD_STRING_BUFFER(struct_type, member)         \
+    {                                                                          \
+        .sb_refl_name = #member,                                               \
+        .sb_refl_type = &shrewd_basic_reflect_char,                            \
+        .sb_refl_offset = offsetof(struct_type, member),                       \
+        .sb_refl_size = sizeof(((struct_type *)0)->member),                    \
+        .sb_refl_count = sizeof(((struct_type *)0)->member)                    \
+                / sizeof(((struct_type *)0)->member[0]),                       \
+        .sb_refl_stride = sizeof(((struct_type *)0)->member[0]),               \
+        .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_ARRAY                    \
+                | SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF                       \
+    }
+
+/* FIELD_STRING_BUFFER with a field-level ops override. */
+#define SHREWD_BASIC_REFLECT_FIELD_STRING_BUFFER_OPS(struct_type, member, ops_ref) \
+    {                                                                          \
+        .sb_refl_name = #member,                                               \
+        .sb_refl_type = &shrewd_basic_reflect_char,                            \
+        .sb_refl_offset = offsetof(struct_type, member),                       \
+        .sb_refl_size = sizeof(((struct_type *)0)->member),                    \
+        .sb_refl_count = sizeof(((struct_type *)0)->member)                    \
+                / sizeof(((struct_type *)0)->member[0]),                       \
+        .sb_refl_stride = sizeof(((struct_type *)0)->member[0]),               \
+        .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_ARRAY                    \
+                | SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF,                      \
         .sb_refl_ops = &(ops_ref)                                              \
     }
 

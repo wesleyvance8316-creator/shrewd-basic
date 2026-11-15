@@ -2587,6 +2587,149 @@ static void test_hash(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
+/* --- string buffer fixtures -------------------------------------------- */
+
+typedef struct {
+    char title[8];
+    int32_t id;
+} text_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_text_reflect, text_t,
+    SHREWD_BASIC_REFLECT_FIELD_STRING_BUFFER(text_t, title),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(text_t, id));
+
+static void test_stringbuf(void)
+{
+    /* Descriptor shape: an inline char array with the string-buffer flag. */
+    const shrewd_basic_reflect_field_t *field =
+        find_or_fail("stringbuf", &g_text_reflect, "title");
+    if (NULL == field) {
+        return;
+    }
+    expect_true("stringbuf shape",
+                (&shrewd_basic_reflect_char == field->sb_refl_type)
+                && ((size_t)8 == field->sb_refl_count)
+                && ((size_t)1 == field->sb_refl_stride)
+                && ((uint32_t)(SHREWD_BASIC_REFLECT_FIELD_F_ARRAY
+                               | SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)
+                    == field->sb_refl_flags));
+
+    text_t a;
+    text_t b;
+    memset(&a, 0, sizeof(a));
+    memset(&b, 0, sizeof(b));
+    memcpy(a.title, "hi", 3);
+    memcpy(b.title, "hi", 3);
+    b.title[3] = 'x'; /* garbage after the NUL: ignored */
+    b.title[4] = 'y';
+    a.id = 7;
+    b.id = 7;
+
+    /* dump renders it as one quoted, escaped string. */
+    shrewd_basic_log_module_t *module = NULL;
+    expect_eq_int("stringbuf find module",
+                  shrewd_basic_log_module_find("reflect", &module),
+                  SHREWD_BASIC_ERR_OK);
+    FILE *stream = tmpfile();
+    expect_true("stringbuf tmpfile", NULL != stream);
+    if (NULL == stream) {
+        return;
+    }
+    shrewd_basic_log_module_set_stream(module, stream);
+    expect_eq_int("stringbuf dump",
+                  shrewd_basic_reflect_dump(&g_text_reflect, &a, "text"),
+                  SHREWD_BASIC_ERR_OK);
+    char buf[4096] = {0};
+    slurp(stream, buf, sizeof(buf));
+    expect_true("stringbuf dump quoted", NULL != strstr(buf, "title = \"hi\""));
+    expect_true("stringbuf dump not array", NULL == strstr(buf, "[ 'h'"));
+
+    /* Escapes and an unterminated buffer. */
+    memcpy(a.title, "a\"b\nc", 6);
+    a.title[6] = '\0';
+    expect_eq_int("stringbuf dump escapes",
+                  shrewd_basic_reflect_dump(&g_text_reflect, &a, "text"),
+                  SHREWD_BASIC_ERR_OK);
+    memset(buf, 0, sizeof(buf));
+    slurp(stream, buf, sizeof(buf));
+    expect_true("stringbuf dump escaped",
+                NULL != strstr(buf, "title = \"a\\\"b\\nc\""));
+    memcpy(a.title, "abcdefgh", 8); /* no NUL at all */
+    expect_eq_int("stringbuf dump unterminated",
+                  shrewd_basic_reflect_dump(&g_text_reflect, &a, "text"),
+                  SHREWD_BASIC_ERR_OK);
+    memset(buf, 0, sizeof(buf));
+    slurp(stream, buf, sizeof(buf));
+    expect_true("stringbuf dump all bytes",
+                NULL != strstr(buf, "title = \"abcdefgh\""));
+    shrewd_basic_log_module_set_stream(module, stderr);
+    fclose(stream);
+
+    /* equal/diff/hash work on content up to the NUL. */
+    memcpy(a.title, "hi", 3);
+    a.title[3] = 'z';
+    bool same = false;
+    expect_eq_int("stringbuf equal",
+                  shrewd_basic_reflect_equal(&a, &b, &g_text_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("stringbuf equal yes", same);
+    char path[64];
+    expect_eq_int("stringbuf diff",
+                  shrewd_basic_reflect_diff(&a, &b, &g_text_reflect, path, sizeof(path)),
+                  SHREWD_BASIC_ERR_OK);
+    size_t ha = 0;
+    size_t hb = 0;
+    expect_eq_int("stringbuf hash a",
+                  shrewd_basic_reflect_hash(&a, &g_text_reflect, &ha),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("stringbuf hash b",
+                  shrewd_basic_reflect_hash(&b, &g_text_reflect, &hb),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("stringbuf hash same", ha == hb);
+
+    memcpy(b.title, "hello", 6);
+    expect_eq_int("stringbuf diff content",
+                  shrewd_basic_reflect_diff(&a, &b, &g_text_reflect, path, sizeof(path)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("stringbuf diff content path", 0 == strcmp(path, "title"));
+    expect_eq_int("stringbuf equal content",
+                  shrewd_basic_reflect_equal(&a, &b, &g_text_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("stringbuf equal content no", !same);
+
+    /* visit reports one LEAF, not an element list. */
+    memset(&a, 0, sizeof(a));
+    memcpy(a.title, "hi", 3);
+    visit_rec_t rec;
+    memset(&rec, 0, sizeof(rec));
+    expect_eq_int("stringbuf visit",
+                  shrewd_basic_reflect_visit(&a, &g_text_reflect, visit_collect, &rec),
+                  SHREWD_BASIC_ERR_OK);
+    int at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "title");
+    expect_true("stringbuf visit leaf",
+                (0 <= at) && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "id"))
+                && (0 > visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "title")));
+
+    /* Storage is still bytes: get/set move them raw, paths index chars. */
+    char raw[8];
+    memcpy(a.title, "abcdef", 7);
+    expect_eq_int("stringbuf field_get",
+                  shrewd_basic_reflect_field_get(&a, field, raw, sizeof(raw)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("stringbuf raw bytes", 0 == memcmp(raw, "abcdef\0\0", 8));
+    char ch = 'Z';
+    expect_eq_int("stringbuf path_set",
+                  shrewd_basic_reflect_path_set(&a, &g_text_reflect, "title[2]", &ch,
+                                                sizeof(ch)),
+                  SHREWD_BASIC_ERR_OK);
+    char got = '\0';
+    expect_eq_int("stringbuf path_get",
+                  shrewd_basic_reflect_path_get(&a, &g_text_reflect, "title[2]", &got,
+                                                sizeof(got)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("stringbuf path index", 'Z' == got);
+}
+
 int main(void)
 {
     test_describe();
@@ -2605,6 +2748,7 @@ int main(void)
     test_visit();
     test_diff();
     test_hash();
+    test_stringbuf();
     test_graph_ops();
     test_equal();
     test_dynamic_arrays();

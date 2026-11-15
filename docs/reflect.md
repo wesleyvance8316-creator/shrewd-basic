@@ -147,7 +147,8 @@ shrewd_basic_reflect_void     /* 不透明目标(OPAQUE),size = 0 */
 | `FIELD_SENTINEL(struct_type, member, ref)` | NULL 值终止的值表(char **argv) |
 | `FIELD_PTR_SENTINEL(struct_type, member, ref)` | NULL 槽终止的指针表 |
 | `FIELD_FLEX(struct_type, member, count_member, ref)` | 柔性尾部(尾部内联 + 计数联动) |
-| `FIELD_*_OPS`(全部 7 种形态各有变体) | 同上 + 字段级 ops 覆盖 |
+| `FIELD_STRING_BUFFER(struct_type, member)` | `char[N]` 文本缓冲:按 C 字符串渲染/比较(dump 引号转义、equal/diff/hash 到 NUL 为止、visit 单 LEAF;get/set 仍是原始 N 字节) |
+| `FIELD_*_OPS`(全部形态各有变体) | 同上 + 字段级 ops 覆盖 |
 
 `ref`/`ops_ref` 参数**不带 `&`**(宏内部补 `&` 以保持地址常量)。
 
@@ -389,6 +390,8 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
   `[0]` 形态,自动配对 `name_count`/`name_len`/`count`/`len` 计数成员,配不到则
   告警跳过)、指针(`FIELD_PTR`/`FIELD_PTR_ARRAY`)、枚举(`FIELD_ENUM`/`ENUM_DEFINE`),
   引用但未定义的类型自动补 `TYPE_DECLARE`;
+- `char[N]` 默认生成 `FIELD_ARRAY`(字节精确);文本缓冲可手工改为
+  `FIELD_STRING_BUFFER`(C 字符串语义);
 - 描述符命名约定 `<类型名>_reflect`(如 `shape_t_reflect`);
 - 跳过并告警:bit-field、联合体、函数指针、多维数组、柔性数组;
 - 验证:`tools/reflect_gen_check.sh` 一键自测(生成 → 编译 → 运行 dump/equal/enum 冒烟),样例输入 `tools/reflect_gen_sample.h`;
