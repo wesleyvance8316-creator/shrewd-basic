@@ -214,7 +214,16 @@ encode/decode 的 `info` 参数携带策略(NULL = 纯元数据,行为不变)。
 
 日志走共享 `"json"` 模块:WARN 参数错、TRACE 解析/序列化进度。
 
-## 9. 工程配套
+## 9. 工具集
+
+| 工具 | 语义 |
+|---|---|
+| `json_pointer(root, "/a/b/0", &out)` | RFC 6901 JSON Pointer 查询(`~0`/`~1` 转义;数组段下标、对象段键名) |
+| `json_schema(type, info, &text)` | 导出 draft-07 子集 Schema:属性/`required`/`minimum`/`maximum`/`enum`/`x-aliases`,嵌套结构体走 `$defs`+`$ref`(自引用安全),union 出 `oneOf` |
+| `json_value_size(value, type, &size)` | FAM 尺寸助手:返回 decode 目标所需字节(头 + JSON 尾长) |
+| `reflect_gen.py` 骨架 | 为每个 struct 产出注释形式的 `SHREWD_BASIC_JSON_DEFINE` 策略模板(解开注释即用) |
+
+## 10. 工程配套
 
 - 测试 `shrewd-basic-json-tests`:文法严格性与宽松开关、数字保真、转义/代理对、
   DOM 访问与修改、紧凑/pretty 输出、文本级往返;

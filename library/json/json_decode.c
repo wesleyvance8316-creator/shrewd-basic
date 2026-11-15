@@ -802,6 +802,21 @@ int shrewd_basic_json_decode_value(const shrewd_basic_json_value_t *value,
                             type->sb_refl_size, 0);
 }
 
+int shrewd_basic_json_value_size(const shrewd_basic_json_value_t *value,
+                                 const shrewd_basic_reflect_type_t *type,
+                                 size_t *out_size)
+{
+    if ((NULL == value) || (NULL == type) || (NULL == out_size)) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
+        *out_size = type->sb_refl_size;
+        return SHREWD_BASIC_ERR_OK;
+    }
+    *out_size = json_target_size(value, type);
+    return SHREWD_BASIC_ERR_OK;
+}
+
 int shrewd_basic_json_decode(const char *text, size_t length, void *object,
                              const shrewd_basic_reflect_type_t *type,
                              const shrewd_basic_json_info_t *info,

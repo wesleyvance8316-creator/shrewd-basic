@@ -334,6 +334,15 @@ def generate(parser, input_name):
                 % (descriptor_name(name), name, fields))
             lines_h.append("SHREWD_BASIC_REFLECT_TYPE_DECLARE(%s);"
                            % descriptor_name(name))
+            # Optional JSON policy skeleton (docs/json.md section 6).
+            rows = ",\n    ".join(
+                "SHREWD_BASIC_JSON_KEY(%s, \"%s\")" % (m[2], m[2])
+                for m in parser.structs[name])
+            lines_c.append("")
+            lines_c.append("/* Optional JSON policy for %s:" % name)
+            lines_c.append("SHREWD_BASIC_JSON_DEFINE(%s_json, %s," % (name, descriptor_name(name)))
+            lines_c.append("    %s);" % rows)
+            lines_c.append("*/")
         lines_c.append("")
     return "\n".join(lines_c) + "\n", "\n".join(lines_h) + "\n"
 

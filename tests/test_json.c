@@ -557,6 +557,48 @@ static void test_sinks_and_text(void)
     }
 }
 
+/* --- JSON Pointer tests ------------------------------------------------ */
+
+static void test_pointer(void)
+{
+    shrewd_basic_json_value_t *root = NULL;
+    const shrewd_basic_json_value_t *found = NULL;
+    root = parse_ok("pointer src",
+                    "{\"a\":{\"b\":[10,20]},\"til~de/slash\":7}");
+
+    expect_eq_int("pointer root",
+                  shrewd_basic_json_pointer(root, "", &found),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("pointer root is root", found == root);
+    expect_eq_int("pointer deep",
+                  shrewd_basic_json_pointer(root, "/a/b/1", &found),
+                  SHREWD_BASIC_ERR_OK);
+    {
+        int64_t number = 0;
+        (void)shrewd_basic_json_to_i64(found, &number);
+        expect_true("pointer deep value", 20 == number);
+    }
+    expect_eq_int("pointer escapes",
+                  shrewd_basic_json_pointer(root, "/til~0de~1slash", &found),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("pointer missing",
+                  shrewd_basic_json_pointer(root, "/a/b/9", &found),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("pointer into scalar",
+                  shrewd_basic_json_pointer(root, "/a/b/1/x", &found),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("pointer malformed",
+                  shrewd_basic_json_pointer(root, "a/b", &found),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("pointer bad escape",
+                  shrewd_basic_json_pointer(root, "/a~2", &found),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("pointer non-index",
+                  shrewd_basic_json_pointer(root, "/a/b/x", &found),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    shrewd_basic_json_value_free(root);
+}
+
 int main(void)
 {
     test_parse_scalars();
@@ -568,5 +610,6 @@ int main(void)
     test_serialize();
     test_roundtrip();
     test_sinks_and_text();
+    test_pointer();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

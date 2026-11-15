@@ -625,6 +625,70 @@ static void test_ops_targets(void)
     (void)shrewd_basic_platform_free(&block);
 }
 
+/* Self-referential fixture for schema $ref cycles. */
+typedef struct node {
+    int32_t data;
+    struct node *next;
+} node_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(node_reflect, node_t,
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(node_t, data),
+    SHREWD_BASIC_REFLECT_FIELD_PTR(node_t, next, node_reflect));
+
+/* --- schema + sizing tests -------------------------------------------- */
+
+static void test_schema_export(void)
+{
+    char *text = NULL;
+    expect_eq_int("schema build",
+                  shrewd_basic_json_schema(&cfg_reflect, &cfg_json, &text, NULL,
+                                           NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("schema doc",
+                (NULL != text)
+                && (NULL != strstr(text, "\"title\":\"cfg_t\""))
+                && (NULL != strstr(text, "\"$defs\"")));
+    expect_true("schema keys",
+                (NULL != strstr(text, "\"name_id\""))
+                && (NULL != strstr(text, "\"x-aliases\""))
+                && (NULL != strstr(text, "\"NameID\"")));
+    expect_true("schema required", NULL != strstr(text, "\"required\""));
+    expect_true("schema bounds",
+                (NULL != strstr(text, "\"minimum\""))
+                && (NULL != strstr(text, "\"maximum\"")));
+    expect_true("schema hidden skipped", NULL == strstr(text, "secret"));
+    shrewd_basic_json_text_free(text);
+
+    /* Nested structs become $defs references; unions become oneOf. */
+    text = NULL;
+    expect_eq_int("schema nested",
+                  shrewd_basic_json_schema(&msg_reflect, NULL, &text, NULL, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("schema nested refs",
+                (NULL != text)
+                && (NULL != strstr(text, "\"$defs\""))
+                && (NULL != strstr(text, "point_t")));
+    expect_true("schema union oneOf", NULL != strstr(text, "oneOf"));
+    shrewd_basic_json_text_free(text);
+
+    /* Self-referential types stay finite (node schema through $ref). */
+    {
+        char *cycle = NULL;
+        expect_eq_int("schema cycle",
+                      shrewd_basic_json_schema(&node_reflect, NULL, &cycle, NULL,
+                                               NULL),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("schema cycle ref",
+                    (NULL != cycle) && (NULL != strstr(cycle, "#/$defs/node_t")));
+        shrewd_basic_json_text_free(cycle);
+    }
+
+    expect_eq_int("schema mismatch",
+                  shrewd_basic_json_schema(&msg_reflect, &cfg_json, &text, NULL,
+                                           NULL),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+}
+
 int main(void)
 {
     test_key_aliases();
@@ -634,5 +698,6 @@ int main(void)
     test_required_range_check();
     test_union_styles();
     test_keys_export();
+    test_schema_export();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

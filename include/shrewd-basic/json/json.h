@@ -470,6 +470,37 @@ struct shrewd_basic_json_info {
         .union_style = (int)(style), .has_union_style = 1                      \
     }
 
+/**
+ * Query a value by RFC 6901 JSON Pointer ("/a/b/0"; "" selects the root,
+ * "~0"/"~1" escape '~' and '/'). Array segments index, object segments
+ * match keys. Returns SHREWD_BASIC_ERR_KEY_NOTFOUND for a missing step
+ * and SHREWD_BASIC_ERR_ARG_INVALID for a malformed pointer.
+ */
+int shrewd_basic_json_pointer(const shrewd_basic_json_value_t *root,
+                              const char *pointer,
+                              const shrewd_basic_json_value_t **out);
+
+/**
+ * Export a JSON Schema (draft-07 subset) for a described type: object
+ * properties from the fields, "required" from REQUIRED policy, bounds
+ * from RANGE, "x-aliases" from KEY rows, enums from ENUM descriptors,
+ * nested structs as $defs references, unions as oneOf per variant.
+ * Release the text with shrewd_basic_json_text_free().
+ */
+int shrewd_basic_json_schema(const shrewd_basic_reflect_type_t *type,
+                             const shrewd_basic_json_info_t *info,
+                             char **out_text,
+                             const shrewd_basic_json_options_t *options,
+                             shrewd_basic_json_error_t *error);
+
+/**
+ * Allocation size a decode target needs: the struct header plus the
+ * flexible tails the JSON carries (the FAM sizing helper).
+ */
+int shrewd_basic_json_value_size(const shrewd_basic_json_value_t *value,
+                                 const shrewd_basic_reflect_type_t *type,
+                                 size_t *out_size);
+
 /** Callback of shrewd_basic_json_keys(); return non-zero to stop early. */
 typedef int (*shrewd_basic_json_keys_fn)(void *ctx,
                                          const shrewd_basic_json_key_info_t *key);

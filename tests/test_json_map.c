@@ -624,6 +624,24 @@ static void test_pointers(void)
             expect_eq_int("decode packet free",
                           free_new(packet, &packet_reflect),
                           SHREWD_BASIC_ERR_OK);
+            {
+                /* value_size reports the FAM sizing formula. */
+                shrewd_basic_json_value_t *dom = NULL;
+                size_t needed = 0;
+                const char *dom_text = "{\"data\":[7,8,9],\"len\":3}";
+                expect_eq_int("packet dom",
+                              shrewd_basic_json_parse(dom_text,
+                                                      strlen(dom_text), &dom,
+                                                      NULL, NULL),
+                              SHREWD_BASIC_ERR_OK);
+                expect_eq_int("packet value size",
+                              shrewd_basic_json_value_size(dom, &packet_reflect,
+                                                           &needed),
+                              SHREWD_BASIC_ERR_OK);
+                expect_true("packet value size value",
+                            needed == (sizeof(packet_t) + (3 * sizeof(int32_t))));
+                shrewd_basic_json_value_free(dom);
+            }
         }
     }
 
