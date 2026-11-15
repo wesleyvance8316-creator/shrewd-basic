@@ -15,6 +15,7 @@ SHREWD_BASIC_LOG_MODULE_DECLARE(shrewd_basic_reflect_log);
 #define DUMP_MAX_DEPTH 16 /* indentation clamp (defensive) */
 #define DUMP_STR_MAX 256  /* raw string bytes before truncation */
 #define DUMP_ARRAY_MAX 32 /* elements rendered per array line */
+#define DUMP_TEXT_MAX 256  /* ops->render text buffer */
 #define DUMP_BODY_MIN 1024 /* initial body buffer */
 
 /*
@@ -215,6 +216,21 @@ static int dump_target_seen(const dump_ctx_t *ctx, size_t depth,
     return 0;
 }
 
+/*
+ * Render a followed pointer target through the effective ops->render
+ * (field-level override wins). Returns 1 when a text was produced;
+ * otherwise the caller falls back to the default rendering.
+ */
+static int dump_render_target(const shrewd_basic_reflect_field_t *field,
+                              const void *pointer, char *buf, size_t buf_size)
+{
+    const shrewd_basic_reflect_ops_t *ops = reflect_field_ops(field);
+    if ((NULL == ops) || (NULL == ops->render)) {
+        return 0;
+    }
+    return (SHREWD_BASIC_ERR_OK == ops->render(pointer, buf, buf_size)) ? 1 : 0;
+}
+
 static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type,
                         const unsigned char *object, size_t depth)
 {
@@ -239,6 +255,13 @@ static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
                     void *pointer = reflect_load_ptr(elem);
                     if (NULL == pointer) {
                         dump_append(ctx, "%*s%s[%zu] = (null)", pad, "", field->sb_refl_name, j);
+                        dump_emit(ctx);
+                        continue;
+                    }
+                    char text[DUMP_TEXT_MAX];
+                    if (0 != dump_render_target(field, pointer, text, sizeof(text))) {
+                        dump_append(ctx, "%*s%s[%zu] = %s", pad, "",
+                                    field->sb_refl_name, j, text);
                         dump_emit(ctx);
                         continue;
                     }
@@ -277,13 +300,19 @@ static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
                     void *pointer = reflect_load_ptr(elem);
                     if (NULL == pointer) {
                         dump_append(ctx, "(null)");
-                    } else if (0 != is_opaque) {
-                        dump_append(ctx, "0x%llx",
-                                    (unsigned long long)(uintptr_t)pointer);
                     } else {
-                        dump_scalar(ctx, field->sb_refl_type,
-                                    (const unsigned char *)pointer,
-                                    field->sb_refl_type->sb_refl_size, DUMP_STR_MAX / 8);
+                        char text[DUMP_TEXT_MAX];
+                        if (0 != dump_render_target(field, pointer, text, sizeof(text))) {
+                            dump_append(ctx, "%s", text);
+                        } else if (0 != is_opaque) {
+                            dump_append(ctx, "0x%llx",
+                                        (unsigned long long)(uintptr_t)pointer);
+                        } else {
+                            dump_scalar(ctx, field->sb_refl_type,
+                                        (const unsigned char *)pointer,
+                                        field->sb_refl_type->sb_refl_size,
+                                        DUMP_STR_MAX / 8);
+                        }
                     }
                 } else {
                     dump_scalar(ctx, field->sb_refl_type, elem, stride, DUMP_STR_MAX / 8);
@@ -296,29 +325,35 @@ static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
             if (NULL == pointer) {
                 dump_append(ctx, "%*s%s = (null)", pad, "", field->sb_refl_name);
                 dump_emit(ctx);
-            } else if (0 != is_opaque) {
-                dump_append(ctx, "%*s%s = 0x%llx", pad, "", field->sb_refl_name,
-                            (unsigned long long)(uintptr_t)pointer);
-                dump_emit(ctx);
-            } else if (0 != is_struct) {
-                if (0 != dump_target_seen(ctx, depth, pointer)) {
-                    dump_append(ctx, "%*s%s = ...(cyclic)", pad, "", field->sb_refl_name);
+            } else {
+                char text[DUMP_TEXT_MAX];
+                if (0 != dump_render_target(field, pointer, text, sizeof(text))) {
+                    dump_append(ctx, "%*s%s = %s", pad, "", field->sb_refl_name, text);
                     dump_emit(ctx);
-                } else if (depth >= DUMP_MAX_DEPTH) {
-                    dump_append(ctx, "%*s%s = ...(max depth)", pad, "", field->sb_refl_name);
+} else if (0 != is_opaque) {
+                    dump_append(ctx, "%*s%s = 0x%llx", pad, "", field->sb_refl_name,
+                                (unsigned long long)(uintptr_t)pointer);
                     dump_emit(ctx);
+                } else if (0 != is_struct) {
+                    if (0 != dump_target_seen(ctx, depth, pointer)) {
+                        dump_append(ctx, "%*s%s = ...(cyclic)", pad, "", field->sb_refl_name);
+                        dump_emit(ctx);
+                    } else if (depth >= DUMP_MAX_DEPTH) {
+                        dump_append(ctx, "%*s%s = ...(max depth)", pad, "", field->sb_refl_name);
+                        dump_emit(ctx);
+                    } else {
+                        dump_append(ctx, "%*s%s = {", pad, "", field->sb_refl_name);
+                        dump_emit(ctx);
+                        dump_fields(ctx, field->sb_refl_type, (const unsigned char *)pointer, depth + 1);
+                        dump_append(ctx, "%*s}", pad, "");
+                        dump_emit(ctx);
+                    }
                 } else {
-                    dump_append(ctx, "%*s%s = {", pad, "", field->sb_refl_name);
-                    dump_emit(ctx);
-                    dump_fields(ctx, field->sb_refl_type, (const unsigned char *)pointer, depth + 1);
-                    dump_append(ctx, "%*s}", pad, "");
+                    dump_append(ctx, "%*s%s = ", pad, "", field->sb_refl_name);
+                    dump_scalar(ctx, field->sb_refl_type, (const unsigned char *)pointer,
+                                field->sb_refl_type->sb_refl_size, DUMP_STR_MAX);
                     dump_emit(ctx);
                 }
-            } else {
-                dump_append(ctx, "%*s%s = ", pad, "", field->sb_refl_name);
-                dump_scalar(ctx, field->sb_refl_type, (const unsigned char *)pointer,
-                            field->sb_refl_type->sb_refl_size, DUMP_STR_MAX);
-                dump_emit(ctx);
             }
         } else if (0 != is_struct) {
             if (0 != dump_target_seen(ctx, depth, at)) {

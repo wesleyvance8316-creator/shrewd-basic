@@ -122,6 +122,12 @@ struct shrewd_basic_reflect_ops {
     int (*check)(const void *pointee);
     /** Compare @p a and @p b for equality. */
     int (*equal)(const void *a, const void *b, bool *out_equal);
+    /**
+     * Render @p pointee as text for dump (NUL-terminated into @p buf,
+     * truncated to @p buf_size). Used for followed pointer targets;
+     * without it dump falls back to the pointee value or address.
+     */
+    int (*render)(const void *pointee, char *buf, size_t buf_size);
     /** Deep-copy @p pointee into a new object stored into @p *out. */
     int (*copy)(void **out, const void *pointee);
     /** Release an object produced by @c copy (or an equivalent owner). */

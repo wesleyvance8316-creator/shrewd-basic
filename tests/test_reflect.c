@@ -228,12 +228,21 @@ static void ops_handle_destroy(void *pointee)
     (void)shrewd_basic_platform_free(&pointee);
 }
 
+static int ops_handle_render(const void *pointee, char *buf, size_t buf_size)
+{
+    int32_t value = 0;
+    memcpy(&value, pointee, sizeof(value));
+    (void)snprintf(buf, buf_size, "handle#%d", value);
+    return SHREWD_BASIC_ERR_OK;
+}
+
 static const shrewd_basic_reflect_ops_t g_handle_ops = {
     .value_size = sizeof(int32_t),
     .get = NULL,
     .set = NULL,
     .check = ops_handle_check,
     .copy = ops_handle_copy,
+    .render = ops_handle_render,
     .destroy = ops_handle_destroy };
 
 SHREWD_BASIC_REFLECT_OPAQUE_DEFINE(g_full_handle_reflect, "handle", g_handle_ops);

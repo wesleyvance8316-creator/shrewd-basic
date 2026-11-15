@@ -260,12 +260,14 @@ struct shrewd_basic_reflect_ops {
     int  (*set)(void *pointee, const void *value, size_t value_size);
     int  (*check)(const void *pointee);                 /* 不变量校验 */
     int  (*equal)(const void *a, const void *b, bool *out_equal);     /* 比较两个目标 */
+    int  (*render)(const void *pointee, char *buf, size_t buf_size); /* dump 自定义渲染 */
     int  (*copy)(void **out, const void *pointee);      /* clone-out 深拷贝 */
     void (*destroy)(void *pointee);                     /* 释放 copy 产物 */
 };
 ```
 
 - **两级挂载**:`field->sb_refl_ops` 优先,缺省回落 `type->sb_refl_ops`;
+- `render` 用于 dump 跟随指针目标时的自定义文本(如不透明句柄打 `handle#42` 而非地址);缺失或返回失败则回退默认渲染;
 - **逐回调解退**:缺哪个回调就用哪个元数据默认(只写 `check` 也能复用通用拷贝);
 - `get/set/check` 对值和指针目标同样适用;`copy/destroy` 是**对象语义**(指针目标与
   `copy/destroy` 的根对象)。
