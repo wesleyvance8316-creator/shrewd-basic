@@ -456,6 +456,28 @@ int shrewd_basic_reflect_enum_find_name(const shrewd_basic_reflect_type_t *type,
                                         int64_t value, const char **out_name);
 
 /**
+ * Number of fields described by @p type (0 for primitives and enums,
+ * or when @p type is NULL).
+ */
+size_t shrewd_basic_reflect_type_field_count(const shrewd_basic_reflect_type_t *type);
+
+/**
+ * Field at @p index of @p type, or NULL when the index is out of range
+ * or @p type is NULL. Together with
+ * shrewd_basic_reflect_type_field_count() this iterates a type without
+ * touching the descriptor layout.
+ */
+const shrewd_basic_reflect_field_t *shrewd_basic_reflect_type_field_at(
+        const shrewd_basic_reflect_type_t *type, size_t index);
+
+/** Number of constants described by an ENUM type (0 otherwise). */
+size_t shrewd_basic_reflect_enum_count(const shrewd_basic_reflect_type_t *type);
+
+/** Enum constant at @p index, or NULL when out of range or not an enum. */
+const shrewd_basic_reflect_enum_entry_t *shrewd_basic_reflect_enum_at(
+        const shrewd_basic_reflect_type_t *type, size_t index);
+
+/**
  * Value of the enum constant @p name in the ENUM descriptor @p type.
  * Returns SHREWD_BASIC_ERR_KEY_NOTFOUND when no constant matches,
  * SHREWD_BASIC_ERR_ARG_INVALID for NULL arguments or a non-enum type.

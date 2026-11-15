@@ -104,6 +104,38 @@ const char *shrewd_basic_reflect_kind_name(shrewd_basic_reflect_kind_t kind)
     }
 }
 
+size_t shrewd_basic_reflect_type_field_count(const shrewd_basic_reflect_type_t *type)
+{
+    return (NULL != type) ? type->sb_refl_field_count : 0;
+}
+
+const shrewd_basic_reflect_field_t *shrewd_basic_reflect_type_field_at(
+        const shrewd_basic_reflect_type_t *type, size_t index)
+{
+    if ((NULL == type) || (index >= type->sb_refl_field_count)) {
+        return NULL;
+    }
+    return &type->sb_refl_fields[index];
+}
+
+size_t shrewd_basic_reflect_enum_count(const shrewd_basic_reflect_type_t *type)
+{
+    if ((NULL == type) || (SHREWD_BASIC_REFLECT_KIND_ENUM != type->sb_refl_kind)) {
+        return 0;
+    }
+    return type->sb_refl_enum_count;
+}
+
+const shrewd_basic_reflect_enum_entry_t *shrewd_basic_reflect_enum_at(
+        const shrewd_basic_reflect_type_t *type, size_t index)
+{
+    if ((NULL == type) || (SHREWD_BASIC_REFLECT_KIND_ENUM != type->sb_refl_kind)
+            || (index >= type->sb_refl_enum_count)) {
+        return NULL;
+    }
+    return &type->sb_refl_enum[index];
+}
+
 int shrewd_basic_reflect_enum_find_name(const shrewd_basic_reflect_type_t *type,
                                         int64_t value, const char **out_name)
 {

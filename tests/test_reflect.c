@@ -349,6 +349,16 @@ static void test_describe(void)
     expect_true("describe kind name unknown",
                 0 == strcmp(shrewd_basic_reflect_kind_name((shrewd_basic_reflect_kind_t)99),
                             "unknown"));
+
+    /* Traversal accessors. */
+    expect_true("field count accessor",
+                (size_t)12 == shrewd_basic_reflect_type_field_count(&g_person_reflect));
+    expect_true("field at accessor",
+                0 == strcmp(shrewd_basic_reflect_type_field_at(&g_person_reflect, 3)
+                            ->sb_refl_name, "age"));
+    expect_true("field at range",
+                NULL == shrewd_basic_reflect_type_field_at(&g_person_reflect, 12));
+    expect_true("field count on NULL", 0 == shrewd_basic_reflect_type_field_count(NULL));
 }
 
 static void test_find_field(void)
@@ -1383,6 +1393,16 @@ static void test_enum(void)
     expect_true("enum kind name",
                 0 == strcmp(shrewd_basic_reflect_kind_name(SHREWD_BASIC_REFLECT_KIND_ENUM),
                             "enum"));
+
+    /* Enum traversal accessors. */
+    expect_true("enum count accessor",
+                (size_t)3 == shrewd_basic_reflect_enum_count(&g_mode_reflect));
+    expect_true("enum at accessor",
+                0 == strcmp(shrewd_basic_reflect_enum_at(&g_mode_reflect, 1)
+                            ->sb_refl_name, "MODE_ON"));
+    expect_true("enum at range",
+                NULL == shrewd_basic_reflect_enum_at(&g_mode_reflect, 3));
+    expect_true("enum count on struct", 0 == shrewd_basic_reflect_enum_count(&g_person_reflect));
 
     /* name/value lookup. */
     const char *name = NULL;
