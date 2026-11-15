@@ -13,8 +13,8 @@
  * variants), kind_name, type_find_field, enum_find_name/value,
  * field_get/set, dump (incl. ops->render and cycle markers),
  * type_resolve, path_get/set, value_get/set, check, equal, copy,
- * destroy, dynamic arrays (F_DARRAY/F_SENTINEL) and the traversal
- * accessors. The 1 MiB dump body cap is covered by the test suite
+ * destroy, dynamic arrays (F_DARRAY/F_SENTINEL), flexible tails
+ * (F_FLEX) and the traversal accessors. The 1 MiB dump body cap is covered by the test suite
  * instead - its output would flood the terminal here.
  */
 
@@ -164,6 +164,17 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(dyn_type, dyn_t,
                                       shrewd_basic_reflect_int32),
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dyn_t, value_count),
     SHREWD_BASIC_REFLECT_FIELD_SENTINEL(dyn_t, argv, shrewd_basic_reflect_string));
+
+/* A flexible tail: inline storage sized at run time by the count
+   member (C99 FAM; the GNU zero-length form works the same way). */
+typedef struct {
+    size_t len;
+    int32_t data[];
+} packet_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(packet_type, packet_t,
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(packet_t, len),
+    SHREWD_BASIC_REFLECT_FIELD_FLEX(packet_t, data, len, shrewd_basic_reflect_int32));
 
 /* An enum: int-compatible values with a name/value table. */
 typedef enum {
@@ -543,6 +554,41 @@ int main(void)
                      shrewd_basic_reflect_destroy(dyn_clone, &dyn_type));
         print_status("destroy(dyn)",
                      shrewd_basic_reflect_destroy(dyn, &dyn_type));
+    }
+
+    banner("11. flexible tails: FAM with a linked count member");
+    /* A FAM struct must be allocated with room for its tail - sizeof()
+       covers the header only. */
+    void *tail_block = NULL;
+    if (SHREWD_BASIC_ERR_OK == shrewd_basic_platform_calloc(
+                &tail_block, 1, sizeof(packet_t) + (3 * sizeof(int32_t)))) {
+        packet_t *packet = tail_block;
+        packet->len = 3;
+        packet->data[0] = 7;
+        packet->data[1] = 8;
+        packet->data[2] = 9;
+        (void)shrewd_basic_reflect_dump(&packet_type, packet, "packet");
+
+        int32_t at = 0;
+        print_status("path_get \"data[2]\"",
+                     shrewd_basic_reflect_path_get(packet, &packet_type, "data[2]",
+                                                   &at, sizeof(at)));
+        printf("  -> data[2] = %d\n", at);
+
+        packet_t *packet_clone = NULL;
+        print_status("copy(packet)",
+                     shrewd_basic_reflect_copy((void **)&packet_clone, packet,
+                                               &packet_type));
+        bool packet_same = false;
+        print_status("equal(packet, clone)",
+                     shrewd_basic_reflect_equal(packet, packet_clone, &packet_type,
+                                                &packet_same));
+        printf("  -> %s (clone owns its own tail)\n",
+               packet_same ? "equal" : "different");
+        print_status("destroy(clone)",
+                     shrewd_basic_reflect_destroy(packet_clone, &packet_type));
+        print_status("destroy(packet)",
+                     shrewd_basic_reflect_destroy(packet, &packet_type));
     }
 
     printf("\nDemo done. See docs/reflect.md for the full reference.\n");
