@@ -77,7 +77,13 @@ void shrewd_basic_json_text_free(text);
 - `options.max_depth` 限制嵌套(默认 32;按**值的嵌套层级**计数)。
 
 **序列化**:紧凑默认,`options.pretty` + `options.indent`(默认 2)缩进输出;
-嵌套超限报 `JSON_DEPTH`。
+`options.escape_unicode` 把非 ASCII 全部转义为 `\uXXXX`(BMP 外出代理对);
+嵌套超限报 `JSON_DEPTH`。`options.validate_utf8` 让解析拒绝串内非法 UTF-8
+(默认原样透传)。
+
+**输出 sink**:序列化的核心是 `shrewd_basic_json_write_fn` 回调——
+`json_serialize_to` / `json_encode_to` 流式写文件/socket/收集器,不落全量文本;
+`json_write_file` 是 FILE* 的现成实现,`serialize`(返回文本)是收集器包装。
 
 ## 4. 线格式契约
 

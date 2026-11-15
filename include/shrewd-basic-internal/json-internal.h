@@ -89,6 +89,72 @@ static inline int json_opt_indent(const shrewd_basic_json_options_t *options)
     return ((NULL != options) && (0 < options->indent)) ? options->indent : 2;
 }
 
+/*
+ * Decode one UTF-8 sequence (at most @p n bytes): returns the bytes
+ * consumed, or 0 for an invalid sequence (overlong, surrogate and
+ * out-of-range forms are rejected).
+ */
+static inline size_t json_utf8_decode(const unsigned char *text, size_t n,
+                                      unsigned *out)
+{
+    unsigned c = text[0];
+    size_t need = 0;
+    unsigned cp = 0;
+    if (0x80u > c) {
+        *out = c;
+        return 1;
+    }
+    if ((0xc0u <= c) && (0xe0u > c)) {
+        need = 2;
+        cp = c & 0x1fu;
+    } else if ((0xe0u <= c) && (0xf0u > c)) {
+        need = 3;
+        cp = c & 0x0fu;
+    } else if ((0xf0u <= c) && (0xf8u > c)) {
+        need = 4;
+        cp = c & 0x07u;
+    } else {
+        return 0;
+    }
+    if (n < need) {
+        return 0;
+    }
+    for (size_t i = 1; i < need; ++i) {
+        if (0x80u != (text[i] & 0xc0u)) {
+            return 0;
+        }
+        cp = (cp << 6) | (text[i] & 0x3fu);
+    }
+    if (((2 == need) && (0x80u > cp)) || ((3 == need) && (0x800u > cp))
+            || ((4 == need) && (0x10000u > cp))) {
+        return 0; /* overlong */
+    }
+    if ((0xd800u <= cp) && (0xdfffu >= cp)) {
+        return 0; /* surrogate half */
+    }
+    if (0x10ffffu < cp) {
+        return 0;
+    }
+    *out = cp;
+    return need;
+}
+
+/* Is @p n bytes of @p text well-formed UTF-8? */
+static inline int json_utf8_valid(const char *text, size_t n)
+{
+    size_t i = 0;
+    while (i < n) {
+        unsigned cp = 0;
+        size_t used = json_utf8_decode((const unsigned char *)text + i, n - i,
+                                       &cp);
+        if (0 == used) {
+            return 0;
+        }
+        i += used;
+    }
+    return 1;
+}
+
 /* Bounded strlen for counted buffers (strnlen is POSIX, not C11). */
 static inline size_t json_strn_len(const char *text, size_t max)
 {

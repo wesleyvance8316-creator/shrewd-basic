@@ -76,6 +76,8 @@ typedef struct shrewd_basic_json_options {
     int strict;               /**< decode: unknown keys and alias conflicts error. */
     int keep_defaults;        /**< decode: missing keys keep pre-set values. */
     int key_match;            /**< decode: SHREWD_BASIC_JSON_KEY_MATCH_*. */
+    int escape_unicode;       /**< serialize: non-ASCII as \uXXXX escapes. */
+    int validate_utf8;        /**< parse: reject invalid UTF-8 in strings. */
 } shrewd_basic_json_options_t;
 
 /** Key matching strategies for decode. */
@@ -197,6 +199,31 @@ int shrewd_basic_json_parse(const char *text, size_t length,
                             shrewd_basic_json_value_t **out,
                             const shrewd_basic_json_options_t *options,
                             shrewd_basic_json_error_t *error);
+
+/** Sink callback for streaming output; return non-zero on I/O failure. */
+typedef int (*shrewd_basic_json_write_fn)(void *ctx, const char *data,
+                                          size_t length);
+
+/**
+ * Serialize @p value through a writer callback (the streaming core:
+ * files, sockets and collectors all sit behind it). The text/FILE
+ * wrappers below are conveniences over this.
+ */
+int shrewd_basic_json_serialize_to(const shrewd_basic_json_value_t *value,
+                                   shrewd_basic_json_write_fn write, void *ctx,
+                                   const shrewd_basic_json_options_t *options,
+                                   shrewd_basic_json_error_t *error);
+
+/** Encode a described object straight through a writer callback. */
+int shrewd_basic_json_encode_to(const void *object,
+                                const shrewd_basic_reflect_type_t *type,
+                                const shrewd_basic_json_info_t *info,
+                                shrewd_basic_json_write_fn write, void *ctx,
+                                const shrewd_basic_json_options_t *options,
+                                shrewd_basic_json_error_t *error);
+
+/** shrewd_basic_json_write_fn that writes into a FILE (@c ctx). */
+int shrewd_basic_json_write_file(void *ctx, const char *data, size_t length);
 
 /**
  * Serialize @p value to a newly allocated NUL-terminated string

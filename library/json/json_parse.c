@@ -237,6 +237,12 @@ static int json_parse_string(json_parser_t *p, shrewd_basic_json_value_t **out)
             return status;
         }
     }
+    if ((0 != p->options->validate_utf8)
+            && (0 == json_utf8_valid(buf.data, buf.len))) {
+        json_buf_release(&buf);
+        return json_fail(p, SHREWD_BASIC_ERR_JSON_SYNTAX,
+                         "invalid UTF-8 in string");
+    }
     status = shrewd_basic_json_new_string_n(buf.data, buf.len, out);
     json_buf_release(&buf);
     return status;
@@ -480,7 +486,7 @@ int shrewd_basic_json_parse(const char *text, size_t length,
                             const shrewd_basic_json_options_t *options,
                             shrewd_basic_json_error_t *error)
 {
-    static const shrewd_basic_json_options_t strict = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    static const shrewd_basic_json_options_t strict = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     json_parser_t parser;
     int status = 0;
     if ((NULL == text) || (NULL == out)) {

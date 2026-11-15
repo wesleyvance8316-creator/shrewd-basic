@@ -191,7 +191,7 @@ static void expect_encode(const char *name, const void *object,
                           const char *expected)
 {
     char *text = NULL;
-    int status = shrewd_basic_json_encode(object, type, &text, NULL, NULL);
+    int status = shrewd_basic_json_encode(object, type, NULL, &text, NULL, NULL);
     if (SHREWD_BASIC_ERR_OK != status) {
         fprintf(stderr, "FAIL %s: encode returned %d\n", name, status);
         ++g_failures;
@@ -211,13 +211,13 @@ static void *decode_new(const char *name, const char *text,
     if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_calloc(&block, 1, size)) {
         return NULL;
     }
-    status = shrewd_basic_json_decode(text, strlen(text), block, type, NULL,
+    status = shrewd_basic_json_decode(text, strlen(text), block, type, NULL, NULL,
                                       &error);
     if (SHREWD_BASIC_ERR_OK != status) {
         fprintf(stderr, "FAIL %s: decode returned %d at %s (%s)\n", name,
                 status, error.path, error.message);
         ++g_failures;
-        (void)shrewd_basic_json_free(block, type);
+        (void)shrewd_basic_json_free(block, type, NULL);
         (void)shrewd_basic_platform_free(&block);
         return NULL;
     }
@@ -227,9 +227,18 @@ static void *decode_new(const char *name, const char *text,
 /* Release a decode_new() graph: internals first, then the root. */
 static int free_new(void *object, const shrewd_basic_reflect_type_t *type)
 {
-    int status = shrewd_basic_json_free(object, type);
+    int status = shrewd_basic_json_free(object, type, NULL);
     (void)shrewd_basic_platform_free(&object);
     return status;
+}
+
+static int map_sink_write(void *ctx, const char *data, size_t length)
+{
+    char **cursor = (char **)ctx;
+    memcpy(*cursor, data, length);
+    *cursor += length;
+    **cursor = '\0';
+    return SHREWD_BASIC_ERR_OK;
 }
 
 static void test_encode_person(void)
@@ -251,6 +260,18 @@ static void test_encode_person(void)
     person.home.y = 5;
     person.pair[1].x = 8;
 
+    {
+        /* encode_to streams the same bytes through a writer sink. */
+        char streamed[1024];
+        char *cursor = streamed;
+        expect_eq_int("encode person to sink",
+                      shrewd_basic_json_encode_to(&person, &person_reflect, NULL,
+                                                  map_sink_write, &cursor, NULL,
+                                                  NULL),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("encode person to sink body",
+                    NULL != strstr(streamed, "\"name\":\"Alice\""));
+    }
     expect_encode("encode person", &person, &person_reflect,
                   "{\"active\":true,\"grade\":\"A\",\"age\":30,"
                   "\"big\":18446744073709551615,\"precise\":2.5,"
@@ -263,7 +284,7 @@ static void test_encode_person(void)
     {
         char *text = NULL;
         expect_eq_int("encode null string",
-                      shrewd_basic_json_encode(&person, &person_reflect, &text,
+                      shrewd_basic_json_encode(&person, &person_reflect, NULL, &text,
                                                NULL, NULL),
                       SHREWD_BASIC_ERR_OK);
         expect_true("encode null string body",
@@ -279,7 +300,7 @@ static void test_encode_person(void)
         {
             char *text = NULL;
             expect_eq_int("roundtrip person encode",
-                          shrewd_basic_json_encode(&person, &person_reflect,
+                          shrewd_basic_json_encode(&person, &person_reflect, NULL,
                                                    &text, NULL, NULL),
                           SHREWD_BASIC_ERR_OK);
             clone = decode_new("roundtrip person", text, &person_reflect,
@@ -341,12 +362,12 @@ static void test_decode_rules(void)
         memset(&target, 0, sizeof(target));
         expect_eq_int("decode mismatch",
                       shrewd_basic_json_decode("{\"home\":{\"x\":\"bad\"}}", strlen("{\"home\":{\"x\":\"bad\"}}"),
-                                               &target, &person_reflect, NULL,
+                                               &target, &person_reflect, NULL, NULL,
                                                &error),
                       SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH);
         expect_streq("decode mismatch path", error.path, "home.x");
         expect_eq_int("decode mismatch free",
-                      shrewd_basic_json_free(&target, &person_reflect),
+                      shrewd_basic_json_free(&target, &person_reflect, NULL),
                       SHREWD_BASIC_ERR_OK);
     }
     {
@@ -355,12 +376,12 @@ static void test_decode_rules(void)
         memset(&target, 0, sizeof(target));
         expect_eq_int("decode long array",
                       shrewd_basic_json_decode("{\"scores\":[1,2,3,4]}", strlen("{\"scores\":[1,2,3,4]}"),
-                                               &target, &person_reflect, NULL,
+                                               &target, &person_reflect, NULL, NULL,
                                                &error),
                       SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH);
         expect_streq("decode long array path", error.path, "scores");
         expect_eq_int("decode long array free",
-                      shrewd_basic_json_free(&target, &person_reflect),
+                      shrewd_basic_json_free(&target, &person_reflect, NULL),
                       SHREWD_BASIC_ERR_OK);
     }
     {
@@ -383,11 +404,11 @@ static void test_decode_rules(void)
                       shrewd_basic_json_decode(
                               "{\"tag\":\"123456789\"}",
                               strlen("{\"tag\":\"123456789\"}"), &target,
-                              &person_reflect, NULL, &error),
+                              &person_reflect, NULL, NULL, &error),
                       SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH);
         expect_streq("decode long buffer path", error.path, "tag");
         expect_eq_int("decode long buffer free",
-                      shrewd_basic_json_free(&target, &person_reflect),
+                      shrewd_basic_json_free(&target, &person_reflect, NULL),
                       SHREWD_BASIC_ERR_OK);
     }
     {
@@ -396,7 +417,7 @@ static void test_decode_rules(void)
         memset(&target, 0, sizeof(target));
         expect_eq_int("decode bad enum",
                       shrewd_basic_json_decode("{\"mode\":\"NOPE\"}", strlen("{\"mode\":\"NOPE\"}"), &target,
-                                               &person_reflect, NULL, &error),
+                                               &person_reflect, NULL, NULL, &error),
                       SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH);
         expect_streq("decode bad enum path", error.path, "mode");
     }
@@ -437,7 +458,7 @@ static void test_union(void)
         bool same = false;
         char *text = NULL;
         expect_eq_int("union encode int",
-                      shrewd_basic_json_encode(&message, &message_reflect, &text,
+                      shrewd_basic_json_encode(&message, &message_reflect, NULL, &text,
                                                NULL, NULL),
                       SHREWD_BASIC_ERR_OK);
         clone = decode_new("decode union int", text, &message_reflect,
@@ -461,7 +482,7 @@ static void test_union(void)
         shrewd_basic_json_error_t error;
         char *text = NULL;
         expect_eq_int("union unknown tag",
-                      shrewd_basic_json_encode(&message, &message_reflect, &text,
+                      shrewd_basic_json_encode(&message, &message_reflect, NULL, &text,
                                                NULL, &error),
                       SHREWD_BASIC_ERR_JSON_UNSUPPORTED);
         expect_streq("union unknown tag path", error.path, "payload");
@@ -470,7 +491,7 @@ static void test_union(void)
             memset(&options, 0, sizeof(options));
             options.allow_unknown_union = 1;
             expect_eq_int("union unknown allowed",
-                          shrewd_basic_json_encode(&message, &message_reflect,
+                          shrewd_basic_json_encode(&message, &message_reflect, NULL,
                                                    &text, &options, NULL),
                           SHREWD_BASIC_ERR_OK);
             expect_true("union unknown body",
@@ -595,7 +616,7 @@ static void test_pointers(void)
             expect_eq_int("decode packet",
                           shrewd_basic_json_decode(
                                   "{\"data\":[7,8,9],\"len\":999}", strlen("{\"data\":[7,8,9],\"len\":999}"), packet,
-                                  &packet_reflect, NULL, &error),
+                                  &packet_reflect, NULL, NULL, &error),
                           SHREWD_BASIC_ERR_OK);
             expect_true("decode packet tail",
                         ((size_t)3 == packet->len) && (7 == packet->data[0])
@@ -614,7 +635,7 @@ static void test_pointers(void)
         memset(&loop, 0, sizeof(loop));
         loop.next = &loop;
         expect_eq_int("encode cycle",
-                      shrewd_basic_json_encode(&loop, &node_reflect, &text, NULL,
+                      shrewd_basic_json_encode(&loop, &node_reflect, NULL, &text, NULL,
                                                &error),
                       SHREWD_BASIC_ERR_JSON_UNSUPPORTED);
         expect_streq("encode cycle path", error.path, "next");
@@ -635,13 +656,13 @@ static void test_encode_options(void)
 
     /* Non-finite numbers fail by default, become null on request. */
     expect_eq_int("encode nan",
-                  shrewd_basic_json_encode(&person, &person_reflect, &text, NULL,
+                  shrewd_basic_json_encode(&person, &person_reflect, NULL, &text, NULL,
                                            NULL),
                   SHREWD_BASIC_ERR_JSON_UNSUPPORTED);
     memset(&options, 0, sizeof(options));
     options.allow_nan = 1;
     expect_eq_int("encode nan allowed",
-                  shrewd_basic_json_encode(&person, &person_reflect, &text,
+                  shrewd_basic_json_encode(&person, &person_reflect, NULL, &text,
                                            &options, NULL),
                   SHREWD_BASIC_ERR_OK);
     expect_true("encode nan null",
@@ -653,7 +674,7 @@ static void test_encode_options(void)
     memset(&options, 0, sizeof(options));
     options.pretty = 1;
     expect_eq_int("encode pretty",
-                  shrewd_basic_json_encode(&person, &person_reflect, &text,
+                  shrewd_basic_json_encode(&person, &person_reflect, NULL, &text,
                                            &options, NULL),
                   SHREWD_BASIC_ERR_OK);
     expect_true("encode pretty body",

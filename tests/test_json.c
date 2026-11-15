@@ -460,6 +460,103 @@ static void test_roundtrip(void)
     shrewd_basic_json_value_free(v);
 }
 
+/* --- sink + text option tests ----------------------------------------- */
+
+typedef struct collect_sink {
+    char buf[512];
+    size_t len;
+    int calls;
+} collect_sink_t;
+
+static int collect_write(void *ctx, const char *data, size_t length)
+{
+    collect_sink_t *sink = (collect_sink_t *)ctx;
+    for (size_t i = 0; i < length; ++i) {
+        if (sink->len + 1 < sizeof(sink->buf)) {
+            sink->buf[sink->len++] = data[i];
+        }
+    }
+    sink->buf[sink->len] = '\0';
+    sink->calls += 1;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+static void test_sinks_and_text(void)
+{
+    shrewd_basic_json_value_t *v = NULL;
+    collect_sink_t sink;
+    char *text = NULL;
+    shrewd_basic_json_options_t options;
+
+    memset(&sink, 0, sizeof(sink));
+    v = parse_ok("sink src", "{\"a\":[1,2],\"b\":\"x\"}");
+
+    /* Streaming serialize matches the text wrapper byte for byte. */
+    expect_eq_int("sink serialize_to",
+                  shrewd_basic_json_serialize_to(v, collect_write, &sink, NULL,
+                                                 NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("sink serialize",
+                  shrewd_basic_json_serialize(v, &text, NULL, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_streq("sink output matches", sink.buf, text);
+    expect_true("sink streamed", 1 < sink.calls);
+    shrewd_basic_json_text_free(text);
+
+    /* FILE sink. */
+    {
+        FILE *file = tmpfile();
+        expect_true("sink tmpfile", NULL != file);
+        if (NULL != file) {
+            char file_text[256] = {0};
+            size_t n = 0;
+            expect_eq_int("sink file",
+                          shrewd_basic_json_serialize_to(
+                                  v, shrewd_basic_json_write_file, file, NULL,
+                                  NULL),
+                          SHREWD_BASIC_ERR_OK);
+            rewind(file);
+            n = fread(file_text, 1, sizeof(file_text) - 1, file);
+            file_text[n] = '\0';
+            expect_streq("sink file output", file_text, sink.buf);
+            fclose(file);
+        }
+    }
+
+    shrewd_basic_json_value_free(v);
+
+    /* escape_unicode: non-ASCII becomes \uXXXX (surrogate pairs past BMP). */
+    memset(&options, 0, sizeof(options));
+    options.escape_unicode = 1;
+    expect_eq_int("escape build",
+                  shrewd_basic_json_new_string("caf\xc3\xa9\xf0\x9f\x98\x80", &v),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("escape serialize",
+                  shrewd_basic_json_serialize(v, &text, &options, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_streq("escape output", text,
+                 "\"caf\\u00e9\\ud83d\\ude00\"");
+    shrewd_basic_json_text_free(text);
+    shrewd_basic_json_value_free(v);
+
+    /* validate_utf8 rejects raw invalid sequences. */
+    memset(&options, 0, sizeof(options));
+    options.validate_utf8 = 1;
+    expect_eq_int("utf8 valid",
+                  shrewd_basic_json_parse("\"ok \xc3\xa9\"", 7, &v, &options,
+                                          NULL),
+                  SHREWD_BASIC_ERR_OK);
+    shrewd_basic_json_value_free(v);
+    {
+        shrewd_basic_json_error_t error;
+        v = NULL;
+        expect_eq_int("utf8 invalid",
+                      shrewd_basic_json_parse("\"\xc3\x28\"", 4, &v, &options,
+                                              &error),
+                      SHREWD_BASIC_ERR_JSON_SYNTAX);
+    }
+}
+
 int main(void)
 {
     test_parse_scalars();
@@ -470,5 +567,6 @@ int main(void)
     test_value_model();
     test_serialize();
     test_roundtrip();
+    test_sinks_and_text();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

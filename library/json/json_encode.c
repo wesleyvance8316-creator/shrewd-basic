@@ -519,7 +519,7 @@ int shrewd_basic_json_encode_value(const void *object,
                                    const shrewd_basic_json_options_t *options,
                                    shrewd_basic_json_error_t *error)
 {
-    static const shrewd_basic_json_options_t plain = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    static const shrewd_basic_json_options_t plain = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     json_map_ctx_t ctx;
     int status = 0;
     if ((NULL == object) || (NULL == type) || (NULL == out)) {
@@ -552,6 +552,24 @@ int shrewd_basic_json_encode_value(const void *object,
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_json_log,
                          "encode", "encode ok (%s)\n", type->sb_refl_name);
     }
+    return status;
+}
+
+int shrewd_basic_json_encode_to(const void *object,
+                                const shrewd_basic_reflect_type_t *type,
+                                const shrewd_basic_json_info_t *info,
+                                shrewd_basic_json_write_fn write, void *ctx,
+                                const shrewd_basic_json_options_t *options,
+                                shrewd_basic_json_error_t *error)
+{
+    shrewd_basic_json_value_t *tree = NULL;
+    int status = shrewd_basic_json_encode_value(object, type, info, &tree,
+                                                options, error);
+    if (SHREWD_BASIC_ERR_OK != status) {
+        return status;
+    }
+    status = shrewd_basic_json_serialize_to(tree, write, ctx, options, error);
+    shrewd_basic_json_value_free(tree);
     return status;
 }
 
