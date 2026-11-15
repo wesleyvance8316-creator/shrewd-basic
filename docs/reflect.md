@@ -348,7 +348,8 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
   枚举(`FIELD_ENUM`/`ENUM_DEFINE`),引用但未定义的类型自动补 `TYPE_DECLARE`;
 - 描述符命名约定 `<类型名>_reflect`(如 `shape_t_reflect`);
 - 跳过并告警:bit-field、联合体、函数指针、多维数组、柔性数组;
-- 验证:`tools/reflect_gen_check.sh` 一键自测(生成 → 编译 → 运行 dump/equal/enum 冒烟),样例输入 `tools/reflect_gen_sample.h`。
+- 验证:`tools/reflect_gen_check.sh` 一键自测(生成 → 编译 → 运行 dump/equal/enum 冒烟),样例输入 `tools/reflect_gen_sample.h`;
+- 基准:`tools/reflect_bench.sh` 输出关键路径的 ns/op 基线(find/resolve/path_get/field_get/equal/copy+destroy/dump),供优化工作对照。
 
 ## 11. 路线图
 
