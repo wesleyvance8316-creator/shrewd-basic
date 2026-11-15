@@ -52,6 +52,12 @@
  * types); a followed pointee scalar is read with the pointee type's
  * canonical width.
  *
+ * Traversal: shrewd_basic_reflect_visit() reports the value graph event
+ * by event (ENTER/LEAF/EXIT with path strings) so applications -
+ * serializers, validators, exporters - can walk objects without writing
+ * their own recursion. Pointer targets are followed like dump; a cycle
+ * or the depth cap reports a CYCLE event instead of expanding.
+ *
  * Operations: a type (or a single field) may carry a
  * shrewd_basic_reflect_ops_t vtable so generic code can read, write,
  * check, copy and destroy targets it cannot describe otherwise. The
@@ -837,6 +843,71 @@ int shrewd_basic_reflect_destroy(void *object,
 int shrewd_basic_reflect_equal(const void *a, const void *b,
                                const shrewd_basic_reflect_type_t *type,
                                bool *out_equal);
+
+/*
+ * Traversal: event-by-event walk of a value graph for applications that
+ * want the structure without writing their own recursion. Pointers are
+ * followed like dump; arrays are bracketed by ARRAY_ENTER/ARRAY_EXIT;
+ * cycles and the depth cap are reported as CYCLE events instead of being
+ * expanded. The walk allocates nothing.
+ */
+
+/** Events reported by shrewd_basic_reflect_visit(). */
+typedef enum shrewd_basic_reflect_visit_event {
+    SHREWD_BASIC_REFLECT_VISIT_ENTER = 0,       /**< Before a struct value's fields. */
+    SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER,     /**< Before an array's elements. */
+    SHREWD_BASIC_REFLECT_VISIT_LEAF,            /**< One scalar/string/opaque value or NULL slot. */
+    SHREWD_BASIC_REFLECT_VISIT_CYCLE,           /**< Skipped target (cycle or depth cap). */
+    SHREWD_BASIC_REFLECT_VISIT_ARRAY_EXIT,      /**< After an array's elements. */
+    SHREWD_BASIC_REFLECT_VISIT_EXIT             /**< After a struct value's fields. */
+} shrewd_basic_reflect_visit_event_t;
+
+/** What the walker should do after a visit callback returns. */
+typedef enum shrewd_basic_reflect_visit_action {
+    SHREWD_BASIC_REFLECT_VISIT_CONTINUE = 0, /**< Keep walking. */
+    SHREWD_BASIC_REFLECT_VISIT_PRUNE = 1,    /**< Skip this node's subtree (ENTER/ARRAY_ENTER). */
+    SHREWD_BASIC_REFLECT_VISIT_STOP = 2      /**< Abort the walk at once. */
+} shrewd_basic_reflect_visit_action_t;
+
+/**
+ * One event of shrewd_basic_reflect_visit(). @c path follows the
+ * path_get() syntax ("home.x", "pair[2].y", "" for the root).
+ * @c field is the member the node was reached through (NULL at the root),
+ * @c value points at the node's storage - NULL for a NULL pointer slot -
+ * and @c count carries the element count on ARRAY_ENTER/ARRAY_EXIT.
+ * A STRING node's storage holds the char pointer itself.
+ */
+typedef struct shrewd_basic_reflect_visit_node {
+    shrewd_basic_reflect_visit_event_t event;
+    const char *path;
+    const shrewd_basic_reflect_field_t *field;
+    const void *value;
+    const shrewd_basic_reflect_type_t *type;
+    size_t count;
+} shrewd_basic_reflect_visit_node_t;
+
+/**
+ * Visit callback. Return SHREWD_BASIC_REFLECT_VISIT_CONTINUE to keep
+ * walking, ..._PRUNE to skip the subtree (only meaningful on ENTER and
+ * ARRAY_ENTER, where it also suppresses the matching EXIT; elsewhere it
+ * acts as CONTINUE) or ..._STOP to abort the walk - no further events are
+ * reported, not even the pending EXIT ones.
+ */
+typedef shrewd_basic_reflect_visit_action_t (*shrewd_basic_reflect_visit_fn)(
+        void *ctx, const shrewd_basic_reflect_visit_node_t *node);
+
+/**
+ * Walk the value graph of @p object (an instance of the struct @p type
+ * describes) and report every node to @p visit. Pointers are followed
+ * exactly like shrewd_basic_reflect_dump() (NULL slots become LEAF events
+ * with a NULL value, opaque targets become LEAF events, cyclic targets
+ * become CYCLE events). Returns SHREWD_BASIC_ERR_OK once the walk is
+ * done (or stopped by the callback), SHREWD_BASIC_ERR_ARG_INVALID for
+ * NULL arguments or a non-struct type.
+ */
+int shrewd_basic_reflect_visit(const void *object,
+                               const shrewd_basic_reflect_type_t *type,
+                               shrewd_basic_reflect_visit_fn visit, void *ctx);
 
 #ifdef __cplusplus
 }

@@ -14,7 +14,8 @@
  * field_get/set, dump (incl. ops->render and cycle markers),
  * type_resolve, path_get/set, value_get/set, check, equal, copy,
  * destroy, dynamic arrays (F_DARRAY/F_SENTINEL), flexible tails
- * (F_FLEX) and the traversal accessors. The 1 MiB dump body cap is covered by the test suite
+ * (F_FLEX), the traversal accessors and visit (event-by-event walk).
+ * The 1 MiB dump body cap is covered by the test suite
  * instead - its output would flood the terminal here.
  */
 
@@ -241,6 +242,25 @@ static void describe_field(const char *name)
            field->sb_refl_offset, field->sb_refl_size, field->sb_refl_count,
            (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_ARRAY)) ? " ARRAY" : "",
            (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) ? " PTR" : "");
+}
+
+/* Visit callback: one printed line per traversal event. */
+static shrewd_basic_reflect_visit_action_t demo_visit_print(
+        void *ctx, const shrewd_basic_reflect_visit_node_t *node)
+{
+    static const char *const event_name[] = {
+        "ENTER", "ARRAY_ENTER", "LEAF", "CYCLE", "ARRAY_EXIT", "EXIT" };
+    (void)ctx;
+    if ((SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER == node->event)
+            || (SHREWD_BASIC_REFLECT_VISIT_ARRAY_EXIT == node->event)) {
+        printf("  %-11s %s (count %zu)\n", event_name[node->event],
+               node->path, node->count);
+    } else {
+        printf("  %-11s %s%s\n", event_name[node->event],
+               ('\0' != node->path[0]) ? node->path : "(root)",
+               (NULL == node->value) ? " (null)" : "");
+    }
+    return SHREWD_BASIC_REFLECT_VISIT_CONTINUE;
 }
 
 int main(void)
@@ -590,6 +610,12 @@ int main(void)
         print_status("destroy(packet)",
                      shrewd_basic_reflect_destroy(packet, &packet_type));
     }
+
+    banner("12. traversal: event-by-event visit");
+    printf("  walking person (ENTER/LEAF/EXIT, arrays bracketed):\n");
+    (void)shrewd_basic_reflect_visit(&person, &person_type, demo_visit_print, NULL);
+    printf("  walking the self-cycle node (CYCLE instead of expanding):\n");
+    (void)shrewd_basic_reflect_visit(&loop, &node_type, demo_visit_print, NULL);
 
     printf("\nDemo done. See docs/reflect.md for the full reference.\n");
     return 0;

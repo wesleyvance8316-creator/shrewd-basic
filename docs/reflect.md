@@ -193,6 +193,7 @@ SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                /* 跨 TU 
 | `equal(a, b, type, &same)` | 深度比较(值语义/内容/深目标,环安全) | `ARG_INVALID` |
 | `copy(&out, obj, type)` | 深拷贝(clone-out) | `MEM_NOMEM` / `REFLECT_NOT_SUPPORTED` / `ARG_INVALID` |
 | `destroy(obj, type)` | 深释放(copy 的逆) | `REFLECT_NOT_SUPPORTED` / `ARG_INVALID` |
+| `visit(obj, type, fn, ctx)` | 事件流遍历(ENTER/LEAF/EXIT/…,跟随指针,环→CYCLE) | `ARG_INVALID` |
 
 ### 5.1 get/set 的尺寸规则
 
@@ -211,6 +212,25 @@ member ( '[' index ']' )? ( '.' member ( '[' index ']' )? )*
 - 语法非法 → `ARG_INVALID`;成员不存在 / 索引越界 / **指针段为 NULL** → `KEY_NOTFOUND`;
 - `resolve` 是纯元数据零解引用,**跨指针段的路径被拒绝**(`ARG_INVALID`),动态寻址用
   `path_get/set`;路径终点是指针字段时返回指针值本身(与 `field_get` 一致)。
+
+### 5.3 visit 事件遍历
+
+`shrewd_basic_reflect_visit(obj, type, fn, ctx)` 把值图逐节点报给回调,应用(序列化器、
+校验器、导出器)无需自己写递归。零分配,路径串随事件给出(5.2 的语法,根为 `""`)。
+
+| 事件 | 含义 | 节点内容 |
+|---|---|---|
+| `ENTER` / `EXIT` | 结构体值展开前后 | `type` = 该结构体类型,`field` = 到达它的字段(根为 NULL) |
+| `ARRAY_ENTER` / `ARRAY_EXIT` | 数组字段前后 | `count` = 运行时元素数,`value` = 元素区基址 |
+| `LEAF` | 标量 / 字符串 / 不透明值,**或 NULL 指针槽**(`value == NULL`) | `value` = 值存储地址;STRING 槽内是 `char *` 本身 |
+| `CYCLE` | 不再展开的目标 | 环回边(同对象同类型再现)或超出 16 层深度钳制 |
+
+- 指针语义与 dump 一致:**跟随**(NULL → `LEAF` + `value==NULL`,不透明 → `LEAF`,结构体 →
+  `ENTER…EXIT`);动态数组表未分配时按 `LEAF(value==NULL)` 上报(同 dump 的 `(null)`);
+- 回调返回 `CONTINUE` 继续、`PRUNE` 跳过子树(仅对 `ENTER`/`ARRAY_ENTER` 有效,并连带
+  抑制配对的 `EXIT`)、`STOP` 立即终止(后续事件含待发的 `EXIT` 一概不再报告);
+- 事件顺序:`ENTER 根 → 字段序(数组为 ARRAY_ENTER → 元素 → ARRAY_EXIT)→ EXIT 根`,
+  结构体数组逐元素 `ENTER/EXIT`(路径 `pair[1]`)。
 
 ---
 

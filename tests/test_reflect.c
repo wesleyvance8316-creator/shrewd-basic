@@ -2042,6 +2042,296 @@ static void test_graph_ops(void)
                   SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED);
 }
 
+/* --- visitor fixtures ------------------------------------------------- */
+
+#define VISIT_LOG_MAX 128
+
+typedef struct visit_entry {
+    shrewd_basic_reflect_visit_event_t event;
+    char path[64];
+    int value_null;
+    size_t count;
+} visit_entry_t;
+
+typedef struct visit_rec {
+    visit_entry_t entries[VISIT_LOG_MAX];
+    size_t count;
+    shrewd_basic_reflect_visit_event_t prune_event; /* prune when this matches */
+    const char *prune_path;
+    size_t stop_after; /* abort the walk after this many events; 0 = never */
+} visit_rec_t;
+
+static shrewd_basic_reflect_visit_action_t visit_collect(
+        void *ctx, const shrewd_basic_reflect_visit_node_t *node)
+{
+    visit_rec_t *rec = (visit_rec_t *)ctx;
+    if (rec->count < VISIT_LOG_MAX) {
+        visit_entry_t *entry = &rec->entries[rec->count];
+        size_t n = strlen(node->path);
+        if (n >= sizeof(entry->path)) {
+            n = sizeof(entry->path) - 1;
+        }
+        memcpy(entry->path, node->path, n);
+        entry->path[n] = '\0';
+        entry->event = node->event;
+        entry->value_null = (NULL == node->value) ? 1 : 0;
+        entry->count = node->count;
+    }
+    ++rec->count;
+    if ((node->event == rec->prune_event) && (NULL != rec->prune_path)
+            && (0 == strcmp(node->path, rec->prune_path))) {
+        return SHREWD_BASIC_REFLECT_VISIT_PRUNE;
+    }
+    if ((0 != rec->stop_after) && (rec->count >= rec->stop_after)) {
+        return SHREWD_BASIC_REFLECT_VISIT_STOP;
+    }
+    return SHREWD_BASIC_REFLECT_VISIT_CONTINUE;
+}
+
+/* Index of the first matching event, or -1. */
+static int visit_find(const visit_rec_t *rec,
+                      shrewd_basic_reflect_visit_event_t event, const char *path)
+{
+    for (size_t i = 0; i < rec->count; ++i) {
+        if ((event == rec->entries[i].event) && (0 == strcmp(rec->entries[i].path, path))) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+static void test_visit(void)
+{
+    person_t person;
+    memset(&person, 0, sizeof(person));
+    person.name = "Alice";
+    person.tag[0] = 't';
+    person.tag[1] = 'g';
+    person.scores[0] = 1;
+    person.scores[1] = 2;
+    person.scores[2] = 3;
+    person.home.x = 4;
+    person.pair[1].y = 9;
+
+    /* Full walk of person_t: every event in order. */
+    visit_rec_t rec;
+    memset(&rec, 0, sizeof(rec));
+    expect_eq_int("visit person",
+                  shrewd_basic_reflect_visit(&person, &g_person_reflect, visit_collect, &rec),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("visit person count", (size_t)35 == rec.count);
+    expect_true("visit root enter",
+                (0 == visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, ""))
+                && (SHREWD_BASIC_REFLECT_VISIT_ENTER == rec.entries[0].event));
+    expect_true("visit root exit",
+                ((int)rec.count - 1
+                 == visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_EXIT, "")));
+    expect_true("visit leaf scalar", 0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "age"));
+    expect_true("visit leaf string", 0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "name"));
+    expect_true("visit nested order",
+                (visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, "home")
+                 < visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "home.y"))
+                && (visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "home.y")
+                    < visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_EXIT, "home")));
+    expect_true("visit struct array order",
+                (visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "pair")
+                 < visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, "pair[1]"))
+                && (visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "pair[1].y")
+                    < visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_EXIT, "pair")));
+    int tag_enter = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "tag");
+    expect_true("visit array count",
+                (0 <= tag_enter) && ((size_t)4 == rec.entries[tag_enter].count));
+    expect_true("visit array elements",
+                (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "tag[0]"))
+                && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "tag[3]")));
+    expect_true("visit no leaves under arrays missing",
+                0 > visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "pair"));
+
+    /* PRUNE at a struct: its subtree (and matching EXIT) is suppressed. */
+    memset(&rec, 0, sizeof(rec));
+    rec.prune_event = SHREWD_BASIC_REFLECT_VISIT_ENTER;
+    rec.prune_path = "home";
+    expect_eq_int("visit prune",
+                  shrewd_basic_reflect_visit(&person, &g_person_reflect, visit_collect, &rec),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("visit prune enter reported",
+                0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, "home"));
+    expect_true("visit prune subtree gone",
+                (0 > visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "home.x"))
+                && (0 > visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_EXIT, "home")));
+    expect_true("visit prune siblings kept",
+                (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "age"))
+                && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "pair")));
+
+    /* PRUNE at an array: elements and the matching ARRAY_EXIT are suppressed. */
+    memset(&rec, 0, sizeof(rec));
+    rec.prune_event = SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER;
+    rec.prune_path = "scores";
+    expect_eq_int("visit prune array",
+                  shrewd_basic_reflect_visit(&person, &g_person_reflect, visit_collect, &rec),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("visit prune array reported",
+                0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "scores"));
+    expect_true("visit prune array gone",
+                (0 > visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "scores[0]"))
+                && (0 > visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_EXIT, "scores")));
+
+    /* STOP aborts at once - no further events at all. */
+    memset(&rec, 0, sizeof(rec));
+    rec.stop_after = 2;
+    expect_eq_int("visit stop",
+                  shrewd_basic_reflect_visit(&person, &g_person_reflect, visit_collect, &rec),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("visit stop truncates", (size_t)2 == rec.count);
+    expect_true("visit stop last leaf",
+                (SHREWD_BASIC_REFLECT_VISIT_LEAF == rec.entries[1].event)
+                && (0 == strcmp(rec.entries[1].path, "active")));
+
+    /* NULL pointer slots, opaque targets and pointer-to-struct elements. */
+    point_t team_point;
+    int32_t counter = 5;
+    const char *text = "hi";
+    int32_t handle = 9;
+    refs_t refs;
+    memset(&refs, 0, sizeof(refs));
+    memset(&team_point, 0, sizeof(team_point));
+    refs.p_str = &text;
+    refs.ctx = &handle;
+    refs.counter = &counter;
+    refs.team[0] = &team_point;
+    memset(&rec, 0, sizeof(rec));
+    expect_eq_int("visit refs",
+                  shrewd_basic_reflect_visit(&refs, &g_refs_reflect, visit_collect, &rec),
+                  SHREWD_BASIC_ERR_OK);
+    int at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "p_str");
+    expect_true("visit ptr-to-string leaf",
+                (0 <= at) && (0 == rec.entries[at].value_null));
+    at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "ctx");
+    expect_true("visit opaque leaf",
+                (0 <= at) && (0 == rec.entries[at].value_null));
+    at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "counter");
+    expect_true("visit ptr-to-scalar leaf",
+                (0 <= at) && (0 == rec.entries[at].value_null));
+    expect_true("visit ptr array element struct",
+                (visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "team")
+                 < visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, "team[0]"))
+                && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "team[0].y"))
+                && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_EXIT, "team")));
+    refs.counter = NULL;
+    memset(&rec, 0, sizeof(rec));
+    expect_eq_int("visit refs null",
+                  shrewd_basic_reflect_visit(&refs, &g_refs_reflect, visit_collect, &rec),
+                  SHREWD_BASIC_ERR_OK);
+    at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "counter");
+    expect_true("visit null pointer leaf",
+                (0 <= at) && (0 != rec.entries[at].value_null));
+
+    /* Cycles: a self-link reports CYCLE instead of expanding. */
+    node_t loop;
+    memset(&loop, 0, sizeof(loop));
+    loop.data = 1;
+    loop.next = &loop;
+    memset(&rec, 0, sizeof(rec));
+    expect_eq_int("visit cycle",
+                  shrewd_basic_reflect_visit(&loop, &g_node_reflect, visit_collect, &rec),
+                  SHREWD_BASIC_ERR_OK);
+    at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_CYCLE, "next");
+    expect_true("visit cycle reported", (0 <= at) && ((size_t)4 == rec.count));
+    expect_true("visit cycle target",
+                (0 <= at) && (0 == rec.entries[at].value_null));
+    loop.next = NULL;
+    memset(&rec, 0, sizeof(rec));
+    expect_eq_int("visit null link",
+                  shrewd_basic_reflect_visit(&loop, &g_node_reflect, visit_collect, &rec),
+                  SHREWD_BASIC_ERR_OK);
+    at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "next");
+    expect_true("visit null struct link",
+                (0 <= at) && (0 != rec.entries[at].value_null));
+
+    /* Depth cap: a 20-long chain stops with a CYCLE event. */
+    node_t chain[20];
+    memset(chain, 0, sizeof(chain));
+    for (size_t i = 0; i + 1 < 20; ++i) {
+        chain[i].next = &chain[i + 1];
+    }
+    memset(&rec, 0, sizeof(rec));
+    expect_eq_int("visit depth cap",
+                  shrewd_basic_reflect_visit(&chain[0], &g_node_reflect, visit_collect, &rec),
+                  SHREWD_BASIC_ERR_OK);
+    int saw_cycle = 0;
+    for (size_t i = 0; i < rec.count; ++i) {
+        if (SHREWD_BASIC_REFLECT_VISIT_CYCLE == rec.entries[i].event) {
+            saw_cycle = 1;
+        }
+    }
+    expect_true("visit depth cap events",
+                ((size_t)49 == rec.count) && (0 != saw_cycle));
+    expect_true("visit depth cap shallow",
+                0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, "next.next.next"));
+
+    /* Dynamic arrays: ARRAY_ENTER carries the run-time count. */
+    dyn_t dyn;
+    point_t dyn_points[2];
+    point_t *dyn_table[2];
+    int32_t dyn_values[3];
+    char *dyn_argv[3];
+    memset(&dyn, 0, sizeof(dyn));
+    memset(dyn_points, 0, sizeof(dyn_points));
+    dyn_table[0] = &dyn_points[0];
+    dyn_table[1] = &dyn_points[1];
+    dyn_values[0] = 7;
+    dyn_values[1] = 8;
+    dyn_values[2] = 9;
+    dyn_argv[0] = (char *)"ls";
+    dyn_argv[1] = (char *)"-l";
+    dyn_argv[2] = NULL;
+    dyn.points = dyn_table;
+    dyn.point_count = 2;
+    dyn.values = dyn_values;
+    dyn.value_count = 3;
+    dyn.argv = dyn_argv;
+    memset(&rec, 0, sizeof(rec));
+    expect_eq_int("visit dyn",
+                  shrewd_basic_reflect_visit(&dyn, &g_dyn_reflect, visit_collect, &rec),
+                  SHREWD_BASIC_ERR_OK);
+    at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "values");
+    expect_true("visit darray count",
+                (0 <= at) && ((size_t)3 == rec.entries[at].count)
+                && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "values[2]")));
+    at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "points");
+    expect_true("visit ptr darray",
+                (0 <= at) && ((size_t)2 == rec.entries[at].count)
+                && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, "points[1]")));
+    at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "argv");
+    expect_true("visit sentinel count",
+                (0 <= at) && ((size_t)2 == rec.entries[at].count)
+                && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "argv[1]")));
+    dyn_t dyn_empty;
+    memset(&dyn_empty, 0, sizeof(dyn_empty));
+    memset(&rec, 0, sizeof(rec));
+    expect_eq_int("visit dyn empty",
+                  shrewd_basic_reflect_visit(&dyn_empty, &g_dyn_reflect, visit_collect, &rec),
+                  SHREWD_BASIC_ERR_OK);
+    at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "points");
+    expect_true("visit null table leaf",
+                (0 <= at) && (0 != rec.entries[at].value_null));
+
+    /* Argument validation. */
+    expect_eq_int("visit NULL object",
+                  shrewd_basic_reflect_visit(NULL, &g_person_reflect, visit_collect, &rec),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("visit NULL type",
+                  shrewd_basic_reflect_visit(&person, NULL, visit_collect, &rec),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("visit NULL callback",
+                  shrewd_basic_reflect_visit(&person, &g_person_reflect, NULL, &rec),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("visit non-struct type",
+                  shrewd_basic_reflect_visit(&person.age, &shrewd_basic_reflect_int32,
+                                             visit_collect, &rec),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+}
+
 int main(void)
 {
     test_describe();
@@ -2057,6 +2347,7 @@ int main(void)
     test_dump_pointers();
     test_dump_body_cap();
     test_paths();
+    test_visit();
     test_graph_ops();
     test_equal();
     test_dynamic_arrays();
