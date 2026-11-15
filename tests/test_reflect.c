@@ -166,6 +166,8 @@ typedef struct {
     int32_t *type_ops_slot;
     int32_t *field_ops_slot;
     int32_t *many[1];
+    int32_t prim_ops;
+    int32_t arr_ops[2];
 } ops_refs_t;
 
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_ops_refs_reflect, ops_refs_t,
@@ -173,7 +175,10 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_ops_refs_reflect, ops_refs_t,
     SHREWD_BASIC_REFLECT_FIELD_PTR_OPS(ops_refs_t, field_ops_slot, g_handle_reflect,
                                        g_override_ops),
     SHREWD_BASIC_REFLECT_FIELD_PTR_ARRAY_OPS(ops_refs_t, many, g_handle_reflect,
-                                             g_override_ops));
+                                             g_override_ops),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE_OPS(ops_refs_t, prim_ops, g_type_ops),
+    SHREWD_BASIC_REFLECT_FIELD_ARRAY_OPS(ops_refs_t, arr_ops, shrewd_basic_reflect_int32,
+                                         g_override_ops));
 
 static int g_check_calls = 0;
 
@@ -1426,6 +1431,17 @@ static void test_ops(void)
     expect_true("ops field falls back to type",
                 (NULL == type_field->sb_refl_ops) && (&g_handle_reflect == type_field->sb_refl_type));
     expect_true("ops field override wins", &g_override_ops == field_field->sb_refl_ops);
+    const shrewd_basic_reflect_field_t *prim_ops_field =
+        find_or_fail("ops", &g_ops_refs_reflect, "prim_ops");
+    const shrewd_basic_reflect_field_t *arr_ops_field =
+        find_or_fail("ops", &g_ops_refs_reflect, "arr_ops");
+    if ((NULL != prim_ops_field) && (NULL != arr_ops_field)) {
+        expect_true("ops primitive field", &g_type_ops == prim_ops_field->sb_refl_ops);
+        expect_true("ops array field",
+                    (&g_override_ops == arr_ops_field->sb_refl_ops)
+                    && ((size_t)2 == arr_ops_field->sb_refl_count)
+                    && (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY == arr_ops_field->sb_refl_flags));
+    }
     expect_true("ops opaque target", &g_type_ops == g_handle_reflect.sb_refl_ops);
 
     /* value_get/set through the type-level ops. */
@@ -1556,7 +1572,7 @@ static void test_graph_ops(void)
     void *bad = NULL;
     expect_eq_int("copy opaque without ops",
                   shrewd_basic_reflect_copy(&bad, &refs, &g_refs_reflect),
-                  SHREWD_BASIC_ERR_ARG_INVALID);
+                  SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED);
 
     /* Cyclic and shared graphs: the clone map and the visited set make
        copy and destroy sound - the clone keeps the cycle, shared sources
@@ -1625,7 +1641,7 @@ static void test_graph_ops(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
     expect_eq_int("destroy primitive root",
                   shrewd_basic_reflect_destroy(&counter, &shrewd_basic_reflect_int32),
-                  SHREWD_BASIC_ERR_ARG_INVALID);
+                  SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED);
 }
 
 int main(void)

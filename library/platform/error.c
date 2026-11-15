@@ -17,6 +17,8 @@ const char *shrewd_basic_error_name(int status)
         return "SHREWD_BASIC_ERR_LOG_FOPEN";
     case SHREWD_BASIC_ERR_REFLECT_MISMATCH:
         return "SHREWD_BASIC_ERR_REFLECT_MISMATCH";
+    case SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED:
+        return "SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED";
     default:
         return "SHREWD_BASIC_ERR_UNKNOWN";
     }

@@ -142,7 +142,7 @@ shrewd_basic_reflect_void     /* 不透明目标(OPAQUE),size = 0 */
 | `FIELD_PTR(struct_type, member, ref)` | 指针成员,`ref` 为目标描述符 |
 | `FIELD_PTR_ARRAY(struct_type, member, ref)` | 定长指针数组 |
 | `FIELD_ENUM(struct_type, member, ref)` | 枚举成员 |
-| `FIELD_STRUCT_OPS` / `FIELD_PTR_OPS` / `FIELD_PTR_ARRAY_OPS` | 同上 + 字段级 ops 覆盖 |
+| `FIELD_*_OPS`(全部 5 种形态各有变体) | 同上 + 字段级 ops 覆盖 |
 
 `ref`/`ops_ref` 参数**不带 `&`**(宏内部补 `&` 以保持地址常量)。
 
@@ -186,8 +186,8 @@ SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                /* 跨 TU 
 | `value_set(obj, field, in, n)` | 经 ops 写目标的规范值 | 同上 |
 | `check(obj, type)` | 图校验(ops->check + 字段递归) | 回调返回值 / `ARG_INVALID` |
 | `equal(a, b, type, &same)` | 深度比较(值语义/内容/深目标,环安全) | `ARG_INVALID` |
-| `copy(&out, obj, type)` | 深拷贝(clone-out) | `MEM_NOMEM` / `ARG_INVALID` |
-| `destroy(obj, type)` | 深释放(copy 的逆) | `ARG_INVALID` |
+| `copy(&out, obj, type)` | 深拷贝(clone-out) | `MEM_NOMEM` / `REFLECT_NOT_SUPPORTED` / `ARG_INVALID` |
+| `destroy(obj, type)` | 深释放(copy 的逆) | `REFLECT_NOT_SUPPORTED` / `ARG_INVALID` |
 
 ### 5.1 get/set 的尺寸规则
 

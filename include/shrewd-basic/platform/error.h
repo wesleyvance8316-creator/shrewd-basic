@@ -33,7 +33,8 @@ typedef enum shrewd_basic_error {
     /* Log module codes: -100 .. -199. */
     SHREWD_BASIC_ERR_LOG_FOPEN = -100,   /**< Log: failed to open the output file. */
     /* Reflect module codes: -200 .. -299. */
-    SHREWD_BASIC_ERR_REFLECT_MISMATCH = -200 /**< Reflect: value size does not match the field. */
+    SHREWD_BASIC_ERR_REFLECT_MISMATCH = -200,     /**< Reflect: value size does not match the field. */
+    SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED = -201 /**< Reflect: operation needs an ops callback. */
 } shrewd_basic_error_t;
 
 /**

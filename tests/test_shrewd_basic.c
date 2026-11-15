@@ -69,6 +69,9 @@ int main(void)
     expect_true("error name unknown code",
                 0 == strcmp(shrewd_basic_error_name(-12345),
                             "SHREWD_BASIC_ERR_UNKNOWN"));
+    expect_true("error name REFLECT_NOT_SUPPORTED",
+                0 == strcmp(shrewd_basic_error_name(SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED),
+                            "SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED"));
     expect_true("error name REFLECT_MISMATCH",
                 0 == strcmp(shrewd_basic_error_name(SHREWD_BASIC_ERR_REFLECT_MISMATCH),
                             "SHREWD_BASIC_ERR_REFLECT_MISMATCH"));

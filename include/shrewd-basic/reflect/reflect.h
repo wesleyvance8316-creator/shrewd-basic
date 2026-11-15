@@ -374,6 +374,32 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
         .sb_refl_ops = NULL                                                    \
     }
 
+/* FIELD_PRIMITIVE with a field-level ops override. */
+#define SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE_OPS(struct_type, member, ops_ref) \
+    {                                                                          \
+        .sb_refl_name = #member,                                               \
+        .sb_refl_type = SHREWD_BASIC_REFLECT_PRIM_TYPE(                        \
+                ((struct_type *)0)->member),                                   \
+        .sb_refl_offset = offsetof(struct_type, member),                       \
+        .sb_refl_size = sizeof(((struct_type *)0)->member),                    \
+        .sb_refl_count = (size_t)1,                                            \
+        .sb_refl_flags = (uint32_t)0,                                          \
+        .sb_refl_ops = &(ops_ref)                                              \
+    }
+
+/* FIELD_ARRAY with a field-level ops override. */
+#define SHREWD_BASIC_REFLECT_FIELD_ARRAY_OPS(struct_type, member, ref, ops_ref) \
+    {                                                                          \
+        .sb_refl_name = #member,                                               \
+        .sb_refl_type = &(ref),                                                \
+        .sb_refl_offset = offsetof(struct_type, member),                       \
+        .sb_refl_size = sizeof(((struct_type *)0)->member),                    \
+        .sb_refl_count = sizeof(((struct_type *)0)->member)                    \
+                / sizeof(((struct_type *)0)->member[0]),                       \
+        .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_ARRAY,                   \
+        .sb_refl_ops = &(ops_ref)                                              \
+    }
+
 /* FIELD_STRUCT with a field-level ops override (takes precedence over type ops). */
 #define SHREWD_BASIC_REFLECT_FIELD_STRUCT_OPS(struct_type, member, ref, ops_ref) \
     {                                                                          \

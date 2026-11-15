@@ -775,7 +775,7 @@ static int reflect_clone_target(const shrewd_basic_reflect_type_t *type, const v
         return SHREWD_BASIC_ERR_OK;
     }
     if (SHREWD_BASIC_REFLECT_KIND_OPAQUE == type->sb_refl_kind) {
-        return SHREWD_BASIC_ERR_ARG_INVALID;
+        return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
     }
     if (REFLECT_MAX_DEPTH <= depth) {
         /* Defensive: past the cap the pointer is aliased. Such aliases
@@ -891,7 +891,7 @@ int shrewd_basic_reflect_copy(void **out, const void *object,
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
                          "field", "copy: type \"%s\" needs ops->copy\n", type->sb_refl_name);
         (void)shrewd_basic_rbtree_destroy(map);
-        return SHREWD_BASIC_ERR_ARG_INVALID;
+        return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
     }
     void *block = NULL;
     status = shrewd_basic_platform_calloc(&block, 1, type->sb_refl_size);
@@ -1020,7 +1020,7 @@ int shrewd_basic_reflect_destroy(void *object,
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
                          "field", "destroy: type \"%s\" needs ops->destroy\n",
                          type->sb_refl_name);
-        return SHREWD_BASIC_ERR_ARG_INVALID;
+        return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
     }
     shrewd_basic_rbtree_t *visited = NULL;
     int status = shrewd_basic_rbtree_create(reflect_cmp_addr, NULL, &visited);
