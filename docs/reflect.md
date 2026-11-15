@@ -348,8 +348,10 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
     python3 tools/reflect_gen.py input.h -o stub   # 生成 stub.h + stub.c
 
 - 收录:`typedef struct/enum`;标量/字符串(`FIELD_PRIMITIVE`)、嵌套结构体
-  (`FIELD_STRUCT`)、定长数组(`FIELD_ARRAY`)、指针(`FIELD_PTR`/`FIELD_PTR_ARRAY`)、
-  枚举(`FIELD_ENUM`/`ENUM_DEFINE`),引用但未定义的类型自动补 `TYPE_DECLARE`;
+  (`FIELD_STRUCT`)、定长数组(`FIELD_ARRAY`)、柔性尾部(`FIELD_FLEX`,含 GNU
+  `[0]` 形态,自动配对 `name_count`/`name_len`/`count`/`len` 计数成员,配不到则
+  告警跳过)、指针(`FIELD_PTR`/`FIELD_PTR_ARRAY`)、枚举(`FIELD_ENUM`/`ENUM_DEFINE`),
+  引用但未定义的类型自动补 `TYPE_DECLARE`;
 - 描述符命名约定 `<类型名>_reflect`(如 `shape_t_reflect`);
 - 跳过并告警:bit-field、联合体、函数指针、多维数组、柔性数组;
 - 验证:`tools/reflect_gen_check.sh` 一键自测(生成 → 编译 → 运行 dump/equal/enum 冒烟),样例输入 `tools/reflect_gen_sample.h`;

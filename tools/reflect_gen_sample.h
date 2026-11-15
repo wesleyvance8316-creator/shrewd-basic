@@ -6,6 +6,7 @@
  * @brief Sample input for tools/reflect_gen.py (verification fixture).
  */
 
+#include <stddef.h>
 #include <stdint.h>
 
 typedef enum {
@@ -29,5 +30,10 @@ typedef struct {
     void *ctx;
     uint64_t count;
 } shape_t;
+
+typedef struct {
+    size_t len;
+    int32_t data[];
+} packet_t;
 
 #endif /* REFLECT_GEN_SAMPLE_H */

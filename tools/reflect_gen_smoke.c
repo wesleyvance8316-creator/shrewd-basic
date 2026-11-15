@@ -10,6 +10,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "shrewd-basic/platform/memory.h"
+
 #include "generated.h"
 #include "reflect_gen_sample.h"
 
@@ -49,6 +51,34 @@ int main(void)
         printf("reflect_gen_smoke: enum FAILED\n");
         return 1;
     }
+    /* Flexible tail: allocated as header + tail, compared deeply. */
+    void *block_a = NULL;
+    void *block_b = NULL;
+    if ((SHREWD_BASIC_ERR_OK
+                != shrewd_basic_platform_calloc(&block_a, 1,
+                                                sizeof(packet_t) + (2 * sizeof(int32_t))))
+            || (SHREWD_BASIC_ERR_OK
+                != shrewd_basic_platform_calloc(&block_b, 1,
+                                                sizeof(packet_t) + (2 * sizeof(int32_t))))) {
+        printf("reflect_gen_smoke: flex setup FAILED\n");
+        return 1;
+    }
+    packet_t *pa = block_a;
+    packet_t *pb = block_b;
+    pa->len = 2;
+    pa->data[0] = 4;
+    pa->data[1] = 5;
+    pb->len = 2;
+    pb->data[0] = 4;
+    pb->data[1] = 5;
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_reflect_equal(pa, pb, &packet_t_reflect, &same)
+            || !same) {
+        printf("reflect_gen_smoke: flex equal FAILED\n");
+        return 1;
+    }
+    (void)shrewd_basic_reflect_destroy(pa, &packet_t_reflect);
+    (void)shrewd_basic_reflect_destroy(pb, &packet_t_reflect);
+
     printf("reflect_gen_smoke: ok (color 1 = %s)\n", name);
     return 0;
 }

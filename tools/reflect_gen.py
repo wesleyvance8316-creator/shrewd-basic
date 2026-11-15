@@ -100,8 +100,8 @@ def parse_member(decl):
     if match:
         decl = match.group(1).strip()
         digits = match.group(2)
-        if digits == "":
-            flexible = True
+        if digits in ("", "0"):
+            flexible = True  # C99 FAM or the GNU zero-length form
         else:
             array_len = int(digits)
     match = re.match(r"^(.*\S)\s*(\*+)\s*([A-Za-z_]\w*)$", decl)
@@ -165,32 +165,61 @@ def descriptor_name(type_name):
     return "%s_reflect" % type_name
 
 
-def field_macro(parser, struct_name, member):
+def find_count_member(members, name):
+    """Pair a flexible tail with its count member (name_count, name_len,
+    count, len - in that order of preference)."""
+    names = [m[2] for m in members]
+    for candidate in ("%s_count" % name, "%s_len" % name, "count", "len"):
+        if candidate in names:
+            return candidate
+    return None
+
+
+def primitive_ref(base):
+    return PRIMITIVE_TYPES.get(base)
+
+
+def field_macro(parser, struct_name, member, members):
     base, stars, name, array_len, flexible = member
     base = normalize(base)
     if flexible:
-        raise ParseError("flexible array member: %s" % name)
+        if stars != "":
+            raise ParseError("pointer flexible array not described: %s" % name)
+        count_member = find_count_member(members, name)
+        if count_member is None:
+            return None, ("no count member found for flexible array '%s' "
+                          "(expected %s_count/%s_len/count/len) - skipped"
+                          % (name, name, name))
+        ref = primitive_ref(base)
+        if ref is None:
+            if base in parser.enums or base in parser.structs:
+                ref = descriptor_name(base)
+            else:
+                return None, ("unknown element type '%s' of flexible array "
+                              "'%s' - skipped" % (base, name))
+        return "SHREWD_BASIC_REFLECT_FIELD_FLEX(%s, %s, %s, %s)" % (
+            struct_name, name, count_member, ref), None
     if stars not in ("", "*"):
         raise ParseError("only single pointers are described: %s" % name)
     ref = None
     if base == "void" and stars == "*":
         ref = "shrewd_basic_reflect_void"
     elif base == "char" and stars == "*":
-        return "SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(%s, %s)" % (struct_name, name)
+        return "SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(%s, %s)" % (struct_name, name), None
     elif base in PRIMITIVE_TYPES:
         ref = PRIMITIVE_TYPES[base]
         if stars == "" and array_len is None:
-            return "SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(%s, %s)" % (struct_name, name)
+            return "SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(%s, %s)" % (struct_name, name), None
     elif base in parser.enums:
         ref = descriptor_name(base)
         if stars == "" and array_len is None:
             return "SHREWD_BASIC_REFLECT_FIELD_ENUM(%s, %s, %s)" % (
-                struct_name, name, ref)
+                struct_name, name, ref), None
     else:
         ref = descriptor_name(base)
         if stars == "" and array_len is None:
             return "SHREWD_BASIC_REFLECT_FIELD_STRUCT(%s, %s, %s)" % (
-                struct_name, name, ref)
+                struct_name, name, ref), None
     if ref is None:
         raise ParseError("unsupported member type: %s %s" % (base, name))
     if stars == "*":
@@ -198,7 +227,7 @@ def field_macro(parser, struct_name, member):
             else "SHREWD_BASIC_REFLECT_FIELD_PTR"
     else:
         macro = "SHREWD_BASIC_REFLECT_FIELD_ARRAY"
-    return "%s(%s, %s, %s)" % (macro, struct_name, name, ref)
+    return "%s(%s, %s, %s)" % (macro, struct_name, name, ref), None
 
 
 def collect_references(parser):
@@ -243,8 +272,18 @@ def generate(parser, input_name):
             lines_h.append("SHREWD_BASIC_REFLECT_TYPE_DECLARE(%s);"
                            % descriptor_name(name))
         else:
-            fields = ",\n    ".join(
-                field_macro(parser, name, m) for m in parser.structs[name])
+            entries = []
+            for m in parser.structs[name]:
+                macro, warning = field_macro(parser, name, m, parser.structs[name])
+                if warning is not None:
+                    print("reflect_gen: %s: %s" % (name, warning), file=sys.stderr)
+                if macro is not None:
+                    entries.append(macro)
+            if not entries:
+                print("reflect_gen: %s: no describable fields - skipped" % name,
+                      file=sys.stderr)
+                continue
+            fields = ",\n    ".join(entries)
             lines_c.append(
                 "SHREWD_BASIC_REFLECT_TYPE_DEFINE(%s, %s,\n    %s);"
                 % (descriptor_name(name), name, fields))
