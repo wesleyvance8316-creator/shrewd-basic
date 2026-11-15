@@ -14,7 +14,8 @@
  * field_get/set, dump (incl. ops->render and cycle markers),
  * type_resolve, path_get/set, value_get/set, check, equal, copy,
  * destroy, dynamic arrays (F_DARRAY/F_SENTINEL), flexible tails
- * (F_FLEX), the traversal accessors and visit (event-by-event walk).
+ * (F_FLEX), the traversal accessors, visit (event-by-event walk) and
+ * diff/hash.
  * The 1 MiB dump body cap is covered by the test suite
  * instead - its output would flood the terminal here.
  */
@@ -616,6 +617,28 @@ int main(void)
     (void)shrewd_basic_reflect_visit(&person, &person_type, demo_visit_print, NULL);
     printf("  walking the self-cycle node (CYCLE instead of expanding):\n");
     (void)shrewd_basic_reflect_visit(&loop, &node_type, demo_visit_print, NULL);
+
+    banner("13. diff and hash: locate differences, fold values");
+    char diff_path[64];
+    print_status("diff(person, other)",
+                 shrewd_basic_reflect_diff(&person, &other, &person_type,
+                                           diff_path, sizeof(diff_path)));
+    printf("  first difference at \"%s\"\n", diff_path);
+    other = person;
+    print_status("diff(person, copy)",
+                 shrewd_basic_reflect_diff(&person, &other, &person_type,
+                                           diff_path, sizeof(diff_path)));
+    size_t person_hash = 0;
+    size_t other_hash = 0;
+    (void)shrewd_basic_reflect_hash(&person, &person_type, &person_hash);
+    (void)shrewd_basic_reflect_hash(&other, &person_type, &other_hash);
+    printf("  person=0x%zx other=0x%zx -> %s\n", person_hash, other_hash,
+           (person_hash == other_hash) ? "same (equal objects hash equal)"
+                                       : "different");
+    other.name = "Alicia";
+    (void)shrewd_basic_reflect_hash(&other, &person_type, &other_hash);
+    printf("  after changing one string: person=0x%zx other=0x%zx\n",
+           person_hash, other_hash);
 
     printf("\nDemo done. See docs/reflect.md for the full reference.\n");
     return 0;

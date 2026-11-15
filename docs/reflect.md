@@ -191,6 +191,8 @@ SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                /* 跨 TU 
 | `value_set(obj, field, in, n)` | 经 ops 写目标的规范值 | 同上 |
 | `check(obj, type)` | 图校验(ops->check + 字段递归) | 回调返回值 / `ARG_INVALID` |
 | `equal(a, b, type, &same)` | 深度比较(值语义/内容/深目标,环安全) | `ARG_INVALID` |
+| `diff(a, b, type, path, n)` | 比较并报告首个差异的路径 | `REFLECT_MISMATCH`(带路径)/ `ARG_INVALID` |
+| `hash(obj, type, &out)` | 与 equal 一致的泛型哈希 | `ARG_INVALID` |
 | `copy(&out, obj, type)` | 深拷贝(clone-out) | `MEM_NOMEM` / `REFLECT_NOT_SUPPORTED` / `ARG_INVALID` |
 | `destroy(obj, type)` | 深释放(copy 的逆) | `REFLECT_NOT_SUPPORTED` / `ARG_INVALID` |
 | `visit(obj, type, fn, ctx)` | 事件流遍历(ENTER/LEAF/EXIT/…,跟随指针,环→CYCLE) | `ARG_INVALID` |
@@ -231,6 +233,18 @@ member ( '[' index ']' )? ( '.' member ( '[' index ']' )? )*
   抑制配对的 `EXIT`)、`STOP` 立即终止(后续事件含待发的 `EXIT` 一概不再报告);
 - 事件顺序:`ENTER 根 → 字段序(数组为 ARRAY_ENTER → 元素 → ARRAY_EXIT)→ EXIT 根`,
   结构体数组逐元素 `ENTER/EXIT`(路径 `pair[1]`)。
+
+### 5.4 diff 与 hash
+
+- `shrewd_basic_reflect_diff(a, b, type, path, n)`:按 `equal` 的语义比较,在首个差异处
+  停止并把路径写入 `path`(5.2 语法,如 `home.y`、`pair[1].x`;根级 `ops->equal` 不等时为
+  `(root)`;动态数组长度不同报字段名本身,如 `values`)。相等返回 `OK`,不等返回
+  `REFLECT_MISMATCH`;`path` 可传 NULL 跳过报告,非 NULL 时保证 NUL 结尾(过小则截断)。
+- `shrewd_basic_reflect_hash(obj, type, &out)`:与 equal 相容的泛型哈希——**相等的对象
+  必然哈希相等**。叶子按规范编码折入 FNV-1a 流(整数按值、浮点折叠 -0.0/NaN 标记、
+  字符串按内容、不透明按地址),与字节序和宽度无关。限制:环图按形状折叠(回边记标记
+  常量),双模拟但形状不同的环可能哈希不同;深度钳制区两侧同样折叠标记,与 equal 的
+  钳制行为一致。自定义节点用 `ops->hash`。
 
 ---
 
@@ -288,12 +302,15 @@ struct shrewd_basic_reflect_ops {
     int  (*render)(const void *pointee, char *buf, size_t buf_size); /* dump 自定义渲染 */
     int  (*copy)(void **out, const void *pointee);      /* clone-out 深拷贝 */
     void (*destroy)(void *pointee);                     /* 释放 copy 产物 */
+    int  (*hash)(const void *value, size_t *out_hash);  /* 与 equal 一致的哈希折叠 */
 };
 ```
 
 - **两级挂载**:`field->sb_refl_ops` 优先,缺省回落 `type->sb_refl_ops`;
 - 动态数组(`F_DARRAY`):表本身是堆块,`copy` 会克隆表并登记克隆映射(共享表保持共享、失败清理可追踪),元素各自深拷;`destroy` 访问集保证表只释放一次;**计数成员建议也注册为字段**(未注册时 copy 会把解析出的计数写回,保持克隆自洽);
 - `render` 用于 dump 跟随指针目标时的自定义文本(如不透明句柄打 `handle#42` 而非地址);缺失或返回失败则回退默认渲染;
+- `hash` 供 `reflect_hash()` 覆盖单节点折叠(与 `equal` 同层生效):自定义了
+  `equal` 的节点应同步提供 `hash`,维持"相等则哈希相等"的契约;
 - **逐回调解退**:缺哪个回调就用哪个元数据默认(只写 `check` 也能复用通用拷贝);
 - `get/set/check` 对值和指针目标同样适用;`copy/destroy` 是**对象语义**(指针目标与
   `copy/destroy` 的根对象)。

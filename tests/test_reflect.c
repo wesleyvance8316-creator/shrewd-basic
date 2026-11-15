@@ -2332,6 +2332,261 @@ static void test_visit(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
+/* --- diff/hash fixtures ------------------------------------------------ */
+
+static int ops_equal_false(const void *a, const void *b, bool *out_equal)
+{
+    (void)a;
+    (void)b;
+    *out_equal = false;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+/* Type-level ops whose equal always says "different" (root mismatch). */
+static const shrewd_basic_reflect_ops_t g_never_equal_ops = {
+    .value_size = 0,
+    .equal = ops_equal_false };
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE_OPS(g_never_equal_reflect, point_t, g_never_equal_ops,
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, x),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, y));
+
+static int ops_hash_constant(const void *value, size_t *out_hash)
+{
+    (void)value;
+    *out_hash = 42;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+/* Type-level ops whose hash ignores the value entirely. */
+static const shrewd_basic_reflect_ops_t g_const_hash_ops = {
+    .value_size = 0,
+    .hash = ops_hash_constant };
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE_OPS(g_const_hash_reflect, point_t, g_const_hash_ops,
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, x),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, y));
+
+static void test_diff(void)
+{
+    person_t a;
+    person_t b;
+    char path[64];
+    memset(&a, 0, sizeof(a));
+    b = a;
+
+    /* Equal graphs: OK, no path reported. */
+    expect_eq_int("diff equal",
+                  shrewd_basic_reflect_diff(&a, &b, &g_person_reflect, path, sizeof(path)),
+                  SHREWD_BASIC_ERR_OK);
+
+    /* The first difference's path, in path_get syntax. */
+    a.home.y = 5;
+    expect_eq_int("diff leaf",
+                  shrewd_basic_reflect_diff(&a, &b, &g_person_reflect, path, sizeof(path)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("diff leaf path", 0 == strcmp(path, "home.y"));
+    b.home.y = 5;
+
+    a.pair[1].x = 8;
+    expect_eq_int("diff array elem",
+                  shrewd_basic_reflect_diff(&a, &b, &g_person_reflect, path, sizeof(path)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("diff array elem path", 0 == strcmp(path, "pair[1].x"));
+    b.pair[1].x = 8;
+
+    /* Field order decides which difference is "first". */
+    a.age = 30;
+    a.name = "Alice";
+    b.age = 31;
+    b.name = "Bob";
+    expect_eq_int("diff first in order",
+                  shrewd_basic_reflect_diff(&a, &b, &g_person_reflect, path, sizeof(path)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("diff first in order path", 0 == strcmp(path, "age"));
+    a.age = 0;
+    b.age = 0;
+
+    /* Strings compare by content. */
+    b.name = "Alice";
+    expect_eq_int("diff strings same",
+                  shrewd_basic_reflect_diff(&a, &b, &g_person_reflect, path, sizeof(path)),
+                  SHREWD_BASIC_ERR_OK);
+    b.name = "Bob";
+    expect_eq_int("diff string",
+                  shrewd_basic_reflect_diff(&a, &b, &g_person_reflect, path, sizeof(path)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("diff string path", 0 == strcmp(path, "name"));
+    b.name = "Alice";
+
+    /* NULL vs non-NULL pointer target. */
+    node_t left;
+    node_t right;
+    node_t target;
+    memset(&left, 0, sizeof(left));
+    memset(&right, 0, sizeof(right));
+    memset(&target, 0, sizeof(target));
+    left.next = &target;
+    expect_eq_int("diff null pointer",
+                  shrewd_basic_reflect_diff(&left, &right, &g_node_reflect,
+                                            path, sizeof(path)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("diff null pointer path", 0 == strcmp(path, "next"));
+
+    /* Dynamic arrays of different lengths report the field itself. */
+    dyn_t d1;
+    dyn_t d2;
+    int32_t v_a[3] = {7, 8, 9};
+    int32_t v_b[3] = {7, 80, 9};
+    memset(&d1, 0, sizeof(d1));
+    memset(&d2, 0, sizeof(d2));
+    d1.values = v_a;
+    d1.value_count = 3;
+    d2.values = v_b;
+    d2.value_count = 2;
+    expect_eq_int("diff count mismatch",
+                  shrewd_basic_reflect_diff(&d1, &d2, &g_dyn_reflect, path, sizeof(path)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("diff count mismatch path", 0 == strcmp(path, "values"));
+    d2.value_count = 3; /* same length now, element 1 differs */
+    expect_eq_int("diff darray elem",
+                  shrewd_basic_reflect_diff(&d1, &d2, &g_dyn_reflect, path, sizeof(path)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("diff darray elem path", 0 == strcmp(path, "values[1]"));
+
+    /* Root-level ops->equal mismatch reports "(root)". */
+    point_t p1;
+    point_t p2;
+    memset(&p1, 0, sizeof(p1));
+    p2 = p1;
+    expect_eq_int("diff root ops",
+                  shrewd_basic_reflect_diff(&p1, &p2, &g_never_equal_reflect,
+                                            path, sizeof(path)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("diff root ops path", 0 == strcmp(path, "(root)"));
+
+    /* No report buffer, and a truncated one stays NUL-terminated. */
+    a.home.y = 9;
+    expect_eq_int("diff without path",
+                  shrewd_basic_reflect_diff(&a, &b, &g_person_reflect, NULL, 0),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    char tiny[4] = {0};
+    expect_eq_int("diff tiny buffer",
+                  shrewd_basic_reflect_diff(&a, &b, &g_person_reflect, tiny, sizeof(tiny)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("diff tiny buffer terminated",
+                (3 == strlen(tiny)) && (0 == strcmp(tiny, "hom")));
+    a.home.y = 5;
+
+    expect_eq_int("diff NULL a",
+                  shrewd_basic_reflect_diff(NULL, &b, &g_person_reflect, path, sizeof(path)),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("diff NULL type",
+                  shrewd_basic_reflect_diff(&a, &b, NULL, path, sizeof(path)),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+}
+
+static void test_hash(void)
+{
+    person_t a;
+    person_t b;
+    char name[] = "Alice";
+    size_t ha = 0;
+    size_t hb = 0;
+    memset(&a, 0, sizeof(a));
+    a.age = 30;
+    a.name = "Alice";
+    a.precise = -0.0;
+    a.home.x = 4;
+    b = a;
+    b.name = name; /* equal content, different pointer */
+
+    /* Equal objects hash equal (the hash/equal contract). */
+    bool same = false;
+    expect_eq_int("hash equal objects",
+                  shrewd_basic_reflect_hash(&a, &g_person_reflect, &ha),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("hash equal objects b",
+                  shrewd_basic_reflect_hash(&b, &g_person_reflect, &hb),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("hash equal objects same",
+                (0 != ha) && (ha == hb));
+    expect_eq_int("hash contract equal",
+                  shrewd_basic_reflect_equal(&a, &b, &g_person_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("hash contract equal yes", same);
+
+    /* -0.0 and +0.0 compare equal, so they must fold alike. */
+    b.precise = 0.0;
+    expect_eq_int("hash signed zero",
+                  shrewd_basic_reflect_hash(&b, &g_person_reflect, &hb),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("hash signed zero same", ha == hb);
+
+    /* Different content hashes differently. */
+    b.precise = -0.0;
+    b.age = 31;
+    expect_eq_int("hash different",
+                  shrewd_basic_reflect_hash(&b, &g_person_reflect, &hb),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("hash different differs", ha != hb);
+
+    /* Deep and dynamic content: equal graphs hash equal. */
+    dyn_t d1;
+    dyn_t d2;
+    int32_t vals[3] = {7, 8, 9};
+    memset(&d1, 0, sizeof(d1));
+    memset(&d2, 0, sizeof(d2));
+    d1.values = vals;
+    d1.value_count = 3;
+    d2.values = vals;
+    d2.value_count = 3;
+    expect_eq_int("hash dyn a",
+                  shrewd_basic_reflect_hash(&d1, &g_dyn_reflect, &ha),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("hash dyn b",
+                  shrewd_basic_reflect_hash(&d2, &g_dyn_reflect, &hb),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("hash dyn same", ha == hb);
+
+    /* Cyclic graphs hash deterministically (back-edges fold as a marker). */
+    node_t loop_a;
+    node_t loop_b;
+    memset(&loop_a, 0, sizeof(loop_a));
+    memset(&loop_b, 0, sizeof(loop_b));
+    loop_a.next = &loop_a;
+    loop_b.next = &loop_b;
+    expect_eq_int("hash cycle a",
+                  shrewd_basic_reflect_hash(&loop_a, &g_node_reflect, &ha),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("hash cycle b",
+                  shrewd_basic_reflect_hash(&loop_b, &g_node_reflect, &hb),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("hash cycle same", ha == hb);
+
+    /* ops->hash overrides the metadata-driven fold. */
+    point_t p1;
+    point_t p2;
+    memset(&p1, 0, sizeof(p1));
+    memset(&p2, 0, sizeof(p2));
+    p2.x = 999;
+    p2.y = -7;
+    expect_eq_int("hash ops a",
+                  shrewd_basic_reflect_hash(&p1, &g_const_hash_reflect, &ha),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("hash ops b",
+                  shrewd_basic_reflect_hash(&p2, &g_const_hash_reflect, &hb),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("hash ops override", ha == hb);
+
+    expect_eq_int("hash NULL object",
+                  shrewd_basic_reflect_hash(NULL, &g_person_reflect, &ha),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("hash NULL out",
+                  shrewd_basic_reflect_hash(&a, &g_person_reflect, NULL),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+}
+
 int main(void)
 {
     test_describe();
@@ -2348,6 +2603,8 @@ int main(void)
     test_dump_body_cap();
     test_paths();
     test_visit();
+    test_diff();
+    test_hash();
     test_graph_ops();
     test_equal();
     test_dynamic_arrays();

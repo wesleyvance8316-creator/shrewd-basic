@@ -138,6 +138,12 @@ struct shrewd_basic_reflect_ops {
     int (*copy)(void **out, const void *pointee);
     /** Release an object produced by @c copy (or an equivalent owner). */
     void (*destroy)(void *pointee);
+    /**
+     * Hash @p value consistently with @c equal (equal values must hash
+     * equal). Used by shrewd_basic_reflect_hash() in place of the
+     * metadata-driven fold.
+     */
+    int (*hash)(const void *value, size_t *out_hash);
 };
 
 /**
@@ -843,6 +849,37 @@ int shrewd_basic_reflect_destroy(void *object,
 int shrewd_basic_reflect_equal(const void *a, const void *b,
                                const shrewd_basic_reflect_type_t *type,
                                bool *out_equal);
+
+/**
+ * Compare like shrewd_basic_reflect_equal() but report where the two
+ * graphs first differ. Returns SHREWD_BASIC_ERR_OK when the objects are
+ * equal, SHREWD_BASIC_ERR_REFLECT_MISMATCH otherwise - with the first
+ * difference's path written into @p path_out (the path_get() syntax,
+ * e.g. "home.y" or "pair[2].x"; "(root)" when the roots themselves
+ * compare unequal, through ops->equal). @p path_out may be NULL to skip
+ * the report; a non-NULL buffer is always NUL-terminated and truncated
+ * when too small. An array field whose length differs reports the
+ * field itself ("values").
+ */
+int shrewd_basic_reflect_diff(const void *a, const void *b,
+                              const shrewd_basic_reflect_type_t *type,
+                              char *path_out, size_t path_out_size);
+
+/**
+ * Hash a value graph consistently with shrewd_basic_reflect_equal():
+ * equal objects always hash equal (see the caveat below). Leaves fold
+ * into a 64-bit FNV-1a stream through canonical encodings (integers by
+ * value, floats with -0.0 folded and NaNs as a fixed marker, strings by
+ * content, opaque targets by address) so the result is endianness- and
+ * width-independent. Caveat: cyclic graphs hash by shape with
+ * back-edges folded as a marker, so two bisimilar but differently
+ * shaped cycles (both "equal" under reflect_equal) may hash
+ * differently. A depth-capped region folds as a marker on both sides,
+ * matching reflect_equal()'s cap. Effective ops->hash overrides a node.
+ */
+int shrewd_basic_reflect_hash(const void *object,
+                              const shrewd_basic_reflect_type_t *type,
+                              size_t *out_hash);
 
 /*
  * Traversal: event-by-event walk of a value graph for applications that

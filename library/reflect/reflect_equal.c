@@ -1,5 +1,6 @@
 #include "shrewd-basic/reflect/reflect.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "reflect-internal.h"
@@ -32,11 +33,70 @@ static int equal_pair_seen(const equal_pair_t *path, size_t depth,
     return 0;
 }
 
+/*
+ * Optional path report for shrewd_basic_reflect_diff(). The walk pushes
+ * one segment per descent and restores it on success, so when a mismatch
+ * stops the recursion the buffer is frozen at the first difference's
+ * path. NULL means "no report" (the plain equal walk).
+ */
+typedef struct diff_path {
+    char *buf;
+    size_t cap;
+    size_t len;
+} diff_path_t;
+
+static size_t diff_path_mark(const diff_path_t *diff)
+{
+    return (NULL != diff) ? diff->len : 0;
+}
+
+static void diff_path_restore(diff_path_t *diff, size_t mark)
+{
+    if (NULL != diff) {
+        diff->len = mark;
+        diff->buf[mark] = '\0';
+    }
+}
+
+static void diff_path_append(diff_path_t *diff, const char *text)
+{
+    size_t room = (diff->cap - 1) - diff->len;
+    size_t used = strlen(text);
+    if (used > room) {
+        used = room;
+    }
+    memcpy(diff->buf + diff->len, text, used);
+    diff->len += used;
+    diff->buf[diff->len] = '\0';
+}
+
+static void diff_path_member(diff_path_t *diff, const char *name)
+{
+    if (NULL == diff) {
+        return;
+    }
+    if (0 != diff->len) {
+        diff_path_append(diff, ".");
+    }
+    diff_path_append(diff, name);
+}
+
+static void diff_path_index(diff_path_t *diff, size_t index)
+{
+    char text[24];
+    if (NULL == diff) {
+        return;
+    }
+    (void)snprintf(text, sizeof(text), "[%zu]", index);
+    diff_path_append(diff, text);
+}
+
 static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
                                const unsigned char *a, const unsigned char *b,
                                size_t nbytes,
                                const shrewd_basic_reflect_ops_t *ops,
-                               equal_pair_t *path, size_t depth, bool *out_equal)
+                               equal_pair_t *path, size_t depth,
+                               diff_path_t *diff, bool *out_equal)
 {
     if (EQUAL_MAX_DEPTH <= depth) {
         *out_equal = true;
@@ -96,6 +156,11 @@ static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
         const shrewd_basic_reflect_ops_t *field_ops = reflect_field_ops(field);
         reflect_array_view_t view_a = reflect_array_view(a, field);
         reflect_array_view_t view_b = reflect_array_view(b, field);
+        size_t mark = diff_path_mark(diff);
+        int indexed = (0u != (field->sb_refl_flags
+                              & (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY
+                                 | SHREWD_BASIC_REFLECT_FIELD_F_DARRAY)));
+        diff_path_member(diff, field->sb_refl_name);
         if (view_a.count != view_b.count) {
             *out_equal = false;
             return SHREWD_BASIC_ERR_OK;
@@ -103,10 +168,15 @@ static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
         for (size_t j = 0; j < view_a.count; ++j) {
             const unsigned char *elem_a = view_a.base + (j * view_a.stride);
             const unsigned char *elem_b = view_b.base + (j * view_b.stride);
+            size_t mark_j = diff_path_mark(diff);
+            if (0 != indexed) {
+                diff_path_index(diff, j);
+            }
             if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
                 const void *target_a = reflect_load_ptr(elem_a);
                 const void *target_b = reflect_load_ptr(elem_b);
                 if ((NULL == target_a) && (NULL == target_b)) {
+                    diff_path_restore(diff, mark_j);
                     continue;
                 }
                 if ((NULL == target_a) || (NULL == target_b)) {
@@ -114,6 +184,7 @@ static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
                     return SHREWD_BASIC_ERR_OK;
                 }
                 if (0 != equal_pair_seen(path, depth, target_a, target_b)) {
+                    diff_path_restore(diff, mark_j);
                     continue;
                 }
                 path[depth].a = target_a;
@@ -123,7 +194,8 @@ static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
                                                  (const unsigned char *)target_a,
                                                  (const unsigned char *)target_b,
                                                  field->sb_refl_type->sb_refl_size,
-                                                 field_ops, path, depth + 1, &same);
+                                                 field_ops, path, depth + 1,
+                                                 diff, &same);
                 if ((SHREWD_BASIC_ERR_OK != status) || !same) {
                     *out_equal = false;
                     return status;
@@ -132,13 +204,15 @@ static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
                 bool same = true;
                 int status = reflect_equal_value(field->sb_refl_type, elem_a, elem_b,
                                                  view_a.stride, field_ops, path,
-                                                 depth + 1, &same);
+                                                 depth + 1, diff, &same);
                 if ((SHREWD_BASIC_ERR_OK != status) || !same) {
                     *out_equal = false;
                     return status;
                 }
             }
+            diff_path_restore(diff, mark_j);
         }
+        diff_path_restore(diff, mark);
     }
     *out_equal = true;
     return SHREWD_BASIC_ERR_OK;
@@ -157,7 +231,7 @@ int shrewd_basic_reflect_equal(const void *a, const void *b,
     bool same = true;
     int status = reflect_equal_value(type, (const unsigned char *)a,
                                      (const unsigned char *)b, type->sb_refl_size,
-                                     type->sb_refl_ops, path, 0, &same);
+                                     type->sb_refl_ops, path, 0, NULL, &same);
     if (SHREWD_BASIC_ERR_OK != status) {
         return status;
     }
@@ -166,4 +240,43 @@ int shrewd_basic_reflect_equal(const void *a, const void *b,
                      "field", "equal: %s (%s)\n", (same ? "yes" : "no"),
                      type->sb_refl_name);
     return SHREWD_BASIC_ERR_OK;
+}
+
+int shrewd_basic_reflect_diff(const void *a, const void *b,
+                              const shrewd_basic_reflect_type_t *type,
+                              char *path_out, size_t path_out_size)
+{
+    if ((NULL == a) || (NULL == b) || (NULL == type)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "diff", "diff: a, b or type is NULL\n");
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    diff_path_t report;
+    diff_path_t *trace = NULL;
+    if ((NULL != path_out) && (0 < path_out_size)) {
+        report.buf = path_out;
+        report.cap = path_out_size;
+        report.len = 0;
+        path_out[0] = '\0';
+        trace = &report;
+    }
+    equal_pair_t path[EQUAL_MAX_DEPTH];
+    bool same = true;
+    int status = reflect_equal_value(type, (const unsigned char *)a,
+                                     (const unsigned char *)b, type->sb_refl_size,
+                                     type->sb_refl_ops, path, 0, trace, &same);
+    if (SHREWD_BASIC_ERR_OK != status) {
+        return status;
+    }
+    if (same) {
+        return SHREWD_BASIC_ERR_OK;
+    }
+    if ((NULL != trace) && (0 == report.len)) {
+        /* The roots themselves compared unequal (root ops->equal). */
+        diff_path_append(trace, "(root)");
+    }
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
+                     "diff", "diff: first difference at %s (%s)\n",
+                     (NULL != trace) ? path_out : "(unreported)", type->sb_refl_name);
+    return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
 }
