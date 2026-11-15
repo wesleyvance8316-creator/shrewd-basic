@@ -232,5 +232,8 @@ encode/decode 的 `info` 参数携带策略(NULL = 纯元数据,行为不变)。
 - 测试 `shrewd-basic-json-policy-tests`:键别名/必填/隐藏/省略/范围/自定义钩子/
   union 形态覆盖/键清单导出/严格模式;
 - demo `programs/json_demo.c`:encode(紧凑/pretty)、decode、DOM 查询修改、策略;
+- 基准 `tools/json_bench.sh`:parse/serialize/查询/encode/decode 的 ns/op 基线;
+- 性能:数字 token 与短字符串**内联**在值节点中(≤31 字节零分配),解析吞吐
+  较内联前提升约 27%;arena 与 encode 直写经评估暂缓(见提交说明);
 - 构建随库源码自动 glob,子项目集成零污染;验证纪律同全库
   (GCC/Clang 严格告警、valgrind、ASan/UBSan)。

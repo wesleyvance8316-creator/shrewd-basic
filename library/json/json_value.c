@@ -155,19 +155,28 @@ int shrewd_basic_json_new_bool(bool value, shrewd_basic_json_value_t **out)
 int json_value_new_number(const char *raw, size_t n,
                           shrewd_basic_json_value_t **out)
 {
-    void *block = NULL;
     int status = json_value_alloc(SHREWD_BASIC_JSON_NUMBER, out);
     if (SHREWD_BASIC_ERR_OK != status) {
         return status;
     }
-    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_alloc(&block, n + 1)) {
-        shrewd_basic_json_value_free(*out);
-        *out = NULL;
-        return SHREWD_BASIC_ERR_MEM_NOMEM;
+    if (n < sizeof((*out)->local)) {
+        /* Inline: short tokens avoid a malloc each. */
+        memcpy((*out)->local, raw, n);
+        (*out)->local[n] = '\0';
+        (*out)->u.number.raw = (*out)->local;
+        return SHREWD_BASIC_ERR_OK;
     }
-    memcpy(block, raw, n);
-    ((char *)block)[n] = '\0';
-    (*out)->u.number.raw = block;
+    {
+        void *block = NULL;
+        if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_alloc(&block, n + 1)) {
+            shrewd_basic_json_value_free(*out);
+            *out = NULL;
+            return SHREWD_BASIC_ERR_MEM_NOMEM;
+        }
+        memcpy(block, raw, n);
+        ((char *)block)[n] = '\0';
+        (*out)->u.number.raw = block;
+    }
     return SHREWD_BASIC_ERR_OK;
 }
 
@@ -211,21 +220,32 @@ int shrewd_basic_json_new_f64(double value, shrewd_basic_json_value_t **out)
 int shrewd_basic_json_new_string_n(const char *text, size_t n,
                                    shrewd_basic_json_value_t **out)
 {
-    void *block = NULL;
     int status = json_value_alloc(SHREWD_BASIC_JSON_STRING, out);
     if (SHREWD_BASIC_ERR_OK != status) {
         return status;
     }
-    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_alloc(&block, n + 1)) {
-        shrewd_basic_json_value_free(*out);
-        *out = NULL;
-        return SHREWD_BASIC_ERR_MEM_NOMEM;
+    if (n < sizeof((*out)->local)) {
+        /* Inline: short strings avoid a malloc each. */
+        if ((NULL != text) && (0 < n)) {
+            memcpy((*out)->local, text, n);
+        }
+        (*out)->local[n] = '\0';
+        (*out)->u.string = (*out)->local;
+        return SHREWD_BASIC_ERR_OK;
     }
-    if ((NULL != text) && (0 < n)) {
-        memcpy(block, text, n);
+    {
+        void *block = NULL;
+        if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_alloc(&block, n + 1)) {
+            shrewd_basic_json_value_free(*out);
+            *out = NULL;
+            return SHREWD_BASIC_ERR_MEM_NOMEM;
+        }
+        if ((NULL != text) && (0 < n)) {
+            memcpy(block, text, n);
+        }
+        ((char *)block)[n] = '\0';
+        (*out)->u.string = block;
     }
-    ((char *)block)[n] = '\0';
-    (*out)->u.string = block;
     return SHREWD_BASIC_ERR_OK;
 }
 
@@ -243,10 +263,14 @@ void shrewd_basic_json_value_free(shrewd_basic_json_value_t *value)
     }
     switch (value->kind) {
     case SHREWD_BASIC_JSON_NUMBER:
-        (void)shrewd_basic_platform_free((void **)&value->u.number.raw);
+        if (value->u.number.raw != value->local) {
+            (void)shrewd_basic_platform_free((void **)&value->u.number.raw);
+        }
         break;
     case SHREWD_BASIC_JSON_STRING:
-        (void)shrewd_basic_platform_free((void **)&value->u.string);
+        if (value->u.string != value->local) {
+            (void)shrewd_basic_platform_free((void **)&value->u.string);
+        }
         break;
     case SHREWD_BASIC_JSON_ARRAY:
         for (size_t i = 0; i < value->u.array.count; ++i) {

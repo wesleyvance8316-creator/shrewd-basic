@@ -24,6 +24,7 @@ typedef struct shrewd_basic_json_entry {
 
 struct shrewd_basic_json_value {
     shrewd_basic_json_kind_t kind;
+    char local[32]; /* inline storage: short number tokens and strings */
     union {
         bool boolean;
         struct {
