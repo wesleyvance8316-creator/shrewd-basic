@@ -961,6 +961,175 @@ static void test_dynamic_arrays(void)
                   SHREWD_BASIC_ERR_OK);
 }
 
+/* --- flexible tail fixtures ------------------------------------------- */
+
+typedef struct {
+    size_t len;
+    int32_t data[];
+} flex_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_flex_reflect, flex_t,
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(flex_t, len),
+    SHREWD_BASIC_REFLECT_FIELD_FLEX(flex_t, data, len, shrewd_basic_reflect_int32));
+
+/* The GNU zero-length form is supported too (its warning is silenced
+   just for this fixture). */
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+#endif
+typedef struct {
+    size_t len;
+    int32_t zero[0];
+} zflex_t;
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_zflex_reflect, zflex_t,
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(zflex_t, len),
+    SHREWD_BASIC_REFLECT_FIELD_FLEX(zflex_t, zero, len, shrewd_basic_reflect_int32));
+
+static void test_flex(void)
+{
+    /* Descriptor shape. */
+    const shrewd_basic_reflect_field_t *field =
+        find_or_fail("flex", &g_flex_reflect, "data");
+    if (NULL == field) {
+        return;
+    }
+    expect_true("flex shape",
+                ((SHREWD_BASIC_REFLECT_FIELD_F_ARRAY | SHREWD_BASIC_REFLECT_FIELD_F_FLEX)
+                        == field->sb_refl_flags)
+                && (sizeof(int32_t) == field->sb_refl_stride)
+                && ((size_t)0 == field->sb_refl_count)
+                && ((size_t)0 == field->sb_refl_size)
+                && (sizeof(size_t) == field->sb_refl_limit_size));
+    field = find_or_fail("flex", &g_zflex_reflect, "zero");
+    if (NULL != field) {
+        expect_true("flex zero-length shape",
+                    sizeof(int32_t) == field->sb_refl_stride);
+    }
+
+    /* A heap-owned object sized struct + tail. */
+    void *block = NULL;
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_calloc(
+                &block, 1, sizeof(flex_t) + (3 * sizeof(int32_t)))) {
+        return;
+    }
+    flex_t *src = block;
+    src->len = 3;
+    src->data[0] = 7;
+    src->data[1] = 8;
+    src->data[2] = 9;
+
+    /* dump renders the tail as an inline array. */
+    shrewd_basic_log_module_t *module = NULL;
+    expect_eq_int("flex find module",
+                  shrewd_basic_log_module_find("reflect", &module),
+                  SHREWD_BASIC_ERR_OK);
+    FILE *stream = tmpfile();
+    expect_true("flex tmpfile", NULL != stream);
+    if (NULL == stream) {
+        (void)shrewd_basic_reflect_destroy(src, &g_flex_reflect);
+        return;
+    }
+    shrewd_basic_log_module_set_stream(module, stream);
+    expect_eq_int("flex dump",
+                  shrewd_basic_reflect_dump(&g_flex_reflect, src, "flex"),
+                  SHREWD_BASIC_ERR_OK);
+    /* A FAM struct must be allocated with room for its tail: sizeof()
+       covers the header only. */
+    void *zblock = NULL;
+    if (SHREWD_BASIC_ERR_OK == shrewd_basic_platform_calloc(
+                &zblock, 1, sizeof(zflex_t) + (2 * sizeof(int32_t)))) {
+        zflex_t *zero = zblock;
+        zero->len = 2;
+        zero->zero[0] = 5;
+        zero->zero[1] = 6;
+        expect_eq_int("flex zero-length dump",
+                      shrewd_basic_reflect_dump(&g_zflex_reflect, zero, "zflex"),
+                      SHREWD_BASIC_ERR_OK);
+        (void)shrewd_basic_reflect_destroy(zero, &g_zflex_reflect);
+    }
+    char buf[4096] = {0};
+    slurp(stream, buf, sizeof(buf));
+    expect_true("flex dump tail", NULL != strstr(buf, "data = [ 7, 8, 9 ]"));
+    expect_true("flex dump zero tail", NULL != strstr(buf, "zero = [ 5, 6 ]"));
+    shrewd_basic_log_module_set_stream(module, stderr);
+    fclose(stream);
+
+    /* whole-tail raw access and indexed paths. */
+    int32_t tail[3] = {0};
+    expect_eq_int("flex field_get tail",
+                  shrewd_basic_reflect_field_get(src, field, tail, sizeof(tail)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("flex field_get values",
+                (7 == tail[0]) && (8 == tail[1]) && (9 == tail[2]));
+    expect_eq_int("flex field_get size rule",
+                  shrewd_basic_reflect_field_get(src, field, tail, (size_t)8),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    int32_t value = 0;
+    expect_eq_int("flex path_get",
+                  shrewd_basic_reflect_path_get(src, &g_flex_reflect, "data[2]",
+                                                &value, sizeof(value)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("flex path_get value", 9 == value);
+    value = 80;
+    expect_eq_int("flex path_set",
+                  shrewd_basic_reflect_path_set(src, &g_flex_reflect, "data[1]",
+                                                &value, sizeof(value)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("flex path_set lands", 80 == src->data[1]);
+    src->data[1] = 8;
+    expect_eq_int("flex path_get out of range",
+                  shrewd_basic_reflect_path_get(src, &g_flex_reflect, "data[5]",
+                                                &value, sizeof(value)),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    const shrewd_basic_reflect_field_t *resolved = NULL;
+    size_t offset = 0;
+    size_t size = 0;
+    expect_eq_int("flex resolve",
+                  shrewd_basic_reflect_type_resolve(&g_flex_reflect, "data[2]",
+                                                    &resolved, &offset, &size),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("flex resolve shape",
+                (offsetof(flex_t, data) + (2 * sizeof(int32_t)) == offset)
+                && (sizeof(int32_t) == size));
+
+    /* copy allocates struct + tail; equal is count-aware; destroy frees
+       the whole block (valgrind asserts the accounting). */
+    flex_t *clone = NULL;
+    expect_eq_int("flex copy",
+                  shrewd_basic_reflect_copy((void **)&clone, src, &g_flex_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    bool same = false;
+    expect_eq_int("flex equal",
+                  shrewd_basic_reflect_equal(src, clone, &g_flex_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("flex equal yes", same);
+    expect_true("flex clone independent",
+                (NULL != clone) && (clone->data != src->data)
+                && (3 == clone->len) && (9 == clone->data[2]));
+    clone->data[0] = 70;
+    expect_eq_int("flex equal differs",
+                  shrewd_basic_reflect_equal(src, clone, &g_flex_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("flex equal differs no", !same);
+    clone->data[0] = 7;
+    clone->len = 2;
+    expect_eq_int("flex equal count differs",
+                  shrewd_basic_reflect_equal(src, clone, &g_flex_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("flex equal count differs no", !same);
+    expect_eq_int("flex destroy clone",
+                  shrewd_basic_reflect_destroy(clone, &g_flex_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("flex destroy src",
+                  shrewd_basic_reflect_destroy(src, &g_flex_reflect),
+                  SHREWD_BASIC_ERR_OK);
+}
+
 static void test_logging_policy(void)
 {
     FILE *stream = tmpfile();
@@ -1891,6 +2060,7 @@ int main(void)
     test_graph_ops();
     test_equal();
     test_dynamic_arrays();
+    test_flex();
     test_logging_policy();
     test_cross_tu();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;

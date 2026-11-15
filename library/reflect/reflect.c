@@ -218,16 +218,21 @@ int shrewd_basic_reflect_field_get(const void *object,
                          "field", "field_get: object, field or out_value is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
-    if (value_size != field->sb_refl_size) {
+    size_t bytes = field->sb_refl_size;
+    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_FLEX)) {
+        reflect_array_view_t view = reflect_array_view((const unsigned char *)object, field);
+        bytes = view.count * view.stride;
+    }
+    if (value_size != bytes) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
                          "field", "field_get: size mismatch (%zu != %zu)\n",
-                         value_size, field->sb_refl_size);
+                         value_size, bytes);
         return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
     }
-    memcpy(out_value, (const unsigned char *)object + field->sb_refl_offset, field->sb_refl_size);
+    memcpy(out_value, (const unsigned char *)object + field->sb_refl_offset, bytes);
     shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
                      "field", "field_get ok (%s, %zu bytes)\n",
-                     field->sb_refl_name, field->sb_refl_size);
+                     field->sb_refl_name, bytes);
     return SHREWD_BASIC_ERR_OK;
 }
 
@@ -240,16 +245,21 @@ int shrewd_basic_reflect_field_set(void *object,
                          "field", "field_set: object, field or value is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
-    if (value_size != field->sb_refl_size) {
+    size_t bytes = field->sb_refl_size;
+    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_FLEX)) {
+        reflect_array_view_t view = reflect_array_view((const unsigned char *)object, field);
+        bytes = view.count * view.stride;
+    }
+    if (value_size != bytes) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
                          "field", "field_set: size mismatch (%zu != %zu)\n",
-                         value_size, field->sb_refl_size);
+                         value_size, bytes);
         return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
     }
-    memcpy((unsigned char *)object + field->sb_refl_offset, value, field->sb_refl_size);
+    memcpy((unsigned char *)object + field->sb_refl_offset, value, bytes);
     shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
                      "field", "field_set ok (%s, %zu bytes)\n",
-                     field->sb_refl_name, field->sb_refl_size);
+                     field->sb_refl_name, bytes);
     return SHREWD_BASIC_ERR_OK;
 }
 
@@ -321,20 +331,48 @@ static int reflect_path_walk(const unsigned char *object,
                 return SHREWD_BASIC_ERR_ARG_INVALID;
             }
             ++p;
-            if (0u == (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_ARRAY)) {
+            if (0u == (field->sb_refl_flags
+                       & (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY
+                          | SHREWD_BASIC_REFLECT_FIELD_F_DARRAY))) {
                 return SHREWD_BASIC_ERR_ARG_INVALID;
             }
-            if (index >= field->sb_refl_count) {
-                return SHREWD_BASIC_ERR_KEY_NOTFOUND;
+            if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_DARRAY)) {
+                /* Elements live behind a run-time table: only the dynamic
+                   walk can index them (same rule as pointer segments). */
+                if (0 == follow) {
+                    return SHREWD_BASIC_ERR_ARG_INVALID;
+                }
+                reflect_array_view_t view = reflect_array_view(base, field);
+                if (index >= view.count) {
+                    return SHREWD_BASIC_ERR_KEY_NOTFOUND;
+                }
+                base = view.base;
+                offset = index * view.stride;
+                size = view.stride;
+            } else {
+                size_t stride = field->sb_refl_stride;
+                if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_FLEX)) {
+                    /* Flexible tail: bound is run-time. */
+                    if (0 != follow) {
+                        reflect_array_view_t view = reflect_array_view(base, field);
+                        if (index >= view.count) {
+                            return SHREWD_BASIC_ERR_KEY_NOTFOUND;
+                        }
+                    }
+                } else if (index >= field->sb_refl_count) {
+                    return SHREWD_BASIC_ERR_KEY_NOTFOUND;
+                }
+                offset += index * stride;
+                size = stride;
             }
-            offset += index * (field->sb_refl_size / field->sb_refl_count);
-            size = field->sb_refl_size / field->sb_refl_count;
             indexed = 1;
         }
 
         if ('.' == *p) {
             ++p;
-            if ((0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_ARRAY))
+            if ((0u != (field->sb_refl_flags
+                        & (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY
+                           | SHREWD_BASIC_REFLECT_FIELD_F_DARRAY)))
                     && (0 == indexed)) {
                 return SHREWD_BASIC_ERR_ARG_INVALID;
             }
@@ -817,7 +855,8 @@ static int reflect_clone_target(const shrewd_basic_reflect_type_t *type, const v
     }
     if (SHREWD_BASIC_REFLECT_KIND_STRUCT == type->sb_refl_kind) {
         void *block = NULL;
-        status = shrewd_basic_platform_calloc(&block, 1, type->sb_refl_size);
+        status = shrewd_basic_platform_calloc(&block, 1,
+                                              reflect_object_size((const unsigned char *)src, type));
         if (SHREWD_BASIC_ERR_OK != status) {
             return status;
         }
@@ -969,7 +1008,8 @@ int shrewd_basic_reflect_copy(void **out, const void *object,
         return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
     }
     void *block = NULL;
-    status = shrewd_basic_platform_calloc(&block, 1, type->sb_refl_size);
+    status = shrewd_basic_platform_calloc(&block, 1,
+                                          reflect_object_size((const unsigned char *)object, type));
     if (SHREWD_BASIC_ERR_OK != status) {
         (void)shrewd_basic_rbtree_destroy(map);
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_reflect_log,

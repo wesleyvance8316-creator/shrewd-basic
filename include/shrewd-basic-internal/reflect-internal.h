@@ -146,9 +146,36 @@ static inline reflect_array_view_t reflect_array_view(const unsigned char *objec
         }
         return view;
     }
+    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_FLEX)) {
+        /* Flexible tail: inline storage, run-time bound. */
+        view.base = object + field->sb_refl_offset;
+        view.count = (size_t)reflect_load_u64(
+                object + field->sb_refl_limit_offset, field->sb_refl_limit_size);
+        return view;
+    }
     view.base = object + field->sb_refl_offset;
     view.count = field->sb_refl_count;
     return view;
+}
+
+/*
+ * Storage size of one object: the struct's own size plus the inline
+ * flexible tails (a FAM struct is allocated with room for its tail, and
+ * a clone must match). Single indirection is enough - a FAM struct can
+ * never be embedded in another struct.
+ */
+static inline size_t reflect_object_size(const unsigned char *object,
+        const shrewd_basic_reflect_type_t *type)
+{
+    size_t size = type->sb_refl_size;
+    for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
+        const shrewd_basic_reflect_field_t *field = &type->sb_refl_fields[i];
+        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_FLEX)) {
+            reflect_array_view_t view = reflect_array_view(object, field);
+            size += view.count * view.stride;
+        }
+    }
+    return size;
 }
 
 #endif /* SHREWD_BASIC_REFLECT_INTERNAL_H */

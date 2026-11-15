@@ -188,6 +188,14 @@ struct shrewd_basic_reflect_type {
 /** Field flag: a F_PTR|F_DARRAY table is NULL-terminated (argv style). */
 #define SHREWD_BASIC_REFLECT_FIELD_F_SENTINEL ((uint32_t)8u)
 
+/**
+ * Field flag: a flexible tail (C99 flexible array member, or the GNU
+ * zero-length array form). The storage is inline at the end of the owner
+ * struct and its element count comes from the linked count member at
+ * walk time - a dynamic array without the extra indirection.
+ */
+#define SHREWD_BASIC_REFLECT_FIELD_F_FLEX ((uint32_t)16u)
+
 /** Primitive descriptors; pass them to FIELD_ARRAY/FIELD_STRUCT by name. */
 extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_bool;
 extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_char;
@@ -411,7 +419,9 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
  *     style - "char **argv" is an array of string VALUES, not another
  *     level of indirection);
  *   - FIELD_PTR_SENTINEL: slots are pointers to @p ref terminated by a
- *     NULL slot.
+ *     NULL slot;
+ *   - FIELD_FLEX: a flexible tail (@c T member[]) sized by the count
+ *     member - a dynamic array inline at the end of the owner struct.
  * The count member must hold an integer; its value is read at walk
  * time.
  */
@@ -542,6 +552,89 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
         .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_PTR                              \
                 | SHREWD_BASIC_REFLECT_FIELD_F_ARRAY,                          \
         .sb_refl_ops = &(ops_ref)                                                      \
+    }
+
+/*
+ * Flexible tail (@c T member[] or the GNU @c T member[0]): inline
+ * storage sized at run time by the count member. The member must be the
+ * struct's last one (a C requirement) and the owner struct cannot be
+ * embedded elsewhere. The zero-length form is a GNU extension and warns
+ * under -Wpedantic.
+ */
+#define SHREWD_BASIC_REFLECT_FIELD_FLEX(struct_type, member, count_member, ref) \
+    {                                                                          \
+        .sb_refl_name = #member,                                               \
+        .sb_refl_type = &(ref),                                                \
+        .sb_refl_offset = offsetof(struct_type, member),                       \
+        .sb_refl_size = 0,                                                     \
+        .sb_refl_count = 0,                                                    \
+        .sb_refl_stride = sizeof(((struct_type *)0)->member[0]),               \
+        .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_ARRAY                    \
+                | SHREWD_BASIC_REFLECT_FIELD_F_FLEX,                           \
+        .sb_refl_ops = NULL,                                                   \
+        .sb_refl_limit_offset = offsetof(struct_type, count_member),           \
+        .sb_refl_limit_size = sizeof(((struct_type *)0)->count_member)         \
+    }
+
+/* Dynamic-array macros with a field-level ops override. */
+#define SHREWD_BASIC_REFLECT_FIELD_FLEX_OPS(struct_type, member, count_member, ref, ops_ref) \
+    {                                                                          \
+        .sb_refl_name = #member,                                               \
+        .sb_refl_type = &(ref),                                                \
+        .sb_refl_offset = offsetof(struct_type, member),                       \
+        .sb_refl_size = 0,                                                     \
+        .sb_refl_count = 0,                                                    \
+        .sb_refl_stride = sizeof(((struct_type *)0)->member[0]),               \
+        .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_ARRAY                    \
+                | SHREWD_BASIC_REFLECT_FIELD_F_FLEX,                           \
+        .sb_refl_ops = &(ops_ref),                                             \
+        .sb_refl_limit_offset = offsetof(struct_type, count_member),           \
+        .sb_refl_limit_size = sizeof(((struct_type *)0)->count_member)         \
+    }
+
+#define SHREWD_BASIC_REFLECT_FIELD_DARRAY_OPS(struct_type, member, count_member, ref, ops_ref) \
+    {                                                                          \
+        .sb_refl_name = #member,                                               \
+        .sb_refl_type = &(ref),                                                \
+        .sb_refl_offset = offsetof(struct_type, member),                       \
+        .sb_refl_size = sizeof(((struct_type *)0)->member),                    \
+        .sb_refl_count = (size_t)1,                                            \
+        .sb_refl_stride = sizeof(*(((struct_type *)0)->member)),               \
+        .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_DARRAY,                  \
+        .sb_refl_ops = &(ops_ref),                                             \
+        .sb_refl_limit_offset = offsetof(struct_type, count_member),           \
+        .sb_refl_limit_size = sizeof(((struct_type *)0)->count_member)         \
+    }
+
+#define SHREWD_BASIC_REFLECT_FIELD_PTR_DARRAY_OPS(struct_type, member, count_member, ref, ops_ref) \
+    {                                                                          \
+        .sb_refl_name = #member,                                               \
+        .sb_refl_type = &(ref),                                                \
+        .sb_refl_offset = offsetof(struct_type, member),                       \
+        .sb_refl_size = sizeof(((struct_type *)0)->member),                    \
+        .sb_refl_count = (size_t)1,                                            \
+        .sb_refl_stride = sizeof(*(((struct_type *)0)->member)),               \
+        .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_DARRAY                   \
+                | SHREWD_BASIC_REFLECT_FIELD_F_PTR,                            \
+        .sb_refl_ops = &(ops_ref),                                             \
+        .sb_refl_limit_offset = offsetof(struct_type, count_member),           \
+        .sb_refl_limit_size = sizeof(((struct_type *)0)->count_member)         \
+    }
+
+#define SHREWD_BASIC_REFLECT_FIELD_PTR_SENTINEL_OPS(struct_type, member, ref, ops_ref) \
+    {                                                                          \
+        .sb_refl_name = #member,                                               \
+        .sb_refl_type = &(ref),                                                \
+        .sb_refl_offset = offsetof(struct_type, member),                       \
+        .sb_refl_size = sizeof(((struct_type *)0)->member),                    \
+        .sb_refl_count = (size_t)1,                                            \
+        .sb_refl_stride = sizeof(*(((struct_type *)0)->member)),               \
+        .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_DARRAY                   \
+                | SHREWD_BASIC_REFLECT_FIELD_F_PTR                             \
+                | SHREWD_BASIC_REFLECT_FIELD_F_SENTINEL,                       \
+        .sb_refl_ops = &(ops_ref),                                             \
+        .sb_refl_limit_offset = 0,                                             \
+        .sb_refl_limit_size = 0                                                \
     }
 
 /** Name of a kind, e.g. "int32"; unknown values map to "unknown". */

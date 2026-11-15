@@ -146,7 +146,8 @@ shrewd_basic_reflect_void     /* 不透明目标(OPAQUE),size = 0 */
 | `FIELD_PTR_DARRAY(struct_type, member, count_member, ref)` | 动态指针表(point_t ** + 计数) |
 | `FIELD_SENTINEL(struct_type, member, ref)` | NULL 值终止的值表(char **argv) |
 | `FIELD_PTR_SENTINEL(struct_type, member, ref)` | NULL 槽终止的指针表 |
-| `FIELD_*_OPS`(全部 5 种形态各有变体) | 同上 + 字段级 ops 覆盖 |
+| `FIELD_FLEX(struct_type, member, count_member, ref)` | 柔性尾部(尾部内联 + 计数联动) |
+| `FIELD_*_OPS`(全部 7 种形态各有变体) | 同上 + 字段级 ops 覆盖 |
 
 `ref`/`ops_ref` 参数**不带 `&`**(宏内部补 `&` 以保持地址常量)。
 
@@ -317,8 +318,11 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
 1. **描述符成员统一带 `sb_refl_` 前缀**(`sb_refl_name` / `sb_refl_type` / `sb_refl_size` ...):C 宏替换会改写 designated initializer 的设计器(未加前缀时,参数 `type` 会毁掉 `.type =`),项目缩写 + `refl_` 双重前缀使设计器与 `type`/`name`/`var`/`size` 等常见标识符彻底隔离——这些词如今可安全用作宏参数或用户包装宏的参数;宏参数仅需避开 `sb_refl_*` 本身。
 2. **`char buf[N]` 必须用 `FIELD_ARRAY(t, buf, shrewd_basic_reflect_char)`**:
    `FIELD_PRIMITIVE` 会因数组退化把 `char[N]` 当 `char *` 误判为字符串(编译器抓不到)。
-3. **多维数组不支持**(元素类型模型是单层),bit-field / 联合体 / 柔性数组成员 /
-   函数指针 / 匿名成员不支持。
+3. **多维数组不支持**(元素类型模型是单层),bit-field / 联合体 / 函数指针 /
+   匿名成员不支持。柔性尾部(`T a[]` 与 GNU `T a[0]`)用 `FIELD_FLEX`:成员必须是
+   最后一个、含它的结构体不能再内嵌(C 约束);**分配必须含尾部**
+   (`platform_calloc(1, sizeof(T) + n * sizeof(T0))`),`sizeof` 只覆盖头部;
+   copy 克隆时会按运行时计数补足尾部。
 4. **`long` → int64 在 LLP64 上 kind 与真实宽度不符**:安全靠 size 不变量,但 dump 的
    指针目标标量按 `type->sb_refl_size` 规范宽度读——`long *` 这类目标建议自供 ops。
 5. **宏需要 C11(`_Generic`)且展开为声明**,必须放文件作用域;类型至少 1 个字段。
