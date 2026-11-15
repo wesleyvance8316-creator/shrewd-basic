@@ -16,6 +16,7 @@ SHREWD_BASIC_LOG_MODULE_DECLARE(shrewd_basic_reflect_log);
 #define DUMP_STR_MAX 256  /* raw string bytes before truncation */
 #define DUMP_ARRAY_MAX 32 /* elements rendered per array line */
 #define DUMP_TEXT_MAX 256  /* ops->render text buffer */
+#define DUMP_BODY_MAX (1u << 20) /* hard cap on one dump body (1 MiB) */
 #define DUMP_BODY_MIN 1024 /* initial body buffer */
 
 /*
@@ -31,8 +32,29 @@ typedef struct dump_ctx {
     size_t cap;
     size_t pos;
     int truncated;
-    const void *path[DUMP_MAX_DEPTH]; /* objects on the render stack */
+    int nomem;
+    struct {
+        const void *object;
+        const shrewd_basic_reflect_type_t *type;
+    } path[DUMP_MAX_DEPTH]; /* objects on the render stack */
 } dump_ctx_t;
+
+/*
+ * Mark the output as cut and stop appending. The marker is guaranteed
+ * to fit: when the buffer is nearly full the tail is rewound to make
+ * room for it.
+ */
+static void dump_truncate(dump_ctx_t *ctx)
+{
+    static const char marker[] = " ...(dump truncated)";
+    size_t at = (ctx->cap > sizeof(marker)) ? (ctx->cap - sizeof(marker)) : 0;
+    if (at < ctx->pos) {
+        ctx->pos = at;
+    }
+    memcpy(ctx->buf + ctx->pos, marker, sizeof(marker));
+    ctx->pos += sizeof(marker) - 1;
+    ctx->truncated = 1;
+}
 
 static int dump_init(dump_ctx_t *ctx)
 {
@@ -41,6 +63,7 @@ static int dump_init(dump_ctx_t *ctx)
     ctx->cap = 0;
     ctx->pos = 0;
     ctx->truncated = 0;
+    ctx->nomem = 0;
     if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_alloc(&block, DUMP_BODY_MIN)) {
         return SHREWD_BASIC_ERR_MEM_NOMEM;
     }
@@ -68,16 +91,19 @@ static void dump_append(dump_ctx_t *ctx, const char *fmt, ...)
     size_t want = ctx->pos + (size_t)needed + 1;
     if (want > ctx->cap) {
         size_t cap = (ctx->cap * 2 > want) ? (ctx->cap * 2) : want;
+        if (cap > DUMP_BODY_MAX) {
+            cap = DUMP_BODY_MAX;
+        }
+        if (want > cap) {
+            /* The hard cap: keep what fits and stop building. */
+            dump_truncate(ctx);
+            va_end(copy);
+            return;
+        }
         void *block = NULL;
         if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_realloc(&block, ctx->buf, cap)) {
-            /* Out of room: mark what fits and stop building. */
-            static const char marker[] = " ...(dump truncated)";
-            size_t slack = ctx->cap - ctx->pos;
-            if (slack > sizeof(marker)) {
-                memcpy(ctx->buf + ctx->pos, marker, sizeof(marker));
-                ctx->pos += sizeof(marker) - 1;
-            }
-            ctx->truncated = 1;
+            ctx->nomem = 1;
+            dump_truncate(ctx);
             va_end(copy);
             return;
         }
@@ -205,11 +231,17 @@ static void dump_scalar(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
  * object graph - stops with " ...(cyclic)"; the recursion is also
  * hard-capped at DUMP_MAX_DEPTH (" ...(max depth)") as a last resort.
  */
+/*
+ * A re-entry is only a cycle when the same object reappears as the same
+ * type: an embedded first member shares its parent's address (offset 0)
+ * without being a cycle.
+ */
 static int dump_target_seen(const dump_ctx_t *ctx, size_t depth,
-                            const void *target)
+                            const void *target,
+                            const shrewd_basic_reflect_type_t *type)
 {
     for (size_t i = 0; i < depth; ++i) {
-        if (ctx->path[i] == target) {
+        if ((ctx->path[i].object == target) && (ctx->path[i].type == type)) {
             return 1;
         }
     }
@@ -235,7 +267,8 @@ static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
                         const unsigned char *object, size_t depth)
 {
     size_t level = (depth < DUMP_MAX_DEPTH) ? depth : DUMP_MAX_DEPTH;
-    ctx->path[depth - 1] = object;
+    ctx->path[depth - 1].object = object;
+    ctx->path[depth - 1].type = type;
     int pad = (int)(level * DUMP_INDENT);
     for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
         const shrewd_basic_reflect_field_t *field = &type->sb_refl_fields[i];
@@ -267,7 +300,7 @@ static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
                     }
                     target = (const unsigned char *)pointer;
                 }
-                if (0 != dump_target_seen(ctx, depth, target)) {
+                if (0 != dump_target_seen(ctx, depth, target, field->sb_refl_type)) {
                     dump_append(ctx, "%*s%s[%zu] = ...(cyclic)", pad, "",
                                 field->sb_refl_name, j);
                     dump_emit(ctx);
@@ -335,7 +368,7 @@ static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
                                 (unsigned long long)(uintptr_t)pointer);
                     dump_emit(ctx);
                 } else if (0 != is_struct) {
-                    if (0 != dump_target_seen(ctx, depth, pointer)) {
+                    if (0 != dump_target_seen(ctx, depth, pointer, field->sb_refl_type)) {
                         dump_append(ctx, "%*s%s = ...(cyclic)", pad, "", field->sb_refl_name);
                         dump_emit(ctx);
                     } else if (depth >= DUMP_MAX_DEPTH) {
@@ -356,7 +389,7 @@ static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
                 }
             }
         } else if (0 != is_struct) {
-            if (0 != dump_target_seen(ctx, depth, at)) {
+            if (0 != dump_target_seen(ctx, depth, at, field->sb_refl_type)) {
                 dump_append(ctx, "%*s%s = ...(cyclic)", pad, "", field->sb_refl_name);
                 dump_emit(ctx);
             } else if (depth >= DUMP_MAX_DEPTH) {
@@ -410,8 +443,8 @@ int shrewd_basic_reflect_dump_write(const shrewd_basic_reflect_type_t *type,
        line on - unprefixed. */
     shrewd_basic_log_write(SHREWD_BASIC_LOG_LEVEL_INFO, shrewd_basic_reflect_log,
                      "dump", file, line, func, "\n%s", ctx.buf);
-    int status = (0 != ctx.truncated) ? SHREWD_BASIC_ERR_MEM_NOMEM
-                                      : SHREWD_BASIC_ERR_OK;
+    int status = (0 != ctx.nomem) ? SHREWD_BASIC_ERR_MEM_NOMEM
+                                  : SHREWD_BASIC_ERR_OK;
     (void)shrewd_basic_platform_free((void **)&ctx.buf);
     return status;
 }

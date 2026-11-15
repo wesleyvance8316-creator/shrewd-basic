@@ -76,6 +76,15 @@ typedef struct {
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_wide_reflect, wide_t,
     SHREWD_BASIC_REFLECT_FIELD_ARRAY(wide_t, wide, shrewd_basic_reflect_int32));
 
+/* Oversized object: exercises the 1 MiB dump body cap (struct arrays
+   render one block each, so this one really is megabytes of output). */
+typedef struct {
+    point_t points[100000];
+} huge_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_huge_reflect, huge_t,
+    SHREWD_BASIC_REFLECT_FIELD_ARRAY(huge_t, points, g_point_reflect));
+
 /* Self-referential type: DEFINE forward-declares the descriptor, so it
  * can appear inside its own field table. */
 typedef struct node {
@@ -749,6 +758,36 @@ static void test_equal(void)
     expect_eq_int("equal NULL args",
                   shrewd_basic_reflect_equal(NULL, &b, &g_person_reflect, &same),
                   SHREWD_BASIC_ERR_ARG_INVALID);
+}
+
+static void test_dump_body_cap(void)
+{
+    static huge_t huge; /* 800 KB: too big for the stack */
+    memset(&huge, 0, sizeof(huge));
+    shrewd_basic_log_module_t *module = NULL;
+    expect_eq_int("dump cap find module",
+                  shrewd_basic_log_module_find("reflect", &module),
+                  SHREWD_BASIC_ERR_OK);
+    FILE *stream = tmpfile();
+    expect_true("dump cap tmpfile", NULL != stream);
+    if (NULL == stream) {
+        return;
+    }
+    shrewd_basic_log_module_set_stream(module, stream);
+    /* Hitting the cap degrades to a marker, not an error. */
+    expect_eq_int("dump cap status",
+                  shrewd_basic_reflect_dump(&g_huge_reflect, &huge, "huge"),
+                  SHREWD_BASIC_ERR_OK);
+    char tail[256] = {0};
+    (void)fseek(stream, 0, SEEK_END);
+    long size = ftell(stream);
+    long back = (long)sizeof(tail) - 1;
+    (void)fseek(stream, (size > back) ? (size - back) : 0, SEEK_SET);
+    size_t n = fread(tail, 1, sizeof(tail) - 1, stream);
+    tail[n] = '\0';
+    expect_true("dump cap marker", NULL != strstr(tail, "...(dump truncated)"));
+    shrewd_basic_log_module_set_stream(module, stderr);
+    fclose(stream);
 }
 
 static void test_logging_policy(void)
@@ -1666,6 +1705,7 @@ int main(void)
     test_ops();
     test_dump();
     test_dump_pointers();
+    test_dump_body_cap();
     test_paths();
     test_graph_ops();
     test_equal();
