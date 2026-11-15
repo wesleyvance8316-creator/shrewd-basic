@@ -179,6 +179,10 @@ static void dump_string_buf(dump_ctx_t *ctx, const char *buf, size_t size)
     dump_append(ctx, "\"");
 }
 
+/* Render one value inline (scalars, array values, struct values). */
+static void dump_inline(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type,
+                        const unsigned char *bytes, size_t nbytes, size_t str_max);
+
 /* Render one scalar value; str_max bounds string elements inside arrays. */
 static void dump_scalar(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type,
                         const unsigned char *bytes, size_t nbytes, size_t str_max)
@@ -234,10 +238,50 @@ static void dump_scalar(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
     case SHREWD_BASIC_REFLECT_KIND_STRING:
         dump_string(ctx, reflect_load_str(bytes), str_max);
         break;
+    case SHREWD_BASIC_REFLECT_KIND_ARRAY: {
+        /* Row of a multi-dimension array: [ e, e, ... ] per level. */
+        size_t count = type->sb_refl_elem_count;
+        size_t stride = type->sb_refl_elem_stride;
+        dump_append(ctx, "[ ");
+        for (size_t i = 0; i < count; ++i) {
+            if (DUMP_ARRAY_MAX == i) {
+                dump_append(ctx, "...(%zu more)", count - i);
+                break;
+            }
+            if (0 != i) {
+                dump_append(ctx, ", ");
+            }
+            dump_inline(ctx, type->sb_refl_elem, bytes + (i * stride), stride,
+                        str_max);
+        }
+        dump_append(ctx, " ]");
+        break;
+    }
     default:
         dump_append(ctx, "<kind %d>", (int)type->sb_refl_kind);
         break;
     }
+}
+
+static void dump_inline(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type,
+                        const unsigned char *bytes, size_t nbytes, size_t str_max)
+{
+    if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
+        dump_scalar(ctx, type, bytes, nbytes, str_max);
+        return;
+    }
+    /* Struct value inline: { x = 1, y = 2 }. */
+    dump_append(ctx, "{ ");
+    for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
+        const shrewd_basic_reflect_field_t *field = &type->sb_refl_fields[i];
+        if (0 != i) {
+            dump_append(ctx, ", ");
+        }
+        dump_append(ctx, "%s = ", field->sb_refl_name);
+        dump_inline(ctx, field->sb_refl_type, bytes + field->sb_refl_offset,
+                    field->sb_refl_size, str_max);
+    }
+    dump_append(ctx, " }");
 }
 
 /*

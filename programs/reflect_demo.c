@@ -15,7 +15,8 @@
  * type_resolve, path_get/set, value_get/set, check, equal, copy,
  * destroy, dynamic arrays (F_DARRAY/F_SENTINEL), flexible tails
  * (F_FLEX), string buffers (F_STRINGBUF), owned strings
- * (F_STRING_OWNED), bit groups (F_BITS), the traversal accessors,
+ * (F_STRING_OWNED), bit groups (F_BITS), multi-dimension arrays
+ * (ARRAY_DEFINE), the traversal accessors,
  * visit (event-by-event walk) and diff/hash.
  * The 1 MiB dump body cap is covered by the test suite
  * instead - its output would flood the terminal here.
@@ -210,6 +211,17 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(reg_type, reg_t,
     SHREWD_BASIC_REFLECT_FIELD_BITS(reg_t, cfg, mode, 1, 3),
     SHREWD_BASIC_REFLECT_FIELD_BITS(reg_t, cfg, divider, 8, 16),
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(reg_t, value));
+
+/* A matrix: int32_t m[2][3] through an array value type. */
+typedef struct {
+    int32_t m[2][3];
+    int32_t id;
+} matrix_t;
+
+SHREWD_BASIC_REFLECT_ARRAY_DEFINE(row3_type, shrewd_basic_reflect_int32, int32_t, 3);
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(matrix_type, matrix_t,
+    SHREWD_BASIC_REFLECT_FIELD_ARRAY(matrix_t, m, row3_type),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(matrix_t, id));
 
 /* An enum: int-compatible values with a name/value table. */
 typedef enum {
@@ -758,6 +770,28 @@ int main(void)
                  shrewd_basic_reflect_equal(&reg, &reg_other, &reg_type, &reg_same));
     printf("  -> %s (unused unit bits are invisible)\n",
            reg_same ? "equal" : "different");
+
+    banner("17. multi-dimension arrays: rows as array value types");
+    matrix_t mx;
+    memset(&mx, 0, sizeof(mx));
+    for (size_t r = 0; r < 2; ++r) {
+        for (size_t c = 0; c < 3; ++c) {
+            mx.m[r][c] = (int32_t)((r * 3) + c) + 1;
+        }
+    }
+    mx.id = 7;
+    (void)shrewd_basic_reflect_dump(&matrix_type, &mx, "matrix");
+    int32_t cell = 0;
+    print_status("path_get \"m[1][2]\"",
+                 shrewd_basic_reflect_path_get(&mx, &matrix_type, "m[1][2]",
+                                               &cell, sizeof(cell)));
+    printf("  -> m[1][2] = %d\n", cell);
+    matrix_t mx_clone = mx;
+    mx_clone.m[0][0] = 99;
+    print_status("diff(matrix, clone)",
+                 shrewd_basic_reflect_diff(&mx, &mx_clone, &matrix_type,
+                                           diff_path, sizeof(diff_path)));
+    printf("  first difference at \"%s\"\n", diff_path);
 
     printf("\nDemo done. See docs/reflect.md for the full reference.\n");
     return 0;

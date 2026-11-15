@@ -3,9 +3,10 @@
 
 Parses the supported subset of typedef struct/enum declarations and emits
 the very same SHREWD_BASIC_REFLECT_* macros a human would write, so the
-generated code stays readable and hand-editable. Unsupported constructs
-(bit-fields, unions, function pointers, multi-dimension arrays, flexible
-arrays) are skipped with a warning.
+generated code stays readable and hand-editable. Multi-dimension arrays
+gain ARRAY_DEFINE row types (one per row level, innermost first).
+Unsupported constructs (bit-fields, unions, function pointers) are
+skipped with a warning.
 
 Usage:
     python3 reflect_gen.py input.h [-o stub] [--quiet]
@@ -92,24 +93,28 @@ def split_declarations(body):
 
 
 def parse_member(decl):
-    """Return (base_type, stars, name, array_len or None, flexible)."""
+    """Return (base_type, stars, name, dims, flexible); dims is outermost
+    first ([] for scalars, [N] for T name[N], [N, M] for T name[N][M], ...)."""
     decl = " ".join(decl.split())
-    array_len = None
+    dims = []
     flexible = False
-    match = re.match(r"^(.*\S)\s*\[\s*(\d*)\s*\]$", decl)
-    if match:
+    while True:
+        match = re.match(r"^(.*\S)\s*\[\s*(\d*)\s*\]$", decl)
+        if not match:
+            break
         decl = match.group(1).strip()
         digits = match.group(2)
         if digits in ("", "0"):
             flexible = True  # C99 FAM or the GNU zero-length form
         else:
-            array_len = int(digits)
+            dims.append(int(digits))
+    dims.reverse()  # the first bracket in the source is the outermost
     match = re.match(r"^(.*\S)\s*(\*+)\s*([A-Za-z_]\w*)$", decl)
     if match:
-        return match.group(1).strip(), match.group(2), match.group(3), array_len, flexible
+        return match.group(1).strip(), match.group(2), match.group(3), dims, flexible
     match = re.match(r"^(.*\S)\s+([A-Za-z_]\w*)$", decl)
     if match:
-        return match.group(1).strip(), "", match.group(2), array_len, flexible
+        return match.group(1).strip(), "", match.group(2), dims, flexible
     raise ParseError("cannot parse member: %s" % decl)
 
 
@@ -179,8 +184,29 @@ def primitive_ref(base):
     return PRIMITIVE_TYPES.get(base)
 
 
+def array_row_defines(struct_name, member, base, dims):
+    """ARRAY_DEFINE lines for the row types of a multi-dimension array.
+
+    Returns (defines, outer_ref): the outermost row type is what
+    FIELD_ARRAY references. Types are generated innermost-first so each
+    one may reference its predecessor (3D+ nests naturally)."""
+    defines = []
+    ref = None
+    elem_type = base
+    for level, count in enumerate(dims[1:], start=1):
+        name = "%s_%s_row%d" % (struct_name, member, level)
+        defines.append("SHREWD_BASIC_REFLECT_ARRAY_DEFINE(%s, %s, %s, %d);"
+                       % (name, ref or primitive_ref(base) or descriptor_name(base),
+                          elem_type, count))
+        ref = name
+        elem_type = "%s[%d]" % (elem_type, count)
+    return defines, ref
+
+
 def field_macro(parser, struct_name, member, members):
-    base, stars, name, array_len, flexible = member
+    """Return (macro, warning, defines); defines are statements that must
+    precede the TYPE_DEFINE of the owning struct."""
+    base, stars, name, dims, flexible = member
     base = normalize(base)
     if flexible:
         if stars != "":
@@ -189,45 +215,57 @@ def field_macro(parser, struct_name, member, members):
         if count_member is None:
             return None, ("no count member found for flexible array '%s' "
                           "(expected %s_count/%s_len/count/len) - skipped"
-                          % (name, name, name))
+                          % (name, name, name)), []
         ref = primitive_ref(base)
         if ref is None:
             if base in parser.enums or base in parser.structs:
                 ref = descriptor_name(base)
             else:
                 return None, ("unknown element type '%s' of flexible array "
-                              "'%s' - skipped" % (base, name))
+                              "'%s' - skipped" % (base, name)), []
         return "SHREWD_BASIC_REFLECT_FIELD_FLEX(%s, %s, %s, %s)" % (
-            struct_name, name, count_member, ref), None
+            struct_name, name, count_member, ref), None, []
+    if 2 <= len(dims):
+        # Multi-dimension array: rows become array value types.
+        if stars != "":
+            raise ParseError("pointer multi-dimension array not described: %s" % name)
+        if base not in PRIMITIVE_TYPES and base not in parser.enums \
+                and base not in parser.structs:
+            return None, ("unknown element type '%s' of multi-dimension array "
+                          "'%s' - skipped" % (base, name)), []
+        defines, ref = array_row_defines(struct_name, name, base, dims)
+        return "SHREWD_BASIC_REFLECT_FIELD_ARRAY(%s, %s, %s)" % (
+            struct_name, name, ref), None, defines
     if stars not in ("", "*"):
         raise ParseError("only single pointers are described: %s" % name)
+    is_array = (1 == len(dims))
     ref = None
     if base == "void" and stars == "*":
         ref = "shrewd_basic_reflect_void"
     elif base == "char" and stars == "*":
-        return "SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(%s, %s)" % (struct_name, name), None
+        return "SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(%s, %s)" % (struct_name, name), None, []
     elif base in PRIMITIVE_TYPES:
         ref = PRIMITIVE_TYPES[base]
-        if stars == "" and array_len is None:
-            return "SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(%s, %s)" % (struct_name, name), None
+        if stars == "" and not is_array:
+            return "SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(%s, %s)" % (struct_name, name), None, []
     elif base in parser.enums:
         ref = descriptor_name(base)
-        if stars == "" and array_len is None:
+        if stars == "" and not is_array:
             return "SHREWD_BASIC_REFLECT_FIELD_ENUM(%s, %s, %s)" % (
-                struct_name, name, ref), None
+                struct_name, name, ref), None, []
     else:
         ref = descriptor_name(base)
-        if stars == "" and array_len is None:
+        if stars == "" and not is_array:
             return "SHREWD_BASIC_REFLECT_FIELD_STRUCT(%s, %s, %s)" % (
-                struct_name, name, ref), None
+                struct_name, name, ref), None, []
     if ref is None:
         raise ParseError("unsupported member type: %s %s" % (base, name))
     if stars == "*":
-        macro = "SHREWD_BASIC_REFLECT_FIELD_PTR_ARRAY" if array_len is not None \
+        macro = "SHREWD_BASIC_REFLECT_FIELD_PTR_ARRAY" if is_array \
             else "SHREWD_BASIC_REFLECT_FIELD_PTR"
     else:
         macro = "SHREWD_BASIC_REFLECT_FIELD_ARRAY"
-    return "%s(%s, %s, %s)" % (macro, struct_name, name, ref), None
+    return "%s(%s, %s, %s)" % (macro, struct_name, name, ref), None, []
 
 
 def collect_references(parser):
@@ -273,16 +311,23 @@ def generate(parser, input_name):
                            % descriptor_name(name))
         else:
             entries = []
+            pre = []
             for m in parser.structs[name]:
-                macro, warning = field_macro(parser, name, m, parser.structs[name])
+                macro, warning, defines = field_macro(parser, name, m,
+                                                      parser.structs[name])
                 if warning is not None:
                     print("reflect_gen: %s: %s" % (name, warning), file=sys.stderr)
                 if macro is not None:
                     entries.append(macro)
+                    pre.extend(defines)
             if not entries:
                 print("reflect_gen: %s: no describable fields - skipped" % name,
                       file=sys.stderr)
                 continue
+            for define in pre:
+                lines_c.append(define)
+            if pre:
+                lines_c.append("")
             fields = ",\n    ".join(entries)
             lines_c.append(
                 "SHREWD_BASIC_REFLECT_TYPE_DEFINE(%s, %s,\n    %s);"

@@ -81,11 +81,12 @@ person (person_t) {
 ### 3.1 kind(`shrewd_basic_reflect_kind_t`)
 
 `BOOL, CHAR, INT8, UINT8, INT16, UINT16, INT32, UINT32, INT64, UINT64, ENUM,
-FLOAT, DOUBLE, STRING, STRUCT, OPAQUE`
+FLOAT, DOUBLE, STRING, STRUCT, ARRAY, OPAQUE`
 
 - `ENUM`:枚举值(int 兼容,顺序排在整数族之后、浮点之前),`ENUM_DEFINE` 注册名/值表,dump 按常量名渲染,`enum_find_name/enum_find_value` 双向查表;
 - `STRING`:`char *` / `const char *` 成员,指针即值;
 - `STRUCT`:有字段表的聚合;
+- `ARRAY`:定长数组值(多维数组的一行),`ARRAY_DEFINE` 注册元素/计数/步长,行可嵌套(3D+);
 - `OPAQUE`:不可描述的目标(`shrewd_basic_reflect_void` 或应用自定义),只能打地址/走 ops;
 - 枚举可扩展(POINTER 等留待未来),所有 switch 都有 `default` 兜底为 `unknown`。
 
@@ -159,6 +160,7 @@ shrewd_basic_reflect_void     /* 不透明目标(OPAQUE),size = 0 */
 ```c
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(var, struct_type, field, ...)        /* 结构体类型 */
 SHREWD_BASIC_REFLECT_TYPE_DEFINE_OPS(var, struct_type, ops_ref, ...)  /* 结构体 + 类型级 ops */
+SHREWD_BASIC_REFLECT_ARRAY_DEFINE(var, elem_ref, elem_type, count)    /* 数组值(一行) */
 SHREWD_BASIC_REFLECT_OPAQUE_DEFINE(var, "name", ops_ref)              /* 不透明类型 + ops */
 SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                /* 跨 TU 引入 */
 ```
@@ -219,7 +221,8 @@ SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                /* 跨 TU 
 member ( '[' index ']' )? ( '.' member ( '[' index ']' )? )*
 ```
 
-- 成员名为 C 标识符,索引为十进制数字,**每段最多一个索引**(不支持多维数组);
+- 成员名为 C 标识符,索引为十进制数字;数组值(多维数组)可**链式索引**:`m[1][2]`、
+  `cube[1][0][1]`,每层一个索引,越界 → `KEY_NOTFOUND`;
 - `.` 由字段形态驱动:值成员直进,`F_PTR` 段自动解引用(与 `->` 不区分);
 - 语法非法 → `ARG_INVALID`;成员不存在 / 索引越界 / **指针段为 NULL** → `KEY_NOTFOUND`;
 - `resolve` 是纯元数据零解引用,**跨指针段的路径被拒绝**(`ARG_INVALID`),动态寻址用
@@ -400,10 +403,11 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
   `[0]` 形态,自动配对 `name_count`/`name_len`/`count`/`len` 计数成员,配不到则
   告警跳过)、指针(`FIELD_PTR`/`FIELD_PTR_ARRAY`)、枚举(`FIELD_ENUM`/`ENUM_DEFINE`),
   引用但未定义的类型自动补 `TYPE_DECLARE`;
-- `char[N]` 默认生成 `FIELD_ARRAY`(字节精确);文本缓冲可手工改为
-  `FIELD_STRING_BUFFER`(C 字符串语义);
+- 多维数组 `T m[N][M]`(任意维):逐层生成 `ARRAY_DEFINE` 行类型(内层在前,
+  3D+ 自然嵌套)+ `FIELD_ARRAY`;`char[N]` 默认生成 `FIELD_ARRAY`
+  (字节精确);文本缓冲可手工改为 `FIELD_STRING_BUFFER`(C 字符串语义);
 - 描述符命名约定 `<类型名>_reflect`(如 `shape_t_reflect`);
-- 跳过并告警:bit-field、联合体、函数指针、多维数组、柔性数组;
+- 跳过并告警:bit-field、联合体、函数指针;
 - 验证:`tools/reflect_gen_check.sh` 一键自测(生成 → 编译 → 运行 dump/equal/enum 冒烟),样例输入 `tools/reflect_gen_sample.h`;
 - 基准:`tools/reflect_bench.sh` 输出关键路径的 ns/op 基线(find/resolve/path_get/field_get/equal/copy+destroy/dump),供优化工作对照。
 

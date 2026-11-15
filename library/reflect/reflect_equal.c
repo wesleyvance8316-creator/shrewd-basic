@@ -146,6 +146,28 @@ static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
     default:
         break;
     }
+    /* Fixed array values (rows of a multi-dimension array). */
+    if (SHREWD_BASIC_REFLECT_KIND_ARRAY == type->sb_refl_kind) {
+        for (size_t i = 0; i < type->sb_refl_elem_count; ++i) {
+            size_t mark_j = diff_path_mark(diff);
+            bool same = true;
+            int status;
+            diff_path_index(diff, i);
+            status = reflect_equal_value(type->sb_refl_elem,
+                                         a + (i * type->sb_refl_elem_stride),
+                                         b + (i * type->sb_refl_elem_stride),
+                                         type->sb_refl_elem_stride,
+                                         type->sb_refl_elem->sb_refl_ops,
+                                         path, depth + 1, diff, &same);
+            if ((SHREWD_BASIC_ERR_OK != status) || !same) {
+                *out_equal = false;
+                return status;
+            }
+            diff_path_restore(diff, mark_j);
+        }
+        *out_equal = true;
+        return SHREWD_BASIC_ERR_OK;
+    }
     /* Structs (and unknown kinds): compare field by field. */
     if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
         *out_equal = (0 == memcmp(a, b, nbytes));

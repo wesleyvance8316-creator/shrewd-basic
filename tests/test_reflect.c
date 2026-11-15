@@ -3202,6 +3202,244 @@ static void test_bits(void)
                   SHREWD_BASIC_ERR_OK);
 }
 
+/* --- multi-dimension array fixtures ------------------------------------ */
+
+/* int32_t m[2][3]: a matrix of 2 rows x 3 columns. */
+typedef struct {
+    int32_t m[2][3];
+    int32_t id;
+} matrix_t;
+
+SHREWD_BASIC_REFLECT_ARRAY_DEFINE(g_row3_reflect, shrewd_basic_reflect_int32,
+                                  int32_t, 3);
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_matrix_reflect, matrix_t,
+    SHREWD_BASIC_REFLECT_FIELD_ARRAY(matrix_t, m, g_row3_reflect),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(matrix_t, id));
+
+/* int32_t cube[2][2][2]: rows nest (row of rows). */
+typedef struct {
+    int32_t cube[2][2][2];
+} cube_t;
+
+SHREWD_BASIC_REFLECT_ARRAY_DEFINE(g_row2_reflect, shrewd_basic_reflect_int32,
+                                  int32_t, 2);
+SHREWD_BASIC_REFLECT_ARRAY_DEFINE(g_plane22_reflect, g_row2_reflect,
+                                  int32_t[2], 2);
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_cube_reflect, cube_t,
+    SHREWD_BASIC_REFLECT_FIELD_ARRAY(cube_t, cube, g_plane22_reflect));
+
+/* point_t grid[2][2]: a matrix of struct values. */
+typedef struct {
+    point_t grid[2][2];
+} grid_t;
+
+SHREWD_BASIC_REFLECT_ARRAY_DEFINE(g_pair2_reflect, g_point_reflect, point_t, 2);
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_grid_reflect, grid_t,
+    SHREWD_BASIC_REFLECT_FIELD_ARRAY(grid_t, grid, g_pair2_reflect));
+
+static void test_multidim(void)
+{
+    /* Row descriptor shape. */
+    expect_true("multidim row kind",
+                SHREWD_BASIC_REFLECT_KIND_ARRAY == g_row3_reflect.sb_refl_kind);
+    expect_true("multidim row shape",
+                (&shrewd_basic_reflect_int32 == g_row3_reflect.sb_refl_elem)
+                && ((size_t)3 == g_row3_reflect.sb_refl_elem_count)
+                && (sizeof(int32_t) == g_row3_reflect.sb_refl_elem_stride)
+                && ((3 * sizeof(int32_t)) == g_row3_reflect.sb_refl_size));
+    expect_true("multidim kind name",
+                0 == strcmp(shrewd_basic_reflect_kind_name(
+                                    g_row3_reflect.sb_refl_kind), "array"));
+
+    matrix_t mx;
+    memset(&mx, 0, sizeof(mx));
+    for (size_t r = 0; r < 2; ++r) {
+        for (size_t c = 0; c < 3; ++c) {
+            mx.m[r][c] = (int32_t)((r * 3) + c) + 1; /* 1..6 */
+        }
+    }
+    mx.id = 7;
+
+    /* Chained paths: one index per row level. */
+    int32_t at = 0;
+    expect_eq_int("multidim path_get",
+                  shrewd_basic_reflect_path_get(&mx, &g_matrix_reflect, "m[1][2]",
+                                                &at, sizeof(at)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("multidim path value", 6 == at);
+    at = 50;
+    expect_eq_int("multidim path_set",
+                  shrewd_basic_reflect_path_set(&mx, &g_matrix_reflect, "m[0][1]",
+                                                &at, sizeof(at)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("multidim path wrote", 50 == mx.m[0][1]);
+    at = 0;
+    expect_eq_int("multidim path row",
+                  shrewd_basic_reflect_path_get(&mx, &g_matrix_reflect, "m[1]",
+                                                &at, sizeof(at)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_eq_int("multidim path row size",
+                  shrewd_basic_reflect_path_get(&mx, &g_matrix_reflect, "m[1]",
+                                                &mx.m[1][0], sizeof(mx.m[1])),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("multidim path row range",
+                  shrewd_basic_reflect_path_get(&mx, &g_matrix_reflect, "m[2][0]",
+                                                &at, sizeof(at)),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("multidim path col range",
+                  shrewd_basic_reflect_path_get(&mx, &g_matrix_reflect, "m[0][3]",
+                                                &at, sizeof(at)),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+
+    /* resolve is static all the way (no pointer segments). */
+    const shrewd_basic_reflect_field_t *field = NULL;
+    size_t offset = 0;
+    size_t size = 0;
+    expect_eq_int("multidim resolve",
+                  shrewd_basic_reflect_type_resolve(&g_matrix_reflect, "m[1][2]",
+                                                    &field, &offset, &size),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("multidim resolve shape",
+                (offsetof(matrix_t, m) + (1 * 3 * sizeof(int32_t))
+                 + (2 * sizeof(int32_t))) == offset
+                && (sizeof(int32_t) == size));
+
+    /* equal/diff/hash. */
+    matrix_t twin;
+    twin = mx;
+    bool same = false;
+    expect_eq_int("multidim equal",
+                  shrewd_basic_reflect_equal(&mx, &twin, &g_matrix_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("multidim equal yes", same);
+    size_t ha = 0;
+    size_t hb = 0;
+    expect_eq_int("multidim hash a",
+                  shrewd_basic_reflect_hash(&mx, &g_matrix_reflect, &ha),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("multidim hash b",
+                  shrewd_basic_reflect_hash(&twin, &g_matrix_reflect, &hb),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("multidim hash same", ha == hb);
+    twin.m[1][0] = 99;
+    char path[64];
+    expect_eq_int("multidim diff",
+                  shrewd_basic_reflect_diff(&mx, &twin, &g_matrix_reflect,
+                                            path, sizeof(path)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("multidim diff path", 0 == strcmp(path, "m[1][0]"));
+    twin.m[1][0] = mx.m[1][0];
+
+    /* dump renders nested rows inline. */
+    shrewd_basic_log_module_t *module = NULL;
+    expect_eq_int("multidim find module",
+                  shrewd_basic_log_module_find("reflect", &module),
+                  SHREWD_BASIC_ERR_OK);
+    FILE *stream = tmpfile();
+    expect_true("multidim tmpfile", NULL != stream);
+    if (NULL == stream) {
+        return;
+    }
+    shrewd_basic_log_module_set_stream(module, stream);
+    expect_eq_int("multidim dump",
+                  shrewd_basic_reflect_dump(&g_matrix_reflect, &mx, "matrix"),
+                  SHREWD_BASIC_ERR_OK);
+    char buf[4096] = {0};
+    slurp(stream, buf, sizeof(buf));
+    expect_true("multidim dump rows",
+                (NULL != strstr(buf, "m = [ [ 1, 50, 3 ], [ 4, 5, 6 ] ]"))
+                && (NULL != strstr(buf, "id = 7")));
+    shrewd_basic_log_module_set_stream(module, stderr);
+    fclose(stream);
+
+    /* 3D: rows nest. */
+    cube_t cube;
+    memset(&cube, 0, sizeof(cube));
+    cube.cube[1][0][1] = 42;
+    at = 0;
+    expect_eq_int("multidim 3d get",
+                  shrewd_basic_reflect_path_get(&cube, &g_cube_reflect,
+                                                "cube[1][0][1]", &at, sizeof(at)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("multidim 3d value", 42 == at);
+    stream = tmpfile();
+    expect_true("multidim 3d tmpfile", NULL != stream);
+    if (NULL == stream) {
+        shrewd_basic_log_module_set_stream(module, stderr);
+        return;
+    }
+    shrewd_basic_log_module_set_stream(module, stream);
+    expect_eq_int("multidim 3d dump",
+                  shrewd_basic_reflect_dump(&g_cube_reflect, &cube, "cube"),
+                  SHREWD_BASIC_ERR_OK);
+    memset(buf, 0, sizeof(buf));
+    slurp(stream, buf, sizeof(buf));
+    expect_true("multidim 3d dump nests",
+                NULL != strstr(buf, "[ [ [ 0, 0 ], [ 0, 0 ] ], [ [ 0, 42 ], [ 0, 0 ] ] ]"));
+    shrewd_basic_log_module_set_stream(module, stderr);
+    fclose(stream);
+
+    /* Struct rows: inline blocks per element. */
+    grid_t grid;
+    memset(&grid, 0, sizeof(grid));
+    grid.grid[1][0].x = 3;
+    grid.grid[1][0].y = 4;
+    grid.grid[0][1].x = 8;
+    stream = tmpfile();
+    expect_true("multidim grid tmpfile", NULL != stream);
+    if (NULL == stream) {
+        return;
+    }
+    shrewd_basic_log_module_set_stream(module, stream);
+    expect_eq_int("multidim grid dump",
+                  shrewd_basic_reflect_dump(&g_grid_reflect, &grid, "grid"),
+                  SHREWD_BASIC_ERR_OK);
+    memset(buf, 0, sizeof(buf));
+    slurp(stream, buf, sizeof(buf));
+    expect_true("multidim grid dump inline",
+                NULL != strstr(buf, "grid = [ [ { x = 0, y = 0 }, { x = 8, y = 0 } ],"
+                                    " [ { x = 3, y = 4 }, { x = 0, y = 0 } ] ]"));
+    shrewd_basic_log_module_set_stream(module, stderr);
+    fclose(stream);
+    grid_t grid_twin;
+    grid_twin = grid;
+    grid_twin.grid[1][0].y = 40;
+    expect_eq_int("multidim grid diff",
+                  shrewd_basic_reflect_diff(&grid, &grid_twin, &g_grid_reflect,
+                                            path, sizeof(path)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("multidim grid diff path", 0 == strcmp(path, "grid[1][0].y"));
+
+    /* visit: nested ARRAY_ENTER per row level. */
+    visit_rec_t rec;
+    memset(&rec, 0, sizeof(rec));
+    expect_eq_int("multidim visit",
+                  shrewd_basic_reflect_visit(&mx, &g_matrix_reflect, visit_collect, &rec),
+                  SHREWD_BASIC_ERR_OK);
+    int at_idx = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "m");
+    expect_true("multidim visit outer",
+                (0 <= at_idx) && ((size_t)2 == rec.entries[at_idx].count));
+    at_idx = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "m[1]");
+    expect_true("multidim visit inner",
+                (0 <= at_idx) && ((size_t)3 == rec.entries[at_idx].count)
+                && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "m[1][2]")));
+    expect_true("multidim visit rows bracketed",
+                visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_EXIT, "m[0]")
+                < visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "m[1]"));
+
+    /* copy clones matrix bytes; equal stays green. */
+    matrix_t *clone = NULL;
+    expect_eq_int("multidim copy",
+                  shrewd_basic_reflect_copy((void **)&clone, &mx, &g_matrix_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("multidim clone equal",
+                (NULL != clone) && (0 == memcmp(clone->m, mx.m, sizeof(mx.m)))
+                && (clone->id == mx.id));
+    expect_eq_int("multidim destroy",
+                  shrewd_basic_reflect_destroy(clone, &g_matrix_reflect),
+                  SHREWD_BASIC_ERR_OK);
+}
+
 int main(void)
 {
     test_describe();
@@ -3224,6 +3462,7 @@ int main(void)
     test_stringbuf();
     test_owned_strings();
     test_bits();
+    test_multidim();
     test_graph_ops();
     test_equal();
     test_dynamic_arrays();

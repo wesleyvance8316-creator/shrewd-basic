@@ -132,6 +132,19 @@ static int hash_value(const shrewd_basic_reflect_type_t *type,
     default:
         break;
     }
+    if (SHREWD_BASIC_REFLECT_KIND_ARRAY == type->sb_refl_kind) {
+        for (size_t i = 0; i < type->sb_refl_elem_count; ++i) {
+            int status = hash_value(type->sb_refl_elem,
+                                    value + (i * type->sb_refl_elem_stride),
+                                    type->sb_refl_elem_stride,
+                                    type->sb_refl_elem->sb_refl_ops,
+                                    stack, depth + 1, h);
+            if (SHREWD_BASIC_ERR_OK != status) {
+                return status;
+            }
+        }
+        return SHREWD_BASIC_ERR_OK;
+    }
     if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
         *h = hash_bytes(*h, value, nbytes);
         return SHREWD_BASIC_ERR_OK;

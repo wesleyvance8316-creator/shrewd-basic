@@ -119,6 +119,7 @@ typedef enum shrewd_basic_reflect_kind {
     SHREWD_BASIC_REFLECT_KIND_DOUBLE,
     SHREWD_BASIC_REFLECT_KIND_STRING, /**< char * / const char * member. */
     SHREWD_BASIC_REFLECT_KIND_STRUCT, /**< Aggregate with field descriptors. */
+    SHREWD_BASIC_REFLECT_KIND_ARRAY,  /**< Fixed array value: one row of a multi-dimension array. */
     SHREWD_BASIC_REFLECT_KIND_OPAQUE  /**< Unknown pointee (shrewd_basic_reflect_void). */
 } shrewd_basic_reflect_kind_t;
 
@@ -196,6 +197,9 @@ struct shrewd_basic_reflect_type {
     const shrewd_basic_reflect_enum_entry_t *sb_refl_enum; /**< NULL unless ENUM. */
     size_t sb_refl_enum_count;                            /**< 0 unless ENUM. */
     const shrewd_basic_reflect_ops_t *sb_refl_ops;         /**< Type-level ops; NULL = defaults. */
+    const shrewd_basic_reflect_type_t *sb_refl_elem;       /**< ARRAY: element descriptor. */
+    size_t sb_refl_elem_count;                            /**< ARRAY: elements in one row. */
+    size_t sb_refl_elem_stride;                           /**< ARRAY: real width of one element. */
 };
 
 /** Field flag: the field is a fixed-size array of @c count elements. */
@@ -388,6 +392,33 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
 /** Import a type defined by SHREWD_BASIC_REFLECT_TYPE_DEFINE() elsewhere. */
 #define SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                 \
     extern const shrewd_basic_reflect_type_t var
+
+/*
+ * Compile-time registration of a fixed array value type: `var` describes
+ * one row of a multi-dimension array (elem_type[count] - e.g. the [4]
+ * row of an int32_t m[3][4]). The element C type is passed for its real
+ * width (the size invariant), the element descriptor for its semantics;
+ * rows nest (a row of rows describes 3D). Use it as the element of
+ * SHREWD_BASIC_REFLECT_FIELD_ARRAY:
+ *
+ *   SHREWD_BASIC_REFLECT_ARRAY_DEFINE(row4_type, shrewd_basic_reflect_int32,
+ *                                     int32_t, 4);
+ *   SHREWD_BASIC_REFLECT_FIELD_ARRAY(matrix_t, m, row4_type)
+ *
+ * describes the member "int32_t m[3][4]" (3 rows of 4).
+ */
+#define SHREWD_BASIC_REFLECT_ARRAY_DEFINE(var, elem_ref, elem_type, count)     \
+    extern const shrewd_basic_reflect_type_t var;                              \
+    const shrewd_basic_reflect_type_t var = {                                  \
+        .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_ARRAY,                              \
+        .sb_refl_name = #elem_type "[" #count "]",                                     \
+        .sb_refl_size = sizeof(elem_type) * (size_t)(count),                           \
+        .sb_refl_field_count = 0,                                                      \
+        .sb_refl_fields = NULL,                                                        \
+        .sb_refl_elem = &(elem_ref),                                                   \
+        .sb_refl_elem_count = (size_t)(count),                                         \
+        .sb_refl_elem_stride = sizeof(elem_type)                                       \
+    }
 
 /*
  * SHREWD_BASIC_REFLECT_TYPE_DEFINE with a type-level ops vtable; the ops

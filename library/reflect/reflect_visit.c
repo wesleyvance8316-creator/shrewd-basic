@@ -127,6 +127,50 @@ static void visit_target(visit_ctx_t *ctx, const shrewd_basic_reflect_type_t *ty
     (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_LEAF, field, target, type, 0);
 }
 
+/*
+ * Expand one fixed array value (a row of a multi-dimension array):
+ * ARRAY_ENTER, one event per element (nested rows recurse), ARRAY_EXIT.
+ */
+static void visit_array_value(visit_ctx_t *ctx,
+                              const shrewd_basic_reflect_type_t *array_type,
+                              const unsigned char *base,
+                              const shrewd_basic_reflect_field_t *field,
+                              size_t depth)
+{
+    if (SHREWD_BASIC_REFLECT_VISIT_PRUNE
+            == visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, field,
+                          base, array_type->sb_refl_elem,
+                          array_type->sb_refl_elem_count)) {
+        return;
+    }
+    for (size_t i = 0; i < array_type->sb_refl_elem_count; ++i) {
+        const unsigned char *elem = base + (i * array_type->sb_refl_elem_stride);
+        size_t mark = ctx->path_len;
+        visit_path_index(ctx, i);
+        if (0 != ctx->stopped) {
+            ctx->path_len = mark;
+            ctx->path[mark] = '\0';
+            return;
+        }
+        if (SHREWD_BASIC_REFLECT_KIND_ARRAY == array_type->sb_refl_elem->sb_refl_kind) {
+            visit_array_value(ctx, array_type->sb_refl_elem, elem, field, depth + 1);
+        } else if (SHREWD_BASIC_REFLECT_KIND_STRUCT
+                   == array_type->sb_refl_elem->sb_refl_kind) {
+            visit_struct(ctx, array_type->sb_refl_elem, elem, field, depth + 1);
+        } else {
+            (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_LEAF, field, elem,
+                             array_type->sb_refl_elem, 0);
+        }
+        ctx->path_len = mark;
+        ctx->path[mark] = '\0';
+        if (0 != ctx->stopped) {
+            return;
+        }
+    }
+    (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_ARRAY_EXIT, field, base,
+                     array_type->sb_refl_elem, array_type->sb_refl_elem_count);
+}
+
 /* Emit the events of one array-shaped field (inline, flexible or dynamic). */
 static void visit_array(visit_ctx_t *ctx, const shrewd_basic_reflect_field_t *field,
                         const unsigned char *object, size_t depth)
@@ -155,6 +199,8 @@ static void visit_array(visit_ctx_t *ctx, const shrewd_basic_reflect_field_t *fi
         if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
             visit_target(ctx, field->sb_refl_type, reflect_load_ptr(elem),
                          field, depth + 1);
+        } else if (SHREWD_BASIC_REFLECT_KIND_ARRAY == field->sb_refl_type->sb_refl_kind) {
+            visit_array_value(ctx, field->sb_refl_type, elem, field, depth + 1);
         } else if (SHREWD_BASIC_REFLECT_KIND_STRUCT == field->sb_refl_type->sb_refl_kind) {
             visit_struct(ctx, field->sb_refl_type, elem, field, depth + 1);
         } else {

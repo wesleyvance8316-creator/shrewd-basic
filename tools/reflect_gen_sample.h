@@ -26,6 +26,7 @@ typedef struct {
     geo_point_t origin;
     int32_t samples[4];
     char tag[8];
+    int32_t grid[2][3];
     geo_point_t *link;
     void *ctx;
     uint64_t count;
