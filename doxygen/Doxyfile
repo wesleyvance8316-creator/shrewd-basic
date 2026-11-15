@@ -1,0 +1,34 @@
+# Doxygen configuration for shrewd-basic - HTML documentation only.
+# Run from this directory:  doxygen Doxyfile   (or `make docs` from the build)
+
+PROJECT_NAME           = "shrewd-basic"
+PROJECT_BRIEF          = "C utility library: platform, ds, log and reflect modules"
+
+# Inputs: the public headers plus the markdown documentation.
+# Paths are relative to the repository root (doxygen runs from there).
+INPUT                  = include/shrewd-basic \
+                         docs
+RECURSIVE              = YES
+EXCLUDE_PATTERNS       = *.in \
+                         CMakeLists.txt
+USE_MDFILE_AS_MAINPAGE = docs/index.md
+FULL_PATH_NAMES        = NO
+
+# C-shaped output; document what the headers document.
+OPTIMIZE_OUTPUT_FOR_C  = YES
+JAVADOC_AUTOBRIEF      = YES
+EXTRACT_ALL            = YES
+QUIET                  = YES
+WARN_IF_UNDOCUMENTED   = NO
+WARN_IF_DOC_ERROR      = YES
+
+# No graphviz available: skip the include/call graphs.
+HAVE_DOT               = NO
+
+# HTML only - no LaTeX/man/XML.
+OUTPUT_DIRECTORY       = doxygen
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+GENERATE_LATEX         = NO
+GENERATE_MAN           = NO
+GENERATE_XML           = NO

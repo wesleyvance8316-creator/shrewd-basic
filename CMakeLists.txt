@@ -56,3 +56,13 @@ endif()
 if(SHREWD_BASIC_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
+
+# Optional HTML documentation (docs/*.md + the public headers).
+find_package(Doxygen QUIET)
+if(Doxygen_FOUND)
+    add_custom_target(docs
+            COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/doxygen/Doxyfile
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            COMMENT "Generating HTML documentation with Doxygen"
+            VERBATIM)
+endif()

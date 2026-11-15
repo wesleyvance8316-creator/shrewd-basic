@@ -113,3 +113,6 @@ out/
 # Demo output (programs/log_demo.c)
 shrewd-basic-log-demo.txt
 shrewd-basic-log-demo-global.txt
+
+# Doxygen output
+doxygen/html/
