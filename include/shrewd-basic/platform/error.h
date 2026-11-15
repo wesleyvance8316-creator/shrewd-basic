@@ -34,7 +34,12 @@ typedef enum shrewd_basic_error {
     SHREWD_BASIC_ERR_LOG_FOPEN = -100,   /**< Log: failed to open the output file. */
     /* Reflect module codes: -200 .. -299. */
     SHREWD_BASIC_ERR_REFLECT_MISMATCH = -200,     /**< Reflect: value size does not match the field. */
-    SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED = -201 /**< Reflect: operation needs an ops callback. */
+    SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED = -201, /**< Reflect: operation needs an ops callback. */
+
+    SHREWD_BASIC_ERR_JSON_SYNTAX = -300,       /**< JSON: malformed text (see the error detail). */
+    SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH = -301, /**< JSON: value does not fit the expected shape. */
+    SHREWD_BASIC_ERR_JSON_DEPTH = -302,        /**< JSON: nesting deeper than the configured limit. */
+    SHREWD_BASIC_ERR_JSON_UNSUPPORTED = -303   /**< JSON: construct has no JSON representation. */
 } shrewd_basic_error_t;
 
 /**

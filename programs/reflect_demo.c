@@ -840,10 +840,10 @@ int main(void)
         printf("  a tag without a variant:\n");
         (void)shrewd_basic_reflect_dump(&msg_type, msg, "msg");
         msg->kind = MSG_TEXT;
-        void *text_block = NULL;
-        (void)shrewd_basic_platform_alloc(&text_block, 6);
-        memcpy(text_block, "hello", 6);
-        msg->body.text = text_block;
+        void *body_text = NULL;
+        (void)shrewd_basic_platform_alloc(&body_text, 6);
+        memcpy(body_text, "hello", 6);
+        msg->body.text = body_text;
         printf("  active variant MSG_TEXT (owned string):\n");
         (void)shrewd_basic_reflect_dump(&msg_type, msg, "msg");
         msg_t *msg_clone = NULL;

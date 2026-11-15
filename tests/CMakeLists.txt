@@ -29,8 +29,17 @@ target_link_libraries(shrewd-basic-reflect-tests
             shrewd-basic
             shrewd-basic-warnings)
 
+# JSON module tests (value model, parser, serializer).
+add_executable(shrewd-basic-json-tests test_json.c)
+
+target_link_libraries(shrewd-basic-json-tests
+        PRIVATE
+            shrewd-basic
+            shrewd-basic-warnings)
+
 # Test binary returns non-zero on failure, so a plain COMMAND run is enough.
 add_test(NAME shrewd-basic.unit COMMAND shrewd-basic-tests)
 add_test(NAME shrewd-basic.ds COMMAND shrewd-basic-ds-tests)
 add_test(NAME shrewd-basic.log COMMAND shrewd-basic-log-tests)
 add_test(NAME shrewd-basic.reflect COMMAND shrewd-basic-reflect-tests)
+add_test(NAME shrewd-basic.json COMMAND shrewd-basic-json-tests)

@@ -12,6 +12,9 @@ compile-time reflection module.
 - [reflect overview](reflect-overview.md) - a summary of everything the
   reflect module supports today: type system, field shapes, API list,
   semantics and tooling.
+- [json reference](json.md) - the json module: layered architecture, the
+  value model (DOM), the strict RFC 8259 parser/serializer and the wire
+  format contract.
 
 ## Modules
 
@@ -21,5 +24,6 @@ compile-time reflection module.
 | ds | `shrewd-basic/ds/*.h` | slist, dlist, queue, stack, btree, rbtree, trie, radix tree |
 | log | `shrewd-basic/log/log.h` | leveled logging with per-module masks and outputs |
 | reflect | `shrewd-basic/reflect/reflect.h` | compile-time type metadata for generic code |
+| json | `shrewd-basic/json/json.h` | JSON value model, parser and serializer |
 
 The API reference below is generated from the public headers.
