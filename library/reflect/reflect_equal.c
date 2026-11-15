@@ -93,13 +93,16 @@ static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
     }
     for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
         const shrewd_basic_reflect_field_t *field = &type->sb_refl_fields[i];
-        const unsigned char *left = a + field->sb_refl_offset;
-        const unsigned char *right = b + field->sb_refl_offset;
-        size_t stride = field->sb_refl_size / field->sb_refl_count;
         const shrewd_basic_reflect_ops_t *field_ops = reflect_field_ops(field);
-        for (size_t j = 0; j < field->sb_refl_count; ++j) {
-            const unsigned char *elem_a = left + (j * stride);
-            const unsigned char *elem_b = right + (j * stride);
+        reflect_array_view_t view_a = reflect_array_view(a, field);
+        reflect_array_view_t view_b = reflect_array_view(b, field);
+        if (view_a.count != view_b.count) {
+            *out_equal = false;
+            return SHREWD_BASIC_ERR_OK;
+        }
+        for (size_t j = 0; j < view_a.count; ++j) {
+            const unsigned char *elem_a = view_a.base + (j * view_a.stride);
+            const unsigned char *elem_b = view_b.base + (j * view_b.stride);
             if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
                 const void *target_a = reflect_load_ptr(elem_a);
                 const void *target_b = reflect_load_ptr(elem_b);
@@ -128,8 +131,8 @@ static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
             } else {
                 bool same = true;
                 int status = reflect_equal_value(field->sb_refl_type, elem_a, elem_b,
-                                                 stride, field_ops, path, depth + 1,
-                                                 &same);
+                                                 view_a.stride, field_ops, path,
+                                                 depth + 1, &same);
                 if ((SHREWD_BASIC_ERR_OK != status) || !same) {
                     *out_equal = false;
                     return status;

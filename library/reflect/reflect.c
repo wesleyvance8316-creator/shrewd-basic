@@ -701,11 +701,10 @@ static int reflect_check_node(const shrewd_basic_reflect_type_t *type, const voi
     const unsigned char *base = (const unsigned char *)value;
     for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
         const shrewd_basic_reflect_field_t *field = &type->sb_refl_fields[i];
-        const unsigned char *at = base + field->sb_refl_offset;
-        size_t stride = field->sb_refl_size / field->sb_refl_count;
         const shrewd_basic_reflect_ops_t *field_ops = reflect_field_ops(field);
-        for (size_t j = 0; j < field->sb_refl_count; ++j) {
-            const unsigned char *elem = at + (j * stride);
+        reflect_array_view_t view = reflect_array_view(base, field);
+        for (size_t j = 0; j < view.count; ++j) {
+            const unsigned char *elem = view.base + (j * view.stride);
             const void *target = elem;
             if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
                 void *pointer = NULL;
@@ -862,12 +861,55 @@ static int reflect_copy_value(const shrewd_basic_reflect_type_t *type,
     }
     for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
         const shrewd_basic_reflect_field_t *field = &type->sb_refl_fields[i];
-        const unsigned char *src_at = src + field->sb_refl_offset;
         unsigned char *dst_at = dst + field->sb_refl_offset;
-        size_t stride = field->sb_refl_size / field->sb_refl_count;
-        for (size_t j = 0; j < field->sb_refl_count; ++j) {
-            const unsigned char *src_elem = src_at + (j * stride);
-            unsigned char *dst_elem = dst_at + (j * stride);
+        reflect_array_view_t view = reflect_array_view(src, field);
+        unsigned char *dst_base = dst_at;
+        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_DARRAY)) {
+            /*
+             * Dynamic array: the table itself is a heap block and joins
+             * the clone map, so tables shared between fields stay shared
+             * and the failure cleanup of copy knows about them.
+             */
+            if (NULL == view.base) {
+                continue;
+            }
+            void *existing = NULL;
+            int found = 0;
+            int status = reflect_map_lookup(map, view.base, &existing, &found);
+            if (SHREWD_BASIC_ERR_OK != status) {
+                return status;
+            }
+            if (0 != found) {
+                memcpy(dst_at, &existing, sizeof(existing));
+                continue;
+            }
+            size_t bytes = view.count * view.stride;
+            if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_SENTINEL)) {
+                bytes += view.stride; /* keep the NULL terminator slot */
+            }
+            void *table = NULL;
+            status = shrewd_basic_platform_calloc(&table, 1, bytes);
+            if (SHREWD_BASIC_ERR_OK != status) {
+                return status;
+            }
+            status = reflect_map_insert(map, view.base, table, NULL);
+            if (SHREWD_BASIC_ERR_OK != status) {
+                (void)shrewd_basic_platform_free(&table);
+                return status;
+            }
+            memcpy(dst_at, &table, sizeof(table));
+            dst_base = (unsigned char *)table;
+            /* Keep the clone self-consistent even when the count member
+               is not described as a field of its own. */
+            if (0 != field->sb_refl_limit_size) {
+                uint64_t count = (uint64_t)view.count;
+                memcpy(dst + field->sb_refl_limit_offset, &count,
+                       field->sb_refl_limit_size);
+            }
+        }
+        for (size_t j = 0; j < view.count; ++j) {
+            const unsigned char *src_elem = view.base + (j * view.stride);
+            unsigned char *dst_elem = dst_base + (j * view.stride);
             if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
                 void *pointer = NULL;
                 memcpy(&pointer, src_elem, sizeof(pointer));
@@ -883,12 +925,13 @@ static int reflect_copy_value(const shrewd_basic_reflect_type_t *type,
                 }
                 memcpy(dst_elem, &clone, sizeof(clone));
             } else if (SHREWD_BASIC_REFLECT_KIND_STRUCT == field->sb_refl_type->sb_refl_kind) {
-                int status = reflect_copy_value(field->sb_refl_type, src_elem, dst_elem, map, depth + 1);
+                int status = reflect_copy_value(field->sb_refl_type, src_elem,
+                                                dst_elem, map, depth + 1);
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
                 }
             } else {
-                memcpy(dst_elem, src_elem, stride);
+                memcpy(dst_elem, src_elem, view.stride);
             }
         }
     }
@@ -1007,10 +1050,27 @@ static int reflect_destroy_value(const shrewd_basic_reflect_type_t *type, void *
     for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
         const shrewd_basic_reflect_field_t *field = &type->sb_refl_fields[i];
         unsigned char *at = base + field->sb_refl_offset;
-        size_t stride = field->sb_refl_size / field->sb_refl_count;
         const shrewd_basic_reflect_ops_t *field_ops = reflect_field_ops(field);
-        for (size_t j = 0; j < field->sb_refl_count; ++j) {
-            unsigned char *elem = at + (j * stride);
+        reflect_array_view_t view = reflect_array_view(value, field);
+        unsigned char *table = NULL;
+        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_DARRAY)) {
+            if (NULL == view.base) {
+                continue;
+            }
+            /* The table is a heap block like any pointee: freed once. */
+            int seen = 0;
+            int status = reflect_visited_check(visited, view.base, &seen);
+            if (SHREWD_BASIC_ERR_OK != status) {
+                return status;
+            }
+            if (0 != seen) {
+                continue;
+            }
+            table = (unsigned char *)(uintptr_t)view.base;
+        }
+        for (size_t j = 0; j < view.count; ++j) {
+            unsigned char *elem = table ? (table + (j * view.stride))
+                                       : (at + (j * view.stride));
             if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
                 void *pointer = NULL;
                 memcpy(&pointer, elem, sizeof(pointer));
@@ -1028,6 +1088,12 @@ static int reflect_destroy_value(const shrewd_basic_reflect_type_t *type, void *
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
                 }
+            }
+        }
+        if (NULL != table) {
+            int status = shrewd_basic_platform_free((void **)&table);
+            if (SHREWD_BASIC_ERR_OK != status) {
+                return status;
             }
         }
     }

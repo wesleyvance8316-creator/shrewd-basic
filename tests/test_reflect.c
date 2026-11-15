@@ -800,6 +800,167 @@ static void test_dump_body_cap(void)
     fclose(stream);
 }
 
+/* --- dynamic array fixtures ------------------------------------------- */
+
+typedef struct {
+    point_t **points; /* pointer table + linked count */
+    size_t point_count;
+    int32_t *values; /* value vector + linked count */
+    size_t value_count;
+    char **argv; /* NULL-terminated pointer table (argv style) */
+} dyn_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_dyn_reflect, dyn_t,
+    SHREWD_BASIC_REFLECT_FIELD_PTR_DARRAY(dyn_t, points, point_count, g_point_reflect),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dyn_t, point_count),
+    SHREWD_BASIC_REFLECT_FIELD_DARRAY(dyn_t, values, value_count,
+                                      shrewd_basic_reflect_int32),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dyn_t, value_count),
+    SHREWD_BASIC_REFLECT_FIELD_SENTINEL(dyn_t, argv, shrewd_basic_reflect_string));
+
+static void test_dynamic_arrays(void)
+{
+    /* Descriptor shapes. */
+    const shrewd_basic_reflect_field_t *field =
+        find_or_fail("dyn", &g_dyn_reflect, "points");
+    if (NULL == field) {
+        return;
+    }
+    expect_true("dyn points shape",
+                ((SHREWD_BASIC_REFLECT_FIELD_F_DARRAY | SHREWD_BASIC_REFLECT_FIELD_F_PTR)
+                        == field->sb_refl_flags)
+                && (sizeof(point_t *) == field->sb_refl_stride)
+                && ((size_t)1 == field->sb_refl_count)
+                && (sizeof(size_t) == field->sb_refl_limit_size));
+    field = find_or_fail("dyn", &g_dyn_reflect, "values");
+    if (NULL != field) {
+        expect_true("dyn values shape",
+                    (SHREWD_BASIC_REFLECT_FIELD_F_DARRAY == field->sb_refl_flags)
+                    && (sizeof(int32_t) == field->sb_refl_stride));
+    }
+    field = find_or_fail("dyn", &g_dyn_reflect, "argv");
+    if (NULL != field) {
+        expect_true("dyn argv shape",
+                    ((SHREWD_BASIC_REFLECT_FIELD_F_DARRAY
+                      | SHREWD_BASIC_REFLECT_FIELD_F_SENTINEL) == field->sb_refl_flags)
+                    && ((size_t)0 == field->sb_refl_limit_size));
+    }
+
+    /* A heap-owned graph (copy/destroy own what they touch, the root
+       included, so even the container is heap-allocated here). */
+    void *block = NULL;
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_calloc(&block, 1, sizeof(dyn_t))) {
+        return;
+    }
+    dyn_t *src = block;
+    point_t *pa = NULL;
+    point_t *pb = NULL;
+    if (SHREWD_BASIC_ERR_OK == shrewd_basic_platform_alloc(&block, sizeof(point_t))) {
+        pa = block;
+        pa->x = 1;
+        pa->y = 2;
+    }
+    if (SHREWD_BASIC_ERR_OK == shrewd_basic_platform_alloc(&block, sizeof(point_t))) {
+        pb = block;
+        pb->x = 3;
+        pb->y = 4;
+    }
+    if (SHREWD_BASIC_ERR_OK == shrewd_basic_platform_alloc(&block, 2 * sizeof(point_t *))) {
+        src->points = block;
+        src->points[0] = pa;
+        src->points[1] = pb;
+    }
+    src->point_count = 2;
+    if (SHREWD_BASIC_ERR_OK == shrewd_basic_platform_alloc(&block, 3 * sizeof(int32_t))) {
+        src->values = block;
+        src->values[0] = 7;
+        src->values[1] = 8;
+        src->values[2] = 9;
+    }
+    src->value_count = 3;
+    if (SHREWD_BASIC_ERR_OK == shrewd_basic_platform_alloc(&block, 3 * sizeof(char *))) {
+        src->argv = block;
+        src->argv[0] = (char *)"ls";
+        src->argv[1] = (char *)"-l";
+        src->argv[2] = NULL;
+    }
+
+    /* dump renders all three flavors and NULL tables. */
+    shrewd_basic_log_module_t *module = NULL;
+    expect_eq_int("dyn find module",
+                  shrewd_basic_log_module_find("reflect", &module),
+                  SHREWD_BASIC_ERR_OK);
+    FILE *stream = tmpfile();
+    expect_true("dyn tmpfile", NULL != stream);
+    if (NULL == stream) {
+        (void)shrewd_basic_reflect_destroy(src, &g_dyn_reflect);
+        return;
+    }
+    shrewd_basic_log_module_set_stream(module, stream);
+    expect_eq_int("dyn dump",
+                  shrewd_basic_reflect_dump(&g_dyn_reflect, src, "dyn"),
+                  SHREWD_BASIC_ERR_OK);
+    dyn_t empty;
+    memset(&empty, 0, sizeof(empty));
+    expect_eq_int("dyn dump empty",
+                  shrewd_basic_reflect_dump(&g_dyn_reflect, &empty, "dyn"),
+                  SHREWD_BASIC_ERR_OK);
+    char buf[8192] = {0};
+    slurp(stream, buf, sizeof(buf));
+    expect_true("dyn dump pointer table",
+                (NULL != strstr(buf, "points[0] = {"))
+                && (NULL != strstr(buf, "points[1] = {"))
+                && (NULL != strstr(buf, "    x = 3")));
+    expect_true("dyn dump value vector",
+                NULL != strstr(buf, "values = [ 7, 8, 9 ]"));
+    expect_true("dyn dump sentinel table",
+                NULL != strstr(buf, "argv = [ \"ls\", \"-l\" ]"));
+    expect_true("dyn dump null tables",
+                (NULL != strstr(buf, "points = (null)"))
+                && (NULL != strstr(buf, "values = (null)"))
+                && (NULL != strstr(buf, "argv = (null)")));
+    shrewd_basic_log_module_set_stream(module, stderr);
+    fclose(stream);
+
+    /* copy: tables and pointees are cloned, strings stay borrowed;
+       equal is deep and count-aware. */
+    dyn_t *twin = NULL;
+    expect_eq_int("dyn copy",
+                  shrewd_basic_reflect_copy((void **)&twin, src, &g_dyn_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    bool same = false;
+    expect_eq_int("dyn equal deep",
+                  shrewd_basic_reflect_equal(src, twin, &g_dyn_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("dyn equal deep yes", same);
+    expect_true("dyn clone independent",
+                (NULL != twin) && (twin != src) && (twin->points != src->points)
+                && (twin->points[0] != src->points[0])
+                && (1 == twin->points[0]->x) && (9 == twin->values[2]));
+    expect_true("dyn clone strings aliased", twin->argv[0] == src->argv[0]);
+    twin->values[0] = 70;
+    expect_eq_int("dyn equal differs",
+                  shrewd_basic_reflect_equal(src, twin, &g_dyn_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("dyn equal differs no", !same);
+    twin->values[0] = 7;
+    twin->value_count = 2;
+    expect_eq_int("dyn equal count differs",
+                  shrewd_basic_reflect_equal(src, twin, &g_dyn_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("dyn equal count differs no", !same);
+    twin->value_count = 3;
+
+    /* destroy frees cloned tables and pointees exactly once (valgrind
+       is the real assertion here). */
+    expect_eq_int("dyn destroy clone",
+                  shrewd_basic_reflect_destroy(twin, &g_dyn_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("dyn destroy src",
+                  shrewd_basic_reflect_destroy(src, &g_dyn_reflect),
+                  SHREWD_BASIC_ERR_OK);
+}
+
 static void test_logging_policy(void)
 {
     FILE *stream = tmpfile();
@@ -1729,6 +1890,7 @@ int main(void)
     test_paths();
     test_graph_ops();
     test_equal();
+    test_dynamic_arrays();
     test_logging_policy();
     test_cross_tu();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;

@@ -108,4 +108,47 @@ static inline const char *reflect_load_str(const unsigned char *bytes)
     return (const char *)reflect_load_ptr(bytes);
 }
 
+/*
+ * Element storage of an array-shaped field, inline or dynamic. For a
+ * F_DARRAY field the table pointer is followed: a NULL table yields an
+ * empty view, a F_SENTINEL table is bounded by its NULL slot, and any
+ * other dynamic table by the linked count member. The stride is the
+ * real element width captured by the authoring macros (sizeof of the
+ * element), so even width-lying basic types stay safe.
+ */
+typedef struct reflect_array_view {
+    const unsigned char *base;
+    size_t count;
+    size_t stride;
+} reflect_array_view_t;
+
+static inline reflect_array_view_t reflect_array_view(const unsigned char *object,
+        const shrewd_basic_reflect_field_t *field)
+{
+    reflect_array_view_t view;
+    view.base = NULL;
+    view.count = 0;
+    view.stride = field->sb_refl_stride;
+    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_DARRAY)) {
+        const unsigned char *table =
+                (const unsigned char *)reflect_load_ptr(object + field->sb_refl_offset);
+        if (NULL == table) {
+            return view;
+        }
+        view.base = table;
+        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_SENTINEL)) {
+            while (NULL != reflect_load_ptr(table + (view.count * view.stride))) {
+                ++view.count;
+            }
+        } else {
+            view.count = (size_t)reflect_load_u64(
+                    object + field->sb_refl_limit_offset, field->sb_refl_limit_size);
+        }
+        return view;
+    }
+    view.base = object + field->sb_refl_offset;
+    view.count = field->sb_refl_count;
+    return view;
+}
+
 #endif /* SHREWD_BASIC_REFLECT_INTERNAL_H */

@@ -142,6 +142,10 @@ shrewd_basic_reflect_void     /* 不透明目标(OPAQUE),size = 0 */
 | `FIELD_PTR(struct_type, member, ref)` | 指针成员,`ref` 为目标描述符 |
 | `FIELD_PTR_ARRAY(struct_type, member, ref)` | 定长指针数组 |
 | `FIELD_ENUM(struct_type, member, ref)` | 枚举成员 |
+| `FIELD_DARRAY(struct_type, member, count_member, ref)` | 动态值数组(指针 + 计数联动) |
+| `FIELD_PTR_DARRAY(struct_type, member, count_member, ref)` | 动态指针表(point_t ** + 计数) |
+| `FIELD_SENTINEL(struct_type, member, ref)` | NULL 值终止的值表(char **argv) |
+| `FIELD_PTR_SENTINEL(struct_type, member, ref)` | NULL 槽终止的指针表 |
 | `FIELD_*_OPS`(全部 5 种形态各有变体) | 同上 + 字段级 ops 覆盖 |
 
 `ref`/`ops_ref` 参数**不带 `&`**(宏内部补 `&` 以保持地址常量)。
@@ -267,6 +271,7 @@ struct shrewd_basic_reflect_ops {
 ```
 
 - **两级挂载**:`field->sb_refl_ops` 优先,缺省回落 `type->sb_refl_ops`;
+- 动态数组(`F_DARRAY`):表本身是堆块,`copy` 会克隆表并登记克隆映射(共享表保持共享、失败清理可追踪),元素各自深拷;`destroy` 访问集保证表只释放一次;**计数成员建议也注册为字段**(未注册时 copy 会把解析出的计数写回,保持克隆自洽);
 - `render` 用于 dump 跟随指针目标时的自定义文本(如不透明句柄打 `handle#42` 而非地址);缺失或返回失败则回退默认渲染;
 - **逐回调解退**:缺哪个回调就用哪个元数据默认(只写 `check` 也能复用通用拷贝);
 - `get/set/check` 对值和指针目标同样适用;`copy/destroy` 是**对象语义**(指针目标与
