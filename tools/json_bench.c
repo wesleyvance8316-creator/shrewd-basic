@@ -75,6 +75,18 @@ int main(void)
 
     printf("json_bench: document %d objects, %zu bytes\n", N, len);
 
+    /* parse */
+    {
+        long iters = 200;
+        double start = now_ns();
+        for (long i = 0; i < iters; ++i) {
+            shrewd_basic_json_value_free(tree);
+            tree = NULL;
+            (void)shrewd_basic_json_parse(doc, len, &tree, NULL, NULL);
+        }
+        report("parse", iters, now_ns() - start);
+    }
+
     /* Small-container document: 1-member objects (the inline case). */
     {
         enum { M = 4000, SMALL_MAX = 131072 };
@@ -102,18 +114,6 @@ int main(void)
             report("parse (tiny containers)", iters, now_ns() - start);
             shrewd_basic_json_value_free(tiny);
         }
-    }
-
-    /* parse */
-    {
-        long iters = 200;
-        double start = now_ns();
-        for (long i = 0; i < iters; ++i) {
-            shrewd_basic_json_value_free(tree);
-            tree = NULL;
-            (void)shrewd_basic_json_parse(doc, len, &tree, NULL, NULL);
-        }
-        report("parse", iters, now_ns() - start);
     }
 
     /* serialize (compact) */

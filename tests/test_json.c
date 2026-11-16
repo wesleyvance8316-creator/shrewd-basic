@@ -702,6 +702,130 @@ static void test_pointer_set(void)
     shrewd_basic_json_value_free(root);
 }
 
+/* --- pull tokenizer ---------------------------------------------------- */
+
+typedef struct chunk_reader {
+    const char *text;
+    size_t length;
+    size_t pos;
+    size_t chunk;
+} chunk_reader_t;
+
+static int chunk_read(void *ctx, char *buf, size_t capacity, size_t *out_read)
+{
+    chunk_reader_t *src = (chunk_reader_t *)ctx;
+    size_t left = src->length - src->pos;
+    size_t take = (left < capacity) ? left : capacity;
+    if (take > src->chunk) {
+        take = src->chunk;
+    }
+    memcpy(buf, src->text + src->pos, take);
+    src->pos += take;
+    *out_read = take;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+static void test_pull(void)
+{
+    shrewd_basic_json_pull_t *pull = NULL;
+    shrewd_basic_json_token_t token;
+    shrewd_basic_json_value_t *item = NULL;
+    static const char *doc = "{\"a\":[1,\"x\"],\"b\":null}";
+    static const int expect[] = {
+        SHREWD_BASIC_JSON_TOKEN_OBJECT_BEGIN, SHREWD_BASIC_JSON_TOKEN_KEY,
+        SHREWD_BASIC_JSON_TOKEN_ARRAY_BEGIN, SHREWD_BASIC_JSON_TOKEN_VALUE,
+        SHREWD_BASIC_JSON_TOKEN_VALUE, SHREWD_BASIC_JSON_TOKEN_ARRAY_END,
+        SHREWD_BASIC_JSON_TOKEN_KEY, SHREWD_BASIC_JSON_TOKEN_VALUE,
+        SHREWD_BASIC_JSON_TOKEN_OBJECT_END, SHREWD_BASIC_JSON_TOKEN_END };
+
+    /* The token stream matches the document structure. */
+    expect_eq_int("pull open",
+                  shrewd_basic_json_pull_open(&pull, doc, strlen(doc), NULL,
+                                              NULL),
+                  SHREWD_BASIC_ERR_OK);
+    for (size_t i = 0; i < (sizeof(expect) / sizeof(expect[0])); ++i) {
+        expect_eq_int("pull next",
+                      shrewd_basic_json_pull_next(pull, &token),
+                      SHREWD_BASIC_ERR_OK);
+        if ((int)token.kind != expect[i]) {
+            fprintf(stderr, "FAIL pull token %zu: got %d want %d\n", i,
+                    (int)token.kind, (int)expect[i]);
+            ++g_failures;
+        }
+        if ((SHREWD_BASIC_JSON_TOKEN_KEY == token.kind)
+                && (0 != strcmp(token.text, (1 == i) ? "a" : "b"))) {
+            fprintf(stderr, "FAIL pull key %zu: got \"%s\"\n", i, token.text);
+            ++g_failures;
+        }
+    }
+    shrewd_basic_json_pull_close(pull);
+
+    /* Subtree capture mid-stream. */
+    pull = NULL;
+    expect_eq_int("pull capture open",
+                  shrewd_basic_json_pull_open(&pull, doc, strlen(doc), NULL,
+                                              NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("pull capture begin",
+                  shrewd_basic_json_pull_next(pull, &token), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("pull capture key",
+                  shrewd_basic_json_pull_next(pull, &token), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("pull capture value",
+                  shrewd_basic_json_pull_capture(pull, &item),
+                  SHREWD_BASIC_ERR_OK);
+    {
+        char *text = NULL;
+        expect_eq_int("pull capture serialize",
+                      shrewd_basic_json_serialize(item, &text, NULL, NULL),
+                      SHREWD_BASIC_ERR_OK);
+        expect_streq("pull capture text", text, "[1,\"x\"]");
+        shrewd_basic_json_text_free(text);
+    }
+    shrewd_basic_json_value_free(item);
+    shrewd_basic_json_pull_close(pull);
+
+    /* Reader source fed in three-byte chunks equals the buffer parse. */
+    {
+        chunk_reader_t src;
+        char *from_reader = NULL;
+        char *from_buffer = NULL;
+        shrewd_basic_json_value_t *tree = NULL;
+        src.text = doc;
+        src.length = strlen(doc);
+        src.pos = 0;
+        src.chunk = 3;
+        expect_eq_int("pull reader open",
+                      shrewd_basic_json_pull_open_reader(&pull, chunk_read, &src,
+                                                         NULL, NULL),
+                      SHREWD_BASIC_ERR_OK);
+        expect_eq_int("pull reader capture",
+                      shrewd_basic_json_pull_capture(pull, &item),
+                      SHREWD_BASIC_ERR_OK);
+        expect_eq_int("pull reader end",
+                      shrewd_basic_json_pull_next(pull, &token),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("pull reader end token",
+                    SHREWD_BASIC_JSON_TOKEN_END == token.kind);
+        shrewd_basic_json_pull_close(pull);
+        expect_eq_int("pull reader serialize",
+                      shrewd_basic_json_serialize(item, &from_reader, NULL, NULL),
+                      SHREWD_BASIC_ERR_OK);
+        expect_eq_int("pull buffer parse",
+                      shrewd_basic_json_parse(doc, strlen(doc), &tree, NULL,
+                                              NULL),
+                      SHREWD_BASIC_ERR_OK);
+        expect_eq_int("pull buffer serialize",
+                      shrewd_basic_json_serialize(tree, &from_buffer, NULL,
+                                                  NULL),
+                      SHREWD_BASIC_ERR_OK);
+        expect_streq("pull reader matches buffer", from_reader, from_buffer);
+        shrewd_basic_json_text_free(from_reader);
+        shrewd_basic_json_text_free(from_buffer);
+        shrewd_basic_json_value_free(item);
+        shrewd_basic_json_value_free(tree);
+    }
+}
+
 int main(void)
 {
     test_parse_scalars();
@@ -716,5 +840,6 @@ int main(void)
     test_pointer();
     test_inline_containers();
     test_pointer_set();
+    test_pull();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

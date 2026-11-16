@@ -560,6 +560,38 @@ int shrewd_basic_json_set(shrewd_basic_json_value_t *object, const char *key,
     return json_object_add(object, key, item);
 }
 
+int json_object_add_steal(shrewd_basic_json_value_t *object, char *key,
+                          shrewd_basic_json_value_t *item)
+{
+    int status = 0;
+    if ((NULL == object) || (SHREWD_BASIC_JSON_OBJECT != object->kind)
+            || (NULL == key) || (NULL == item)) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    if (0 == object->u.object.cap) {
+        if (NULL == object->u.object.entries) {
+            object->u.object.entries = (shrewd_basic_json_entry_t *)
+                    (void *)object->local.bytes;
+        }
+        if (object->u.object.count < 2) {
+            object->u.object.entries[object->u.object.count].key = key;
+            object->u.object.entries[object->u.object.count].value = item;
+            object->u.object.count += 1;
+            return SHREWD_BASIC_ERR_OK;
+        }
+    }
+    if (object->u.object.count >= object->u.object.cap) {
+        status = json_object_grow(object);
+        if (SHREWD_BASIC_ERR_OK != status) {
+            return status;
+        }
+    }
+    object->u.object.entries[object->u.object.count].key = key;
+    object->u.object.entries[object->u.object.count].value = item;
+    object->u.object.count += 1;
+    return SHREWD_BASIC_ERR_OK;
+}
+
 int json_object_add(shrewd_basic_json_value_t *object, const char *key,
                     shrewd_basic_json_value_t *item)
 {

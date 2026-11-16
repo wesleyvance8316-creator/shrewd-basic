@@ -68,6 +68,9 @@ int json_value_new_number(const char *raw, size_t n,
  */
 int json_object_add(shrewd_basic_json_value_t *object, const char *key,
                     shrewd_basic_json_value_t *item);
+/* Like json_object_add but takes ownership of @p key (no copy). */
+int json_object_add_steal(shrewd_basic_json_value_t *object, char *key,
+                          shrewd_basic_json_value_t *item);
 
 /*
  * Decode allocation registry: blocks allocated during decode are
@@ -192,6 +195,33 @@ int json_buf_init(json_buf_t *buf);
 void json_buf_release(json_buf_t *buf);
 int json_buf_append(json_buf_t *buf, const char *text, size_t n);
 int json_buf_printf(json_buf_t *buf, const char *fmt, ...);
-int json_buf_string(json_buf_t *buf, const char *text); /* NUL-terminated */
+int json_buf_string(json_buf_t *buf, const char *text);
+
+/* Append one code point to @p buf as UTF-8. */
+static inline int json_utf8_append(json_buf_t *buf, unsigned code)
+{
+    char bytes[4];
+    size_t n = 0;
+    if (0x80u > code) {
+        bytes[0] = (char)code;
+        n = 1;
+    } else if (0x800u > code) {
+        bytes[0] = (char)(0xc0u | (code >> 6));
+        bytes[1] = (char)(0x80u | (code & 0x3fu));
+        n = 2;
+    } else if (0x10000u > code) {
+        bytes[0] = (char)(0xe0u | (code >> 12));
+        bytes[1] = (char)(0x80u | ((code >> 6) & 0x3fu));
+        bytes[2] = (char)(0x80u | (code & 0x3fu));
+        n = 3;
+    } else {
+        bytes[0] = (char)(0xf0u | (code >> 18));
+        bytes[1] = (char)(0x80u | ((code >> 12) & 0x3fu));
+        bytes[2] = (char)(0x80u | ((code >> 6) & 0x3fu));
+        bytes[3] = (char)(0x80u | (code & 0x3fu));
+        n = 4;
+    }
+    return json_buf_append(buf, bytes, n);
+} /* NUL-terminated */
 
 #endif /* SHREWD_BASIC_JSON_INTERNAL_H */

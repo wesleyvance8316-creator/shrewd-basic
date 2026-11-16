@@ -81,6 +81,13 @@ void shrewd_basic_json_text_free(text);
 嵌套超限报 `JSON_DEPTH`。`options.validate_utf8` 让解析拒绝串内非法 UTF-8
 (默认原样透传)。
 
+**拉取解析器(pull tokenizer)**:文法的唯一实现在 `shrewd_basic_json_pull_*`
+——流式分词器(完整缓冲源与 reader 回调源),应用可直接驱动令牌流
+(`OBJECT_BEGIN/KEY/VALUE/ARRAY_END...`)处理超大文档;`pull_capture` 把当前位置的
+子树抓成 DOM(`{header:{...}, items:[百万级]}` 可只抓 header 与单个 item);
+`json_parse` = pull + DOM 构建,同一份文法。缓冲源的无转义串与数字 token
+**零拷贝**直指源文本;令牌文本存活到下一次 `pull_next`/`pull_capture`。
+
 **输出 sink**:序列化的核心是 `shrewd_basic_json_write_fn` 回调——
 `json_serialize_to` / `json_encode_to` 流式写文件/socket/收集器,不落全量文本;
 `json_write_file` 是 FILE* 的现成实现,`serialize`(返回文本)是收集器包装。

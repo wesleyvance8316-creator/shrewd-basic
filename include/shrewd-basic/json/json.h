@@ -246,6 +246,68 @@ int shrewd_basic_json_serialize(const shrewd_basic_json_value_t *value,
 /** Release text produced by shrewd_basic_json_serialize(). */
 void shrewd_basic_json_text_free(char *text);
 
+/* --- pull tokenizer (the streaming parse core) ------------------------ */
+
+/*
+ * The grammar lives in one place: shrewd_basic_json_parse() is this
+ * pull parser plus a DOM builder, and applications drive the same
+ * tokenizer directly for documents too large to materialize. A token's
+ * text stays valid until the next shrewd_basic_json_pull_next() /
+ * _capture() call.
+ */
+typedef struct shrewd_basic_json_pull shrewd_basic_json_pull_t;
+
+typedef enum shrewd_basic_json_token_kind {
+    SHREWD_BASIC_JSON_TOKEN_END = 0,     /**< No more tokens. */
+    SHREWD_BASIC_JSON_TOKEN_OBJECT_BEGIN,
+    SHREWD_BASIC_JSON_TOKEN_OBJECT_END,
+    SHREWD_BASIC_JSON_TOKEN_ARRAY_BEGIN,
+    SHREWD_BASIC_JSON_TOKEN_ARRAY_END,
+    SHREWD_BASIC_JSON_TOKEN_KEY,         /**< @c text = the key. */
+    SHREWD_BASIC_JSON_TOKEN_VALUE        /**< A scalar: see @c value_kind. */
+} shrewd_basic_json_token_kind_t;
+
+typedef struct shrewd_basic_json_token {
+    shrewd_basic_json_token_kind_t kind;
+    shrewd_basic_json_kind_t value_kind; /**< For TOKEN_VALUE. */
+    const char *text;                    /**< Key / string / number token. */
+    size_t length;
+} shrewd_basic_json_token_t;
+
+/**
+ * Streaming source: fill up to @p capacity bytes into @p buf; report
+ * the count in @p out_read (0 means end of input).
+ */
+typedef int (*shrewd_basic_json_read_fn)(void *ctx, char *buf, size_t capacity,
+                                         size_t *out_read);
+
+/** Open a pull parser over a complete text buffer. */
+int shrewd_basic_json_pull_open(shrewd_basic_json_pull_t **out,
+                                const char *text, size_t length,
+                                const shrewd_basic_json_options_t *options,
+                                shrewd_basic_json_error_t *error);
+
+/** Open a pull parser over a streaming reader source. */
+int shrewd_basic_json_pull_open_reader(shrewd_basic_json_pull_t **out,
+                                       shrewd_basic_json_read_fn read,
+                                       void *ctx,
+                                       const shrewd_basic_json_options_t *options,
+                                       shrewd_basic_json_error_t *error);
+
+/** Fetch the next token (SHREWD_BASIC_JSON_TOKEN_END at the end). */
+int shrewd_basic_json_pull_next(shrewd_basic_json_pull_t *pull,
+                                shrewd_basic_json_token_t *out_token);
+
+/**
+ * Capture the value that starts at the current position into a new DOM
+ * subtree (the parser consumes exactly that value's tokens).
+ */
+int shrewd_basic_json_pull_capture(shrewd_basic_json_pull_t *pull,
+                                   shrewd_basic_json_value_t **out);
+
+/** Release a pull parser. */
+void shrewd_basic_json_pull_close(shrewd_basic_json_pull_t *pull);
+
 /* --- struct mapping (reflect-described graphs) ------------------------ */
 
 /*
