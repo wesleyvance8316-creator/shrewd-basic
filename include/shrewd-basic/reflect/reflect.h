@@ -1038,6 +1038,140 @@ int shrewd_basic_reflect_path_set(void *object,
                                   const char *path, const void *value, size_t value_size);
 
 /*
+ * Caller-hosted lookup lists: the name->field index lives in the
+ * application's own container. The library builds one entry per
+ * registered type (lookup_init fills a caller-provided shrewd_basic_reflect_lookup_t)
+ * and searches it through the application's ops callbacks - the
+ * container's data structure, storage, key choice and locking policy
+ * all stay with the caller. The library never synchronizes a list:
+ * build it during single-threaded initialization and it is safe for
+ * concurrent read-only lookups afterwards. Types missing from the list
+ * fall back to the plain linear scan (correct, just not accelerated).
+ *
+ * The *_list family is the thread-safe path; the no-list interfaces
+ * above accelerate through a per-thread cache (see their notes).
+ */
+
+/** Inline field-index capacity of one lookup entry; larger structs are
+ * registered with sb_refl_count == 0 (no index, linear lookup). */
+#define SHREWD_BASIC_REFLECT_LOOKUP_FIELDS 64
+
+/**
+ * One registered type: the sorted-by-name index over its field list.
+ * Storage belongs to the caller (embed it in your own node if the
+ * container needs links); fill it with shrewd_basic_reflect_lookup_init().
+ * sb_refl_count == 0 means "no index built" and sb_refl_sorted is
+ * meaningless - consult sb_refl_count before searching.
+ */
+typedef struct shrewd_basic_reflect_lookup {
+    const char *sb_refl_name;   /**< Registration key; often type->sb_refl_name. */
+    const shrewd_basic_reflect_type_t *sb_refl_type; /**< The registered type. */
+    size_t sb_refl_count;       /**< Indexed fields; 0 = no index. */
+    const shrewd_basic_reflect_field_t *sb_refl_sorted[SHREWD_BASIC_REFLECT_LOOKUP_FIELDS];
+} shrewd_basic_reflect_lookup_t;
+
+/**
+ * Container callbacks. All three receive the application's context
+ * pointer and return library error codes / NULL like the rest of the
+ * API. find_by_type/find_by_name return the entry (its embedded
+ * shrewd_basic_reflect_lookup_t) or NULL on miss; insert places @p type
+ * into the container and reports where the entry lives via @p out_slot
+ * so the library can fill the index in place (return
+ * SHREWD_BASIC_ERR_KEY_EXISTS for duplicate keys - the policy is the
+ * container's).
+ */
+typedef struct shrewd_basic_reflect_list_ops {
+    int (*insert)(void *ctx, const char *name,
+                  const shrewd_basic_reflect_type_t *type,
+                  shrewd_basic_reflect_lookup_t **out_slot);
+    const shrewd_basic_reflect_lookup_t *(*find_by_type)(
+            void *ctx, const shrewd_basic_reflect_type_t *type);
+    const shrewd_basic_reflect_lookup_t *(*find_by_name)(void *ctx,
+                                                         const char *name);
+} shrewd_basic_reflect_list_ops_t;
+
+/** A caller-hosted list: ops plus the container handle. */
+typedef struct shrewd_basic_reflect_list {
+    const shrewd_basic_reflect_list_ops_t *sb_refl_ops; /**< Callbacks; never NULL. */
+    void *sb_refl_ctx;                                  /**< Application container. */
+} shrewd_basic_reflect_list_t;
+
+/**
+ * Build the sorted field index of @p type into caller-owned @p look.
+ * @p name is the registration key (NULL = type->sb_refl_name; the
+ * pointer is stored as-is and must outlive the entry). Non-struct types
+ * and types with more than SHREWD_BASIC_REFLECT_LOOKUP_FIELDS fields
+ * succeed with sb_refl_count == 0 (no index).
+ */
+int shrewd_basic_reflect_lookup_init(shrewd_basic_reflect_lookup_t *look,
+                                     const shrewd_basic_reflect_type_t *type,
+                                     const char *name);
+
+/**
+ * Binary-search @p look for @p name (not necessarily NUL-terminated at
+ * @p name_len). Returns the field, or NULL when absent or when the
+ * entry carries no index (sb_refl_count == 0).
+ */
+const shrewd_basic_reflect_field_t *shrewd_basic_reflect_lookup_find(
+        const shrewd_basic_reflect_lookup_t *look, const char *name,
+        size_t name_len);
+
+/**
+ * Register @p type under @p name (NULL = type->sb_refl_name) in @p list:
+ * ops->insert places the entry, then the field index is built in place.
+ * Propagates the insert callback's status (e.g.
+ * SHREWD_BASIC_ERR_KEY_EXISTS for a duplicate key).
+ */
+int shrewd_basic_reflect_list_register(const shrewd_basic_reflect_list_t *list,
+                                       const shrewd_basic_reflect_type_t *type,
+                                       const char *name);
+
+/**
+ * Find a registered type by its registration name (find_field's
+ * counterpart for types). SHREWD_BASIC_ERR_KEY_NOTFOUND on miss,
+ * SHREWD_BASIC_ERR_ARG_INVALID for NULL arguments or a NULL ops member.
+ */
+int shrewd_basic_reflect_type_find_list(const shrewd_basic_reflect_list_t *list,
+                                        const char *name,
+                                        const shrewd_basic_reflect_type_t **out);
+
+/**
+ * Find a field by name through @p list (same contract and errors as
+ * shrewd_basic_reflect_type_find_field()). Types absent from the list -
+ * and entries without an index - are searched linearly.
+ */
+int shrewd_basic_reflect_type_find_field_list(
+        const shrewd_basic_reflect_list_t *list,
+        const shrewd_basic_reflect_type_t *type, const char *name,
+        const shrewd_basic_reflect_field_t **out);
+
+/**
+ * Path APIs through @p list: same contract and errors as their no-list
+ * twins, with every by-name segment resolved through the list. NULL
+ * @p list is rejected (use the no-list interfaces for the per-thread
+ * cache path).
+ */
+int shrewd_basic_reflect_type_resolve_list(const shrewd_basic_reflect_list_t *list,
+                                           const shrewd_basic_reflect_type_t *type,
+                                           const char *path,
+                                           const shrewd_basic_reflect_field_t **out_field,
+                                           size_t *out_offset, size_t *out_size);
+
+/** Path read through @p list (see shrewd_basic_reflect_type_resolve_list()). */
+int shrewd_basic_reflect_path_get_list(const shrewd_basic_reflect_list_t *list,
+                                       const void *object,
+                                       const shrewd_basic_reflect_type_t *type,
+                                       const char *path, void *out_value,
+                                       size_t value_size);
+
+/** Path write through @p list (see shrewd_basic_reflect_type_resolve_list()). */
+int shrewd_basic_reflect_path_set_list(const shrewd_basic_reflect_list_t *list,
+                                       void *object,
+                                       const shrewd_basic_reflect_type_t *type,
+                                       const char *path, const void *value,
+                                       size_t value_size);
+
+/*
  * Operations: the effective vtable of a field is field->sb_refl_ops when set,
  * else field->sb_refl_type->sb_refl_ops. get/set/check run for values and pointees
  * alike; copy/destroy handle objects (pointer targets and the root of

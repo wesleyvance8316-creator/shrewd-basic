@@ -192,14 +192,16 @@ int shrewd_basic_reflect_enum_find_value(const shrewd_basic_reflect_type_t *type
 }
 
 /*
- * find_field acceleration: a small static side table of sorted field
- * indexes, keyed by type pointer. Descriptors are const and never
- * freed, so an index never goes stale. The index is built lazily on the
- * first lookup of a type; types with more fields than one slot holds,
- * or once every slot is busy and one is recycled (round-robin), fall
- * back to the plain linear scan - which also rebuilds the index. Like
- * log module registration the cache is not synchronized: first use from
- * several threads at once is unsupported.
+ * find_field acceleration for the no-list interfaces: a per-thread
+ * side table of sorted field indexes, keyed by type pointer.
+ * Descriptors are const and never freed, so an index never goes stale.
+ * The index is built lazily on the first lookup of a type; types with
+ * more fields than one slot holds, or once every slot is busy and one
+ * is recycled (round-robin), fall back to the plain linear scan - which
+ * also rebuilds the index. Thread-local storage keeps concurrent
+ * lookups race-free without locking (each thread warms its own cache);
+ * applications that want one shared index instead build a caller-hosted
+ * list (shrewd_basic_reflect_list_register + the *_list interfaces).
  */
 #define REFLECT_LOOKUP_SLOTS 8
 #define REFLECT_LOOKUP_FIELDS 64
@@ -210,8 +212,8 @@ typedef struct reflect_lookup {
     const shrewd_basic_reflect_field_t *sorted[REFLECT_LOOKUP_FIELDS];
 } reflect_lookup_t;
 
-static reflect_lookup_t g_lookup[REFLECT_LOOKUP_SLOTS];
-static size_t g_lookup_next = 0;
+static _Thread_local reflect_lookup_t g_lookup[REFLECT_LOOKUP_SLOTS];
+static _Thread_local size_t g_lookup_next = 0;
 
 /* Order two names when the left one is not NUL-terminated. */
 static int reflect_name_cmp(const char *name, size_t name_len,
@@ -315,14 +317,28 @@ static const shrewd_basic_reflect_field_t *reflect_fields_find(
 }
 
 /*
- * Find a field by name (not necessarily NUL-terminated at @p name_len),
- * through the sorted index when available and a linear scan otherwise -
- * building the index either way so the next lookup is cheap.
+ * Find a field by name (not necessarily NUL-terminated at @p name_len).
+ * With @p list the lookup goes through the caller-hosted entry
+ * (never touching the per-thread cache); without it the sorted index
+ * accelerates the search - built either way so the next lookup is cheap.
  */
 static const shrewd_basic_reflect_field_t *reflect_field_find(
+        const shrewd_basic_reflect_list_t *list,
         const shrewd_basic_reflect_type_t *type, const char *name, size_t name_len)
 {
     const shrewd_basic_reflect_field_t *field = NULL;
+    if (NULL != list) {
+        const shrewd_basic_reflect_lookup_t *look = NULL;
+        if ((NULL != list->sb_refl_ops)
+                && (NULL != list->sb_refl_ops->find_by_type)) {
+            look = list->sb_refl_ops->find_by_type(list->sb_refl_ctx, type);
+        }
+        if ((NULL != look) && (0 < look->sb_refl_count)) {
+            return shrewd_basic_reflect_lookup_find(look, name, name_len);
+        }
+        return reflect_fields_find(type->sb_refl_fields,
+                                   type->sb_refl_field_count, name, name_len);
+    }
     if (0 != reflect_lookup_query(type, name, name_len, &field)) {
         return field;
     }
@@ -348,7 +364,7 @@ int shrewd_basic_reflect_type_find_field(const shrewd_basic_reflect_type_t *type
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     const shrewd_basic_reflect_field_t *field =
-            reflect_field_find(type, name, strlen(name));
+            reflect_field_find(NULL, type, name, strlen(name));
     if (NULL != field) {
         *out = field;
         return SHREWD_BASIC_ERR_OK;
@@ -439,7 +455,8 @@ int shrewd_basic_reflect_field_set(void *object,
  * offset. *out_size receives the designated value's size: the whole
  * field, or one element when the path ends with an index.
  */
-static int reflect_path_walk(const unsigned char *object,
+static int reflect_path_walk(const shrewd_basic_reflect_list_t *list,
+                             const unsigned char *object,
                              const shrewd_basic_reflect_type_t *type,
                              const char *path, int follow,
                              const unsigned char **out_at, size_t *out_offset,
@@ -466,7 +483,7 @@ static int reflect_path_walk(const unsigned char *object,
         }
         size_t name_len = (size_t)(p - name);
         if (SHREWD_BASIC_REFLECT_KIND_STRUCT == cur->sb_refl_kind) {
-            field = reflect_field_find(cur, name, name_len);
+            field = reflect_field_find(list, cur, name, name_len);
         } else if (SHREWD_BASIC_REFLECT_KIND_UNION == cur->sb_refl_kind) {
             /* Inside a union: the active variant's field list. */
             field = reflect_fields_find(fields, field_count, name, name_len);
@@ -649,7 +666,7 @@ int shrewd_basic_reflect_type_resolve(const shrewd_basic_reflect_type_t *type,
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     size_t size = 0;
-    int status = reflect_path_walk(NULL, type, path, 0, NULL, out_offset,
+    int status = reflect_path_walk(NULL, NULL, type, path, 0, NULL, out_offset,
                                    out_field, &size);
     if (SHREWD_BASIC_ERR_OK == status) {
         *out_size = size;
@@ -671,8 +688,8 @@ int shrewd_basic_reflect_path_get(const void *object,
     const unsigned char *at = NULL;
     const shrewd_basic_reflect_field_t *field = NULL;
     size_t size = 0;
-    int status = reflect_path_walk((const unsigned char *)object, type, path, 1,
-                                   &at, NULL, &field, &size);
+    int status = reflect_path_walk(NULL, (const unsigned char *)object, type,
+                                   path, 1, &at, NULL, &field, &size);
     if (SHREWD_BASIC_ERR_OK != status) {
         reflect_path_log(status, "path_get", path, 0);
         return status;
@@ -706,8 +723,8 @@ int shrewd_basic_reflect_path_set(void *object,
     const unsigned char *at = NULL;
     const shrewd_basic_reflect_field_t *field = NULL;
     size_t size = 0;
-    int status = reflect_path_walk((const unsigned char *)object, type, path, 1,
-                                   &at, NULL, &field, &size);
+    int status = reflect_path_walk(NULL, (const unsigned char *)object, type,
+                                   path, 1, &at, NULL, &field, &size);
     if (SHREWD_BASIC_ERR_OK != status) {
         reflect_path_log(status, "path_set", path, 0);
         return status;
@@ -728,6 +745,160 @@ int shrewd_basic_reflect_path_set(void *object,
         memcpy((unsigned char *)(uintptr_t)at, value, size);
     }
     reflect_path_log(SHREWD_BASIC_ERR_OK, "path_set", path, size);
+    return SHREWD_BASIC_ERR_OK;
+}
+
+/*
+ * Caller-hosted lookup lists: the *_list family resolves every by-name
+ * segment through the application's container (never touching the
+ * per-thread cache) and falls back to the plain linear scan for types
+ * the container does not hold. The library does no locking; a list is
+ * as thread-safe as the container behind its ops.
+ */
+
+int shrewd_basic_reflect_type_find_list(const shrewd_basic_reflect_list_t *list,
+                                        const char *name,
+                                        const shrewd_basic_reflect_type_t **out)
+{
+    const shrewd_basic_reflect_lookup_t *look = NULL;
+    if ((NULL == list) || (NULL == list->sb_refl_ops)
+            || (NULL == list->sb_refl_ops->find_by_name) || (NULL == name)
+            || (NULL == out)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "field", "type_find_list: list, name or out is NULL\n");
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    look = list->sb_refl_ops->find_by_name(list->sb_refl_ctx, name);
+    if ((NULL == look) || (NULL == look->sb_refl_type)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
+                         "field", "type_find_list: no type \"%s\"\n", name);
+        return SHREWD_BASIC_ERR_KEY_NOTFOUND;
+    }
+    *out = look->sb_refl_type;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+int shrewd_basic_reflect_type_find_field_list(
+        const shrewd_basic_reflect_list_t *list,
+        const shrewd_basic_reflect_type_t *type, const char *name,
+        const shrewd_basic_reflect_field_t **out)
+{
+    const shrewd_basic_reflect_field_t *field = NULL;
+    if ((NULL == list) || (NULL == list->sb_refl_ops) || (NULL == type)
+            || (NULL == name) || (NULL == out)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "field", "find_field_list: list, type, name or out is NULL\n");
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    field = reflect_field_find(list, type, name, strlen(name));
+    if (NULL == field) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
+                         "field", "find_field_list: no field \"%s\"\n", name);
+        return SHREWD_BASIC_ERR_KEY_NOTFOUND;
+    }
+    *out = field;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+int shrewd_basic_reflect_type_resolve_list(const shrewd_basic_reflect_list_t *list,
+                                           const shrewd_basic_reflect_type_t *type,
+                                           const char *path,
+                                           const shrewd_basic_reflect_field_t **out_field,
+                                           size_t *out_offset, size_t *out_size)
+{
+    if ((NULL == list) || (NULL == list->sb_refl_ops) || (NULL == type)
+            || (NULL == path) || (NULL == out_field) || (NULL == out_offset)
+            || (NULL == out_size)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "field", "resolve_list: list, type, path or out is NULL\n");
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    size_t size = 0;
+    int status = reflect_path_walk(list, NULL, type, path, 0, NULL, out_offset,
+                                   out_field, &size);
+    if (SHREWD_BASIC_ERR_OK == status) {
+        *out_size = size;
+    } else {
+        reflect_path_log(status, "resolve_list", path, 0);
+    }
+    return status;
+}
+
+int shrewd_basic_reflect_path_get_list(const shrewd_basic_reflect_list_t *list,
+                                       const void *object,
+                                       const shrewd_basic_reflect_type_t *type,
+                                       const char *path, void *out_value,
+                                       size_t value_size)
+{
+    if ((NULL == list) || (NULL == list->sb_refl_ops) || (NULL == object)
+            || (NULL == type) || (NULL == path) || (NULL == out_value)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "field", "path_get_list: list, object, type, path or out_value is NULL\n");
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    const unsigned char *at = NULL;
+    const shrewd_basic_reflect_field_t *field = NULL;
+    size_t size = 0;
+    int status = reflect_path_walk(list, (const unsigned char *)object, type,
+                                   path, 1, &at, NULL, &field, &size);
+    if (SHREWD_BASIC_ERR_OK != status) {
+        reflect_path_log(status, "path_get_list", path, 0);
+        return status;
+    }
+    if (value_size != size) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
+                         "field", "path_get_list: size mismatch (%zu != %zu)\n",
+                         value_size, size);
+        return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
+    }
+    memcpy(out_value, at, size);
+    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_BITS)) {
+        uint64_t unit = reflect_load_u64(out_value, size);
+        uint64_t value = reflect_bits_extract(unit, field->sb_refl_bit_offset,
+                                              field->sb_refl_bit_width);
+        reflect_store_u64(out_value, size, value);
+    }
+    reflect_path_log(SHREWD_BASIC_ERR_OK, "path_get_list", path, size);
+    return SHREWD_BASIC_ERR_OK;
+}
+
+int shrewd_basic_reflect_path_set_list(const shrewd_basic_reflect_list_t *list,
+                                       void *object,
+                                       const shrewd_basic_reflect_type_t *type,
+                                       const char *path, const void *value,
+                                       size_t value_size)
+{
+    if ((NULL == list) || (NULL == list->sb_refl_ops) || (NULL == object)
+            || (NULL == type) || (NULL == path) || (NULL == value)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "field", "path_set_list: list, object, type, path or value is NULL\n");
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    const unsigned char *at = NULL;
+    const shrewd_basic_reflect_field_t *field = NULL;
+    size_t size = 0;
+    int status = reflect_path_walk(list, (const unsigned char *)object, type,
+                                   path, 1, &at, NULL, &field, &size);
+    if (SHREWD_BASIC_ERR_OK != status) {
+        reflect_path_log(status, "path_set_list", path, 0);
+        return status;
+    }
+    if (value_size != size) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
+                         "field", "path_set_list: size mismatch (%zu != %zu)\n",
+                         value_size, size);
+        return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
+    }
+    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_BITS)) {
+        uint64_t unit = reflect_load_u64(at, size);
+        reflect_bits_insert(&unit, field->sb_refl_bit_offset,
+                            field->sb_refl_bit_width,
+                            reflect_load_u64((const unsigned char *)value, size));
+        reflect_store_u64((unsigned char *)(uintptr_t)at, size, unit);
+    } else {
+        memcpy((unsigned char *)(uintptr_t)at, value, size);
+    }
+    reflect_path_log(SHREWD_BASIC_ERR_OK, "path_set_list", path, size);
     return SHREWD_BASIC_ERR_OK;
 }
 

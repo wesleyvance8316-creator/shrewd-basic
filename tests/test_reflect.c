@@ -3744,11 +3744,276 @@ static void test_union(void)
                   SHREWD_BASIC_ERR_OK);
 }
 
+/* Caller-hosted lookup list: a plain array with linear ops callbacks. */
+typedef struct {
+    shrewd_basic_reflect_lookup_t entries[8];
+    size_t count;
+} test_reg_t;
+
+static int test_reg_insert(void *ctx, const char *name,
+                           const shrewd_basic_reflect_type_t *type,
+                           shrewd_basic_reflect_lookup_t **out_slot)
+{
+    test_reg_t *reg = (test_reg_t *)ctx;
+    (void)type;
+    for (size_t i = 0; i < reg->count; ++i) {
+        if (0 == strcmp(reg->entries[i].sb_refl_name, name)) {
+            return SHREWD_BASIC_ERR_KEY_EXISTS;
+        }
+    }
+    if ((sizeof(reg->entries) / sizeof(reg->entries[0])) <= reg->count) {
+        return SHREWD_BASIC_ERR_MEM_NOMEM;
+    }
+    *out_slot = &reg->entries[reg->count];
+    ++reg->count;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+static int test_reg_insert_no_slot(void *ctx, const char *name,
+                                   const shrewd_basic_reflect_type_t *type,
+                                   shrewd_basic_reflect_lookup_t **out_slot)
+{
+    (void)ctx;
+    (void)name;
+    (void)type;
+    *out_slot = NULL;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+static const shrewd_basic_reflect_lookup_t *test_reg_find_type(
+        void *ctx, const shrewd_basic_reflect_type_t *type)
+{
+    test_reg_t *reg = (test_reg_t *)ctx;
+    for (size_t i = 0; i < reg->count; ++i) {
+        if (reg->entries[i].sb_refl_type == type) {
+            return &reg->entries[i];
+        }
+    }
+    return NULL;
+}
+
+static const shrewd_basic_reflect_lookup_t *test_reg_find_name(void *ctx,
+                                                               const char *name)
+{
+    test_reg_t *reg = (test_reg_t *)ctx;
+    for (size_t i = 0; i < reg->count; ++i) {
+        if (0 == strcmp(reg->entries[i].sb_refl_name, name)) {
+            return &reg->entries[i];
+        }
+    }
+    return NULL;
+}
+
+static void test_lookup_list(void)
+{
+    static const shrewd_basic_reflect_list_ops_t ops = {
+        test_reg_insert, test_reg_find_type, test_reg_find_name };
+    static const shrewd_basic_reflect_list_ops_t broken = {
+        test_reg_insert_no_slot, NULL, NULL };
+    test_reg_t reg;
+    shrewd_basic_reflect_list_t list;
+    shrewd_basic_reflect_lookup_t look;
+    const shrewd_basic_reflect_field_t *field = NULL;
+    const shrewd_basic_reflect_field_t *legacy_field = NULL;
+    const shrewd_basic_reflect_type_t *found = NULL;
+    size_t offset = 0;
+    size_t size = 0;
+    size_t legacy_offset = 0;
+    size_t legacy_size = 0;
+    int32_t value = 0;
+    int32_t wrote = 0;
+
+    memset(&reg, 0, sizeof(reg));
+    list.sb_refl_ops = &ops;
+    list.sb_refl_ctx = &reg;
+
+    /* Entry primitives: sorted index built into caller storage. */
+    expect_eq_int("lookup_init person",
+                  shrewd_basic_reflect_lookup_init(&look, &g_person_reflect, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("lookup name defaults to type name",
+                0 == strcmp(look.sb_refl_name, "person_t"));
+    expect_true("lookup indexed all fields",
+                look.sb_refl_count == g_person_reflect.sb_refl_field_count);
+    field = shrewd_basic_reflect_lookup_find(&look, "age", 3);
+    expect_true("lookup_find hit", (NULL != field)
+                && (field->sb_refl_offset == offsetof(person_t, age)));
+    expect_true("lookup_find miss",
+                NULL == shrewd_basic_reflect_lookup_find(&look, "nope", 4));
+    expect_true("lookup_find rejects prefix",
+                NULL == shrewd_basic_reflect_lookup_find(&look, "ag", 2));
+    expect_true("lookup_find rejects extension",
+                NULL == shrewd_basic_reflect_lookup_find(&look, "ages", 4));
+    expect_eq_int("lookup_init rejects NULL",
+                  shrewd_basic_reflect_lookup_init(NULL, &g_person_reflect, NULL),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+
+    /* Non-struct types register without an index. */
+    expect_eq_int("lookup_init primitive",
+                  shrewd_basic_reflect_lookup_init(&look, &shrewd_basic_reflect_int32,
+                                                   "i32"),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("lookup primitive unindexed", 0 == look.sb_refl_count);
+    expect_true("lookup primitive name kept",
+                0 == strcmp(look.sb_refl_name, "i32"));
+    expect_true("lookup_find unindexed",
+                NULL == shrewd_basic_reflect_lookup_find(&look, "x", 1));
+
+    /* Registration: names are the caller's keys, aliases allowed. */
+    expect_eq_int("list register person",
+                  shrewd_basic_reflect_list_register(&list, &g_person_reflect,
+                                                     "person"),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("list register point",
+                  shrewd_basic_reflect_list_register(&list, &g_point_reflect, "point"),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("list register alias",
+                  shrewd_basic_reflect_list_register(&list, &g_point_reflect, "vec2"),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("list rejects duplicate name",
+                  shrewd_basic_reflect_list_register(&list, &g_person_reflect,
+                                                     "point"),
+                  SHREWD_BASIC_ERR_KEY_EXISTS);
+    expect_eq_int("list rejects NULL",
+                  shrewd_basic_reflect_list_register(NULL, &g_point_reflect, "x"),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("list rejects NULL slot ops",
+                  shrewd_basic_reflect_list_register(
+                          &(shrewd_basic_reflect_list_t){ &broken, &reg },
+                          &g_wide_reflect, "wide"),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+
+    /* type_find_list: lookup by registration name. */
+    expect_eq_int("type_find_list alias",
+                  shrewd_basic_reflect_type_find_list(&list, "vec2", &found),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("type_find_list alias resolves", &g_point_reflect == found);
+    expect_eq_int("type_find_list miss",
+                  shrewd_basic_reflect_type_find_list(&list, "nobody", &found),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+
+    /* find_field_list: indexed hits and misses. */
+    expect_eq_int("find_field_list hit",
+                  shrewd_basic_reflect_type_find_field_list(&list, &g_person_reflect,
+                                                            "home", &field),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("find_field_list hit offset",
+                field->sb_refl_offset == offsetof(person_t, home));
+    expect_eq_int("find_field_list miss",
+                  shrewd_basic_reflect_type_find_field_list(&list, &g_person_reflect,
+                                                            "nope", &field),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("find_field_list NULL list",
+                  shrewd_basic_reflect_type_find_field_list(NULL, &g_person_reflect,
+                                                            "home", &field),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+
+    /* Unregistered types fall back to the linear scan. */
+    expect_eq_int("find_field_list unregistered",
+                  shrewd_basic_reflect_type_find_field_list(&list, &g_wide_reflect,
+                                                            "wide", &field),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("find_field_list unregistered offset",
+                field->sb_refl_offset == offsetof(wide_t, wide));
+    expect_eq_int("find_field_list unregistered miss",
+                  shrewd_basic_reflect_type_find_field_list(&list, &g_wide_reflect,
+                                                            "nope", &field),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+
+    /* resolve_list agrees with the no-list resolve. */
+    expect_eq_int("resolve_list",
+                  shrewd_basic_reflect_type_resolve_list(&list, &g_person_reflect,
+                                                         "pair[0].y", &field,
+                                                         &offset, &size),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("resolve legacy",
+                  shrewd_basic_reflect_type_resolve(&g_person_reflect,
+                                                    "pair[0].y", &legacy_field,
+                                                    &legacy_offset, &legacy_size),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("resolve_list matches legacy",
+                (field == legacy_field) && (offset == legacy_offset)
+                && (size == legacy_size));
+
+    /* path_set_list / path_get_list round-trip, nested and indexed. */
+    wrote = 42;
+    expect_eq_int("path_set_list nested",
+                  shrewd_basic_reflect_path_set_list(&list, &(person_t){0},
+                                                     &g_person_reflect, "home.x",
+                                                     &wrote, sizeof(wrote)),
+                  SHREWD_BASIC_ERR_OK);
+    {
+        person_t probe;
+        memset(&probe, 0, sizeof(probe));
+        wrote = 42;
+        expect_eq_int("path_set_list probe",
+                      shrewd_basic_reflect_path_set_list(&list, &probe,
+                                                         &g_person_reflect, "home.x",
+                                                         &wrote, sizeof(wrote)),
+                      SHREWD_BASIC_ERR_OK);
+        wrote = 7;
+        expect_eq_int("path_set_list indexed",
+                      shrewd_basic_reflect_path_set_list(&list, &probe,
+                                                         &g_person_reflect,
+                                                         "pair[1].y", &wrote,
+                                                         sizeof(wrote)),
+                      SHREWD_BASIC_ERR_OK);
+        expect_eq_int("path_get_list nested",
+                      shrewd_basic_reflect_path_get_list(&list, &probe,
+                                                         &g_person_reflect, "home.x",
+                                                         &value, sizeof(value)),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("path_get_list nested value", 42 == value);
+        expect_eq_int("path_get_list indexed",
+                      shrewd_basic_reflect_path_get_list(&list, &probe,
+                                                         &g_person_reflect,
+                                                         "pair[1].y", &value,
+                                                         sizeof(value)),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("path_get_list indexed value", 7 == value);
+        expect_eq_int("path_get_list size mismatch",
+                      shrewd_basic_reflect_path_get_list(&list, &probe,
+                                                         &g_person_reflect, "home.x",
+                                                         &value, sizeof(value) + 1u),
+                      SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    }
+    expect_eq_int("path_get_list miss",
+                  shrewd_basic_reflect_path_get_list(&list, &(person_t){0},
+                                                     &g_person_reflect, "home.zz",
+                                                     &value, sizeof(value)),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("path_get_list NULL list",
+                  shrewd_basic_reflect_path_get_list(NULL, &(person_t){0},
+                                                     &g_person_reflect, "home.x",
+                                                     &value, sizeof(value)),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+
+    /* Mixed list: registered root walks into an unregistered nested type. */
+    memset(&reg, 0, sizeof(reg));
+    expect_eq_int("mixed register root",
+                  shrewd_basic_reflect_list_register(&list, &g_person_reflect,
+                                                     "person"),
+                  SHREWD_BASIC_ERR_OK);
+    {
+        person_t probe;
+        memset(&probe, 0, sizeof(probe));
+        wrote = 5;
+        expect_eq_int("mixed path_set_list",
+                      shrewd_basic_reflect_path_set_list(&list, &probe,
+                                                         &g_person_reflect,
+                                                         "pair[0].x", &wrote,
+                                                         sizeof(wrote)),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("mixed path wrote", 5 == probe.pair[0].x);
+    }
+}
+
 int main(void)
 {
     test_describe();
     test_find_field();
     test_lookup_index();
+    test_lookup_list();
     test_get_set_scalars();
     test_get_set_string();
     test_nested();
