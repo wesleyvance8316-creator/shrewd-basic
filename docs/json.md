@@ -237,7 +237,20 @@ encode/decode 的 `info` 参数携带策略(NULL = 纯元数据,行为不变)。
 | `json_value_size(value, type, &size)` | FAM 尺寸助手:返回 decode 目标所需字节(头 + JSON 尾长) |
 | `reflect_gen.py` 骨架 | 为每个 struct 产出注释形式的 `SHREWD_BASIC_JSON_DEFINE` 策略模板(解开注释即用) |
 
-## 10. 工程配套
+## 10. 并发契约(可选模式)
+
+- **值树**:并发**只读**安全(访问器/序列化只读);修改不安全,由应用自行同步;
+- **全局侧表**(json 解码分配登记表、reflect 查找缓存、log 模块注册表):默认无锁,
+  单线程宿主零开销;插上互斥钩子后并发安全:
+
+```c
+shrewd_basic_platform_set_mutex(my_lock, my_unlock, my_ctx);   /* platform/thread.h */
+```
+
+  钩子是普通函数指针——库自身不依赖任何线程设施;`set_mutex(NULL, NULL, NULL)`
+  即回到无锁模式。
+
+## 11. 工程配套
 
 - 测试 `shrewd-basic-json-tests`:文法严格性与宽松开关、数字保真、转义/代理对、
   DOM 访问与修改、紧凑/pretty 输出、文本级往返;

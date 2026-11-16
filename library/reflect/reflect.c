@@ -6,6 +6,7 @@
 #include "shrewd-basic/log/log.h"
 #include "shrewd-basic/ds/rbtree.h"
 #include "shrewd-basic/platform/memory.h"
+#include "shrewd-basic/platform/thread.h"
 
 /*
  * Shared log module of the reflect module (imported by reflect_dump.c
@@ -323,18 +324,27 @@ static const shrewd_basic_reflect_field_t *reflect_field_find(
         const shrewd_basic_reflect_type_t *type, const char *name, size_t name_len)
 {
     const shrewd_basic_reflect_field_t *field = NULL;
+    /* The sorted index is the one global table here: only its access
+       is synchronized (see platform/thread.h). */
+    shrewd_basic_platform_lock();
     if (0 != reflect_lookup_query(type, name, name_len, &field)) {
+        shrewd_basic_platform_unlock();
         return field;
     }
+    shrewd_basic_platform_unlock();
     for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
         const shrewd_basic_reflect_field_t *candidate = &type->sb_refl_fields[i];
         if ((strlen(candidate->sb_refl_name) == name_len)
                 && (0 == memcmp(candidate->sb_refl_name, name, name_len))) {
+            shrewd_basic_platform_lock();
             reflect_lookup_build(type);
+            shrewd_basic_platform_unlock();
             return candidate;
         }
     }
+    shrewd_basic_platform_lock();
     reflect_lookup_build(type);
+    shrewd_basic_platform_unlock();
     return NULL;
 }
 
