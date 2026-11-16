@@ -4,7 +4,6 @@
 #endif
 
 #include "shrewd-basic/log/log.h"
-#include "shrewd-basic/platform/thread.h"
 
 #include <stdarg.h>
 #include <string.h>
@@ -39,42 +38,30 @@ static shrewd_basic_log_module_t *g_modules = NULL;
 static FILE *g_global_out = NULL;
 static int g_global_owns_out = 0;
 
-/*
- * The module registry is the one global table here; its accesses take
- * the optional library mutex (platform/thread.h). The lazy "touch"
- * runs in the log path, so the lock is fine-grained.
- */
 static void log_touch(shrewd_basic_log_module_t *module)
 {
-    shrewd_basic_platform_lock();
     if (0 == module->registered) {
         module->next = g_modules;
         g_modules = module;
         module->registered = 1;
     }
-    shrewd_basic_platform_unlock();
 }
 
 static void log_unlink(shrewd_basic_log_module_t *module)
 {
-    shrewd_basic_platform_lock();
     if (0 == module->registered) {
-        shrewd_basic_platform_unlock();
         return;
     }
-    {
-        shrewd_basic_log_module_t **slot = &g_modules;
-        while (NULL != *slot) {
-            if (*slot == module) {
-                *slot = module->next;
-                break;
-            }
-            slot = &(*slot)->next;
+    shrewd_basic_log_module_t **slot = &g_modules;
+    while (NULL != *slot) {
+        if (*slot == module) {
+            *slot = module->next;
+            break;
         }
-        module->next = NULL;
-        module->registered = 0;
+        slot = &(*slot)->next;
     }
-    shrewd_basic_platform_unlock();
+    module->next = NULL;
+    module->registered = 0;
 }
 
 static FILE *log_output(shrewd_basic_log_module_t *module)
@@ -244,22 +231,15 @@ int shrewd_basic_log_module_find(const char *name, shrewd_basic_log_module_t **o
     if ((NULL == name) || (NULL == out)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
-    {
-        int status = SHREWD_BASIC_ERR_KEY_NOTFOUND;
-        shrewd_basic_log_module_t *module = NULL;
-        shrewd_basic_platform_lock();
-        module = g_modules;
-        while (NULL != module) {
-            if (0 == strcmp(module->name, name)) {
-                *out = module;
-                status = SHREWD_BASIC_ERR_OK;
-                break;
-            }
-            module = module->next;
+    shrewd_basic_log_module_t *module = g_modules;
+    while (NULL != module) {
+        if (0 == strcmp(module->name, name)) {
+            *out = module;
+            return SHREWD_BASIC_ERR_OK;
         }
-        shrewd_basic_platform_unlock();
-        return status;
+        module = module->next;
     }
+    return SHREWD_BASIC_ERR_KEY_NOTFOUND;
 }
 
 int shrewd_basic_log_module_set_level(shrewd_basic_log_module_t *module,

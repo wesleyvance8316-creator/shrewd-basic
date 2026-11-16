@@ -1,7 +1,6 @@
 #include <string.h>
 
 #include "json-internal.h"
-#include "shrewd-basic/platform/thread.h"
 #include "shrewd-basic/platform/memory.h"
 
 /*
@@ -41,7 +40,7 @@ static json_owner_t **json_owner_slot(const void *root)
     return NULL;
 }
 
-int json_owner_touch_locked(const void *root)
+int json_owner_touch(const void *root)
 {
     json_owner_t **slot = json_owner_slot(root);
     if (NULL == slot) {
@@ -69,13 +68,13 @@ int json_owner_touch_locked(const void *root)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int json_owner_calloc_locked(const void *root, void **out, size_t size)
+int json_owner_calloc(const void *root, void **out, size_t size)
 {
     json_owner_t **slot = json_owner_slot(root);
     json_owner_t *owner = NULL;
     struct json_owner_block *entry = NULL;
     void *block = NULL;
-    int status = json_owner_touch_locked(root);
+    int status = json_owner_touch(root);
     *out = NULL;
     if (SHREWD_BASIC_ERR_OK != status) {
         return status;
@@ -97,7 +96,7 @@ int json_owner_calloc_locked(const void *root, void **out, size_t size)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int json_owner_owns_locked(const void *root, const void *block)
+int json_owner_owns(const void *root, const void *block)
 {
     json_owner_t **slot = json_owner_slot(root);
     if ((NULL == slot) || (NULL == *slot) || (NULL == block)) {
@@ -112,7 +111,7 @@ int json_owner_owns_locked(const void *root, const void *block)
     return 0;
 }
 
-int json_owner_release_locked(const void *root, void **block)
+int json_owner_release(const void *root, void **block)
 {
     json_owner_t **slot = json_owner_slot(root);
     json_owner_t *owner = (NULL != slot) ? *slot : NULL;
@@ -134,7 +133,7 @@ int json_owner_release_locked(const void *root, void **block)
     return SHREWD_BASIC_ERR_OK; /* not ours: leave it alone */
 }
 
-void json_owner_release_all_locked(const void *root)
+void json_owner_release_all(const void *root)
 {
     json_owner_t **slot = json_owner_slot(root);
     if ((NULL == slot) || (NULL == *slot)) {
@@ -152,48 +151,4 @@ void json_owner_release_all_locked(const void *root)
             g_json_owners[i].root = NULL;
         }
     }
-}
-
-/* Locked views: the registry is the one global table this module owns. */
-int json_owner_touch(const void *root)
-{
-    int status = 0;
-    shrewd_basic_platform_lock();
-    status = json_owner_touch_locked(root);
-    shrewd_basic_platform_unlock();
-    return status;
-}
-
-int json_owner_calloc(const void *root, void **out, size_t size)
-{
-    int status = 0;
-    shrewd_basic_platform_lock();
-    status = json_owner_calloc_locked(root, out, size);
-    shrewd_basic_platform_unlock();
-    return status;
-}
-
-int json_owner_owns(const void *root, const void *block)
-{
-    int status = 0;
-    shrewd_basic_platform_lock();
-    status = json_owner_owns_locked(root, block);
-    shrewd_basic_platform_unlock();
-    return status;
-}
-
-int json_owner_release(const void *root, void **block)
-{
-    int status = 0;
-    shrewd_basic_platform_lock();
-    status = json_owner_release_locked(root, block);
-    shrewd_basic_platform_unlock();
-    return status;
-}
-
-void json_owner_release_all(const void *root)
-{
-    shrewd_basic_platform_lock();
-    json_owner_release_all_locked(root);
-    shrewd_basic_platform_unlock();
 }

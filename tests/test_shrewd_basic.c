@@ -5,10 +5,7 @@
 
 #include "shrewd-basic/config/build.h"
 #include "shrewd-basic/config/config.h"
-#include "shrewd-basic/json/json.h"
 #include "shrewd-basic/log/log.h"
-#include "shrewd-basic/platform/thread.h"
-#include "shrewd-basic/reflect/reflect.h"
 #include "shrewd-basic/shrewd-basic.h"
 
 static int g_failures = 0;
@@ -29,61 +26,8 @@ static void expect_true(const char *name, int condition)
     }
 }
 
-/* --- platform mutex hooks --------------------------------------------- */
-
-static int g_lock_calls = 0;
-static int g_unlock_calls = 0;
-
-static void test_mutex_hook_lock(void *ctx)
-{
-    (void)ctx;
-    ++g_lock_calls;
-}
-
-static void test_mutex_hook_unlock(void *ctx)
-{
-    (void)ctx;
-    ++g_unlock_calls;
-}
-
-static void test_thread_hooks(void)
-{
-    /* Uninstalled hooks: calls are no-ops. */
-    shrewd_basic_platform_lock();
-    shrewd_basic_platform_unlock();
-
-    expect_eq_int("hooks install",
-                  shrewd_basic_platform_set_mutex(test_mutex_hook_lock,
-                                                  test_mutex_hook_unlock, NULL),
-                  SHREWD_BASIC_ERR_OK);
-    /* Exercise the three shared tables through their public paths. */
-    {
-        const shrewd_basic_reflect_field_t *field = NULL;
-        shrewd_basic_log_module_t *module = NULL;
-        shrewd_basic_json_value_t *doc = NULL;
-        (void)shrewd_basic_reflect_type_find_field(&shrewd_basic_reflect_int32,
-                                                   "x", &field);
-        (void)shrewd_basic_log_module_find("json", &module);
-        if (SHREWD_BASIC_ERR_OK
-                == shrewd_basic_json_parse("[]", 2, &doc, NULL, NULL)) {
-            shrewd_basic_json_value_free(doc);
-        }
-    }
-    expect_true("hooks balanced",
-                (0 < g_lock_calls) && (g_lock_calls == g_unlock_calls));
-    /* Uninstall: back to no-op behavior. */
-    (void)shrewd_basic_platform_set_mutex(NULL, NULL, NULL);
-    {
-        int before = g_lock_calls;
-        shrewd_basic_platform_lock();
-        shrewd_basic_platform_unlock();
-        expect_true("hooks removed", before == g_lock_calls);
-    }
-}
-
 int main(void)
 {
-    test_thread_hooks();
     expect_eq_int("clamp above range", shrewd_basic_clamp(15, 0, 10), 10);
     expect_eq_int("clamp below range", shrewd_basic_clamp(-5, 0, 10), 0);
     expect_eq_int("clamp inside range", shrewd_basic_clamp(5, 0, 10), 5);
