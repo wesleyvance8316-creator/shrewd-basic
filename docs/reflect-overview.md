@@ -106,6 +106,7 @@ SHREWD_BASIC_REFLECT_PRIM_TYPE(expr)                                  /* _Generi
 | `type_field_count(type)` / `type_field_at(type, i)` | 遍历字段表(不触碰布局) |
 | `enum_count(type)` / `enum_at(type, i)` | 遍历枚举常量表 |
 | `type_find_field(type, name, &field)` | 扁平按名查字段(排序索引二分加速) |
+| `list_register(list, type, name)` + `type_find_list` / `type_find_field_list` / `type_resolve_list` / `path_get_list` / `path_set_list` | 调用方容器(ops 回调)驱动的同族查找,线程安全路径 |
 | `enum_find_name(type, value, &name)` / `enum_find_value(type, name, &value)` | 枚举名/值双向查表 |
 
 ### 值读写
@@ -238,8 +239,9 @@ struct shrewd_basic_reflect_ops {
 - 柔性尾部(FAM)的分配契约:`sizeof` 只覆盖头部,须
   `sizeof(T) + n × sizeof(elem)`;
 - union 变体切换标签前,应用须自行处置旧变体资源(库只保证不误触失效槽位);
-- find_field 排序索引是惰性构建的静态侧表(8 槽 × 64 字段,超限回退线性扫描),
-  与 log 注册一样**不支持多线程同时首次使用**;
+- find_field 排序索引是惰性构建的 `_Thread_local` 侧表(8 槽 × 64 字段,超限回退
+  线性扫描),多线程各自预热、无共享竞态;跨线程共享一份索引用调用方容器
+  (`list_register` + `*_list` 接口,库零加锁,并发契约归应用);
 - `destroy` 会释放根对象——栈上对象不能整体 destroy(释放目标可用 ops 或手工);
 - 宏的参数名不得与描述符成员名重合(已由 `sb_refl_` 前缀隔离);`FIELD_BITS`
   的 `name` 是标签,不要与真实成员重名。

@@ -18,7 +18,8 @@
  * (F_STRING_OWNED), bit groups (F_BITS), multi-dimension arrays
  * (ARRAY_DEFINE), tagged unions (UNION_DEFINE/FIELD_UNION),
  * the traversal accessors,
- * visit (event-by-event walk) and diff/hash.
+ * visit (event-by-event walk) and diff/hash, plus caller-hosted
+ * lookup lists (list_register + the *_list query family).
  * The 1 MiB dump body cap is covered by the test suite
  * instead - its output would flood the terminal here.
  */
@@ -340,6 +341,52 @@ static shrewd_basic_reflect_visit_action_t demo_visit_print(
                (NULL == node->value) ? " (null)" : "");
     }
     return SHREWD_BASIC_REFLECT_VISIT_CONTINUE;
+}
+
+/* Section 19: a caller-hosted lookup list - plain array, linear ops. */
+typedef struct {
+    shrewd_basic_reflect_lookup_t entries[4];
+    size_t count;
+} demo_reg_t;
+
+static int demo_reg_insert(void *ctx, const char *name,
+                           const shrewd_basic_reflect_type_t *type,
+                           shrewd_basic_reflect_lookup_t **out_slot)
+{
+    demo_reg_t *reg = (demo_reg_t *)ctx;
+    (void)type;
+    for (size_t i = 0; i < reg->count; ++i) {
+        if (0 == strcmp(reg->entries[i].sb_refl_name, name)) {
+            return SHREWD_BASIC_ERR_KEY_EXISTS;
+        }
+    }
+    *out_slot = &reg->entries[reg->count];
+    ++reg->count;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+static const shrewd_basic_reflect_lookup_t *demo_reg_find_type(
+        void *ctx, const shrewd_basic_reflect_type_t *type)
+{
+    demo_reg_t *reg = (demo_reg_t *)ctx;
+    for (size_t i = 0; i < reg->count; ++i) {
+        if (reg->entries[i].sb_refl_type == type) {
+            return &reg->entries[i];
+        }
+    }
+    return NULL;
+}
+
+static const shrewd_basic_reflect_lookup_t *demo_reg_find_name(void *ctx,
+                                                               const char *name)
+{
+    demo_reg_t *reg = (demo_reg_t *)ctx;
+    for (size_t i = 0; i < reg->count; ++i) {
+        if (0 == strcmp(reg->entries[i].sb_refl_name, name)) {
+            return &reg->entries[i];
+        }
+    }
+    return NULL;
 }
 
 int main(void)
@@ -861,6 +908,44 @@ int main(void)
                      shrewd_basic_reflect_destroy(msg_clone, &msg_type));
         print_status("destroy(msg)",
                      shrewd_basic_reflect_destroy(msg, &msg_type));
+    }
+
+    banner("19. caller-hosted lookup lists: register + *_list queries");
+    {
+        static const shrewd_basic_reflect_list_ops_t ops = {
+            demo_reg_insert, demo_reg_find_type, demo_reg_find_name };
+        demo_reg_t registry;
+        shrewd_basic_reflect_list_t list;
+        const shrewd_basic_reflect_type_t *by_name = NULL;
+        const shrewd_basic_reflect_field_t *by_field = NULL;
+        point_t origin;
+        int32_t x = 0;
+
+        memset(&registry, 0, sizeof(registry));
+        origin.x = 3;
+        origin.y = 4;
+        list.sb_refl_ops = &ops;
+        list.sb_refl_ctx = &registry;
+        print_status("list_register(point_type, \"point\")",
+                     shrewd_basic_reflect_list_register(&list, &point_type, "point"));
+        print_status("list_register(point_type, \"vec2\") (alias)",
+                     shrewd_basic_reflect_list_register(&list, &point_type, "vec2"));
+        print_status("type_find_list(\"vec2\")",
+                     shrewd_basic_reflect_type_find_list(&list, "vec2", &by_name));
+        printf("  \"vec2\" -> %s (same descriptor as \"point\")\n",
+               by_name->sb_refl_name);
+        print_status("find_field_list(point, \"y\")",
+                     shrewd_basic_reflect_type_find_field_list(&list, &point_type,
+                                                               "y", &by_field));
+        printf("  y at offset %zu (index built in the caller's entries)\n",
+               by_field->sb_refl_offset);
+        print_status("path_get_list(point, \"x\")",
+                     shrewd_basic_reflect_path_get_list(&list, &origin, &point_type,
+                                                        "x", &x, sizeof(x)));
+        printf("  origin.x = %d\n", x);
+        print_status("find_field_list(point, \"z\") misses",
+                     shrewd_basic_reflect_type_find_field_list(&list, &point_type,
+                                                               "z", &by_field));
     }
 
     printf("\nDemo done. See docs/reflect.md for the full reference.\n");

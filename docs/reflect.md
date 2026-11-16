@@ -198,6 +198,11 @@ SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                /* 跨 TU 
 | `type_resolve(type, path, &field, &offset, &size)` | 路径→字段+偏移+值尺寸(纯元数据) | `KEY_NOTFOUND` / `ARG_INVALID` |
 | `path_get(obj, type, path, out, n)` | 沿路径读(自动解引用指针段) | `REFLECT_MISMATCH` / `KEY_NOTFOUND` / `ARG_INVALID` |
 | `path_set(obj, type, path, in, n)` | 沿路径写 | 同上 |
+| `lookup_init(look, type, name)` / `lookup_find(look, name, len)` | 调用方容器的条目原语(建/查排序索引) | `ARG_INVALID` / — |
+| `list_register(list, type, name)` | 注册类型进调用方容器(回调插入 + 就地建索引) | 回调返回值 / `ARG_INVALID` |
+| `type_find_list(list, name, &type)` | 注册名→类型(别名即多个条目) | `KEY_NOTFOUND` / `ARG_INVALID` |
+| `type_find_field_list(list, type, name, &field)` | 经调用方容器按名查字段 | `KEY_NOTFOUND` / `ARG_INVALID` |
+| `type_resolve_list` / `path_get_list` / `path_set_list(list, …)` | 同名孪生接口,路径每段经容器解析 | 同名孪生接口 |
 | `value_get(obj, field, out, n)` | 经 ops 取目标的规范值 | `REFLECT_MISMATCH` / `KEY_NOTFOUND` / `ARG_INVALID` |
 | `value_set(obj, field, in, n)` | 经 ops 写目标的规范值 | 同上 |
 | `check(obj, type)` | 图校验(ops->check + 字段递归) | 回调返回值 / `ARG_INVALID` |
@@ -208,12 +213,31 @@ SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                /* 跨 TU 
 | `destroy(obj, type)` | 深释放(copy 的逆) | `REFLECT_NOT_SUPPORTED` / `ARG_INVALID` |
 | `visit(obj, type, fn, ctx)` | 事件流遍历(ENTER/LEAF/EXIT/…,跟随指针,环→CYCLE) | `ARG_INVALID` |
 
-### 5.1 查找加速与 get/set 的尺寸规则
+### 5.1 查找加速:get/set 的尺寸规则
 
 字段查找(`find_field` 以及 `resolve`/`path_get`/`path_set` 的路径段查找)经过按类型缓存的
-**排序索引**二分加速:描述符保持纯 const,索引是惰性构建的运行时侧表(静态、零分配,
-8 槽 × 64 字段,槽满后轮转回收)。超过 64 字段的类型回落线性扫描(结果不受影响);
-与 log 模块注册一样**不支持多线程同时首次使用**。
+**排序索引**二分加速:描述符保持纯 const,索引是惰性构建的运行时侧表(零分配,
+8 槽 × 64 字段,槽满后轮转回收)。超过 64 字段的类型回落线性扫描(结果不受影响)。
+缓存是 **`_Thread_local`** 的——多线程各自预热、互不共享,查找无竞态;无需(或目标
+工具链不支持)`_Thread_local` 时走下面的调用方容器。
+
+#### 调用方容器(`*_list` 家族)
+
+`shrewd_basic_reflect_list_t` = ops 回调表 + 应用容器句柄。存储、数据结构(数组/
+rbtree/哈希)、键与锁策略全部由应用决定,库对 list **零加锁、零全局状态**:
+
+- `lookup_init` / `lookup_find`:条目原语——每类型一份按字段名排序的指针索引,建在
+  调用方的 `shrewd_basic_reflect_lookup_t` 存储里(可内嵌进应用节点);非 struct 或
+  超过 `SHREWD_BASIC_REFLECT_LOOKUP_FIELDS`(64)字段的类型不建索引
+  (`sb_refl_count == 0`,查找回落线性);
+- `list_register(list, type, name)`:两段式插入——`ops->insert` 把类型放进容器并经
+  `out_slot` 报告条目位置,库就地建索引;重名策略归容器(惯例返回 `KEY_EXISTS`)。
+  `name` 为 NULL 时用 `type->sb_refl_name`;**同类型多别名 = 多个条目**;
+- `type_find_list` / `type_find_field_list` / `type_resolve_list` / `path_get_list` /
+  `path_set_list`:查询家族,路径每段经容器解析;容器不持有的类型(以及无索引条目)
+  回落线性扫描,结果一致;
+- **并发契约**:init 期单线程注册后,只读查询可任意线程并发;之后若再补注册,
+  与查询的同步由应用负责。
 
 #### get/set 的尺寸规则
 
