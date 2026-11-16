@@ -300,6 +300,107 @@ static void test_global_output(void)
                   shrewd_basic_log_set_global_stream(stderr), SHREWD_BASIC_ERR_OK);
 }
 
+/* Lock-hook accounting for test_lock_hooks. */
+static int g_lock_calls = 0;
+static int g_unlock_calls = 0;
+static void *g_lock_ctx_seen = NULL;
+static void *g_unlock_ctx_seen = NULL;
+
+static void test_lock_cb(void *ctx)
+{
+    ++g_lock_calls;
+    g_lock_ctx_seen = ctx;
+}
+
+static void test_unlock_cb(void *ctx)
+{
+    ++g_unlock_calls;
+    g_unlock_ctx_seen = ctx;
+}
+
+static void test_lock_hooks(void)
+{
+    static int marker = 0;
+    shrewd_basic_log_module_t *mod = NULL;
+    shrewd_basic_log_module_t *found = NULL;
+    FILE *stream = tmpfile();
+    int before = 0;
+
+    expect_true("log lock tmpfile", NULL != stream);
+    if (NULL == stream) {
+        return;
+    }
+
+    /* A half-installed pair is rejected. */
+    expect_eq_int("log set_lock half 1",
+                  shrewd_basic_log_set_lock(test_lock_cb, NULL, &marker),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("log set_lock half 2",
+                  shrewd_basic_log_set_lock(NULL, test_unlock_cb, &marker),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("log set_lock install",
+                  shrewd_basic_log_set_lock(test_lock_cb, test_unlock_cb, &marker),
+                  SHREWD_BASIC_ERR_OK);
+
+    /* create/find/set_level/set_stream/write/destroy all pass the lock. */
+    expect_eq_int("lock create",
+                  shrewd_basic_log_module_create("lmod",
+                                                 SHREWD_BASIC_LOG_LEVEL_ALL, &mod),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("lock create took lock", 1 == g_lock_calls);
+    expect_true("lock create balanced", g_lock_calls == g_unlock_calls);
+    expect_eq_int("lock set_stream",
+                  shrewd_basic_log_module_set_stream(mod, stream),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("lock find", shrewd_basic_log_module_find("lmod", &found),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("lock find pointer", found == mod);
+    expect_true("lock find took lock", 3 == g_lock_calls);
+    expect_true("lock ctx passed", (&marker == g_lock_ctx_seen)
+                && (&marker == g_unlock_ctx_seen));
+
+    /* A disabled level short-circuits outside the lock. */
+    expect_eq_int("lock level none",
+                  shrewd_basic_log_module_set_level(mod,
+                                                    SHREWD_BASIC_LOG_LEVEL_NONE),
+                  SHREWD_BASIC_ERR_OK);
+    before = g_lock_calls;
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, mod, "lock", "hidden\n");
+    expect_true("lock skipped when disabled", before == g_lock_calls);
+    expect_true("lock balanced when disabled", g_lock_calls == g_unlock_calls);
+
+    /* An enabled write holds the lock across the whole record. */
+    expect_eq_int("lock level all",
+                  shrewd_basic_log_module_set_level(mod,
+                                                    SHREWD_BASIC_LOG_LEVEL_ALL),
+                  SHREWD_BASIC_ERR_OK);
+    before = g_lock_calls;
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, mod, "lock", "visible\n");
+    expect_true("lock taken once per write", (before + 1) == g_lock_calls);
+    expect_true("lock write balanced", g_lock_calls == g_unlock_calls);
+
+    /* Global stream replacement passes the lock. */
+    before = g_lock_calls;
+    expect_eq_int("lock set_global_stream",
+                  shrewd_basic_log_set_global_stream(stderr),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("lock global took lock", (before + 1) == g_lock_calls);
+
+    expect_eq_int("lock destroy", shrewd_basic_log_module_destroy(mod),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("lock destroy balanced", g_lock_calls == g_unlock_calls);
+
+    /* Uninstall: the module behaves exactly as before. */
+    expect_eq_int("log set_lock off",
+                  shrewd_basic_log_set_lock(NULL, NULL, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    before = g_lock_calls;
+    expect_eq_int("lock off register",
+                  shrewd_basic_log_module_register(g_cmod), SHREWD_BASIC_ERR_OK);
+    expect_true("lock off silent", before == g_lock_calls);
+    fclose(stream);
+}
+
 int main(void)
 {
     test_format();
@@ -309,5 +410,6 @@ int main(void)
     test_registry();
     test_shared_module();
     test_global_output();
+    test_lock_hooks();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

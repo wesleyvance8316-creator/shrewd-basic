@@ -38,6 +38,30 @@ static shrewd_basic_log_module_t *g_modules = NULL;
 static FILE *g_global_out = NULL;
 static int g_global_owns_out = 0;
 
+/*
+ * Optional lock hooks (shrewd_basic_log_set_lock): when installed, every
+ * registry operation, stream replacement and record write runs inside
+ * lock/unlock; when absent the module behaves exactly as before. The
+ * enabled-level short-circuit stays outside the lock either way.
+ */
+static void (*g_lock_fn)(void *ctx) = NULL;
+static void (*g_unlock_fn)(void *ctx) = NULL;
+static void *g_lock_ctx = NULL;
+
+static void log_lock(void)
+{
+    if (NULL != g_lock_fn) {
+        g_lock_fn(g_lock_ctx);
+    }
+}
+
+static void log_unlock(void)
+{
+    if (NULL != g_unlock_fn) {
+        g_unlock_fn(g_lock_ctx);
+    }
+}
+
 static void log_touch(shrewd_basic_log_module_t *module)
 {
     if (0 == module->registered) {
@@ -179,6 +203,19 @@ static int log_enabled(const shrewd_basic_log_module_t *module,
     return 0u != (module->level_mask & (uint32_t)level);
 }
 
+int shrewd_basic_log_set_lock(void (*lock_fn)(void *ctx),
+                              void (*unlock_fn)(void *ctx), void *ctx)
+{
+    if (((NULL == lock_fn) && (NULL != unlock_fn))
+            || ((NULL != lock_fn) && (NULL == unlock_fn))) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    g_lock_fn = lock_fn;
+    g_unlock_fn = unlock_fn;
+    g_lock_ctx = ctx;
+    return SHREWD_BASIC_ERR_OK;
+}
+
 int shrewd_basic_log_module_create(const char *name, uint32_t level_mask,
                                    shrewd_basic_log_module_t **out)
 {
@@ -195,16 +232,20 @@ int shrewd_basic_log_module_create(const char *name, uint32_t level_mask,
     module->name = name;
     module->level_mask = level_mask;
     module->heap = 1;
+    log_lock();
     log_touch(module);
+    log_unlock();
     *out = module;
     return SHREWD_BASIC_ERR_OK;
 }
 
 int shrewd_basic_log_module_destroy(shrewd_basic_log_module_t *module)
 {
+    int status = SHREWD_BASIC_ERR_OK;
     if (NULL == module) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
+    log_lock();
     log_unlink(module);
     if ((0 != module->owns_out) && (NULL != module->out)) {
         fclose(module->out);
@@ -212,9 +253,10 @@ int shrewd_basic_log_module_destroy(shrewd_basic_log_module_t *module)
         module->owns_out = 0;
     }
     if (0 != module->heap) {
-        return shrewd_basic_platform_free((void **)&module);
+        status = shrewd_basic_platform_free((void **)&module);
     }
-    return SHREWD_BASIC_ERR_OK;
+    log_unlock();
+    return status;
 }
 
 int shrewd_basic_log_module_register(shrewd_basic_log_module_t *module)
@@ -222,7 +264,9 @@ int shrewd_basic_log_module_register(shrewd_basic_log_module_t *module)
     if (NULL == module) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
+    log_lock();
     log_touch(module);
+    log_unlock();
     return SHREWD_BASIC_ERR_OK;
 }
 
@@ -231,14 +275,17 @@ int shrewd_basic_log_module_find(const char *name, shrewd_basic_log_module_t **o
     if ((NULL == name) || (NULL == out)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
+    log_lock();
     shrewd_basic_log_module_t *module = g_modules;
     while (NULL != module) {
         if (0 == strcmp(module->name, name)) {
             *out = module;
+            log_unlock();
             return SHREWD_BASIC_ERR_OK;
         }
         module = module->next;
     }
+    log_unlock();
     return SHREWD_BASIC_ERR_KEY_NOTFOUND;
 }
 
@@ -248,8 +295,10 @@ int shrewd_basic_log_module_set_level(shrewd_basic_log_module_t *module,
     if (NULL == module) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
+    log_lock();
     log_touch(module);
     module->level_mask = level_mask;
+    log_unlock();
     return SHREWD_BASIC_ERR_OK;
 }
 
@@ -259,12 +308,14 @@ int shrewd_basic_log_module_set_stream(shrewd_basic_log_module_t *module,
     if ((NULL == module) || (NULL == stream)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
+    log_lock();
     log_touch(module);
     if ((0 != module->owns_out) && (NULL != module->out)) {
         fclose(module->out);
     }
     module->out = stream;
     module->owns_out = 0;
+    log_unlock();
     return SHREWD_BASIC_ERR_OK;
 }
 
@@ -274,16 +325,18 @@ int shrewd_basic_log_module_set_file(shrewd_basic_log_module_t *module,
     if ((NULL == module) || (NULL == path)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
-    log_touch(module);
     FILE *file = fopen(path, "a");
     if (NULL == file) {
         return SHREWD_BASIC_ERR_LOG_FOPEN;
     }
+    log_lock();
+    log_touch(module);
     if ((0 != module->owns_out) && (NULL != module->out)) {
         fclose(module->out);
     }
     module->out = file;
     module->owns_out = 1;
+    log_unlock();
     return SHREWD_BASIC_ERR_OK;
 }
 
@@ -292,11 +345,13 @@ int shrewd_basic_log_set_global_stream(FILE *stream)
     if (NULL == stream) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
+    log_lock();
     if ((0 != g_global_owns_out) && (NULL != g_global_out)) {
         fclose(g_global_out);
     }
     g_global_out = stream;
     g_global_owns_out = 0;
+    log_unlock();
     return SHREWD_BASIC_ERR_OK;
 }
 
@@ -309,11 +364,13 @@ int shrewd_basic_log_set_global_file(const char *path)
     if (NULL == file) {
         return SHREWD_BASIC_ERR_LOG_FOPEN;
     }
+    log_lock();
     if ((0 != g_global_owns_out) && (NULL != g_global_out)) {
         fclose(g_global_out);
     }
     g_global_out = file;
     g_global_owns_out = 1;
+    log_unlock();
     return SHREWD_BASIC_ERR_OK;
 }
 
@@ -329,6 +386,7 @@ int shrewd_basic_log_write(shrewd_basic_log_level_t level,
     if (0 == log_enabled(module, level)) {
         return SHREWD_BASIC_ERR_OK;
     }
+    log_lock();
     log_touch(module);
 
     char timestamp[64];
@@ -354,6 +412,7 @@ int shrewd_basic_log_write(shrewd_basic_log_level_t level,
     vfprintf(out, fmt, ap);
     va_end(ap);
     fflush(out);
+    log_unlock();
     return SHREWD_BASIC_ERR_OK;
 }
 
@@ -370,6 +429,7 @@ int shrewd_basic_log_hex_write(shrewd_basic_log_level_t level,
     if (0 == log_enabled(module, level)) {
         return SHREWD_BASIC_ERR_OK;
     }
+    log_lock();
     log_touch(module);
 
     char timestamp[64];
@@ -426,5 +486,6 @@ int shrewd_basic_log_hex_write(shrewd_basic_log_level_t level,
         fprintf(out, " |\n");
     }
     fflush(out);
+    log_unlock();
     return SHREWD_BASIC_ERR_OK;
 }

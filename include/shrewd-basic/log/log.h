@@ -34,6 +34,10 @@
  * replacing the output closes the file, and lines are flushed as they are
  * written so the file is complete even after a crash.
  *
+ * Threading: nothing is synchronized by default; install lock callbacks
+ * with shrewd_basic_log_set_lock() to serialize registry, stream and
+ * output access across threads (see its notes for the exact contract).
+ *
  * The logging macros filter on the module level mask before calling into
  * the library, so a disabled level costs a single bit test (no function
  * call). Macros are statements; their arguments must have no side effects
@@ -148,6 +152,32 @@ int shrewd_basic_log_set_global_stream(FILE *stream);
  * opened - the previous global output stays in place.
  */
 int shrewd_basic_log_set_global_file(const char *path);
+
+/**
+ * Optional lock callbacks guarding the module registry and the output
+ * streams. By default no locking happens (single-threaded host); install
+ * a pair - typically wrapping one mutex - to make concurrent logging and
+ * configuration safe. With a lock installed:
+ *
+ * - registry operations (lazy registration, find, destroy) and stream
+ *   replacement never interleave with a write in progress, so records
+ *   do not mix and replacing a file-backed output cannot close a FILE
+ *   another thread is writing to;
+ * - the level-mask short-circuit still runs outside the lock, so a
+ *   disabled level costs nothing (a concurrent set_level may take
+ *   effect one call late);
+ * - shrewd_basic_log_module_destroy() frees the module under the lock,
+ *   but the no-stale-handles rule stays an application contract: never
+ *   destroy a module another thread may still use;
+ * - install the pair during initialization; the callbacks themselves
+ *   must not log (the lock is not reentrant).
+ *
+ * @p lock_fn and @p unlock_fn must be both NULL (locking off) or both
+ * set; @p ctx is passed to both. Changing the pair while logging is in
+ * flight is unsupported.
+ */
+int shrewd_basic_log_set_lock(void (*lock_fn)(void *ctx),
+                              void (*unlock_fn)(void *ctx), void *ctx);
 
 /** Core writer used by shrewd_basic_log(); the format is printf-style. */
 int shrewd_basic_log_write(shrewd_basic_log_level_t level,
