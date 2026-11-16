@@ -246,8 +246,12 @@ json 侧仍有两张全局侧表按单线程宿主设计,不提供加锁机制�
 - **解码分配登记**(`json_owner`):`json_decode` / `json_decode_value` /
   `json_decode_pointer` / `json_free` 之间必须互斥——登记表是全局映射,
   与是否同一对象无关;
-- **log 注册**(`log` 模块):`log_module_*` 配置接口、`log_set_global_*`
-  与所有日志输出之间必须互斥(全局流切换会 fclose 旧流)。
+- **log 注册**(`log` 模块):默认无锁。并发使用时安装
+  `shrewd_basic_log_set_lock()` 锁钩子——注册表、换流(含 fclose 旧流)与
+  整条记录的输出全程互斥,记录不再交错;禁用级别的短路仍在锁外(并发
+  `set_level` 最迟一条日志后生效)。不装钩子则由应用串行化
+  `log_module_*`/`log_set_global_*` 与所有日志输出。无论哪种方式,
+  "不销毁仍可能被他人使用的模块"始终是应用契约。
 
 ## 11. 工程配套
 
