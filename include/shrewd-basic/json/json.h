@@ -561,6 +561,17 @@ int shrewd_basic_json_schema(const shrewd_basic_reflect_type_t *type,
                              shrewd_basic_json_error_t *error);
 
 /**
+ * Validate a document against a schema (as produced by
+ * shrewd_basic_json_schema()): type/enum/minimum/maximum/maxLength/
+ * maxItems/required/properties/items/oneOf/anyOf/$ref into $defs. The
+ * error carries the document path of the first violation. format and
+ * pattern pass through unvalidated (no regex engine).
+ */
+int shrewd_basic_json_schema_check(const shrewd_basic_json_value_t *document,
+                                   const shrewd_basic_json_value_t *schema,
+                                   shrewd_basic_json_error_t *error);
+
+/**
  * Allocation size a decode target needs: the struct header plus the
  * flexible tails the JSON carries (the FAM sizing helper).
  */

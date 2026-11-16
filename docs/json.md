@@ -224,6 +224,7 @@ encode/decode 的 `info` 参数携带策略(NULL = 纯元数据,行为不变)。
 | `json_pointer_set(root, "/a/b/-", item)` | Pointer 写入:末段替换成员/元素或 `"-"` 数组追加;失败时 `item` 仍归调用方 |
 | `json_decode_pointer(value, "/a/b", obj, type, ...)` | 局部解码:把指针指向的子文档映射进对象(根不必是 struct,标量亦可) |
 | `json_replace_at(value, i, item)` | 原位替换数组元素/对象成员(释放旧值) |
+| `json_schema_check(doc, schema, &err)` | Schema 校验器:按导出的关键字集校验 DOM(`type/enum/minimum/maximum/maxLength/maxItems/required/properties/items/oneOf/anyOf/$ref`),错误带文档路径;**别名与 decode 一致**(成员名与 `KEY` 别名都算命中),`oneOf` 靠变体 required 判别 |
 | `json_schema(type, info, &text)` | 导出 draft-07 子集 Schema:属性/`required`/`minimum`/`maximum`/`enum`/`x-aliases`,嵌套结构体走 `$defs`+`$ref`(自引用安全),union 出 `oneOf` 并按
   `UNION_STYLE` 标注 `x-union-style`(UNWRAP 变体直出裸值) |
 | `json_value_size(value, type, &size)` | FAM 尺寸助手:返回 decode 目标所需字节(头 + JSON 尾长) |

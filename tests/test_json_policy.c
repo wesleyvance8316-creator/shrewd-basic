@@ -842,6 +842,94 @@ static void test_decode_pointer(void)
     shrewd_basic_json_value_free(root);
 }
 
+/* --- schema validator -------------------------------------------------- */
+
+static void test_schema_check(void)
+{
+    char *text = NULL;
+    shrewd_basic_json_value_t *schema = NULL;
+    shrewd_basic_json_value_t *doc = NULL;
+    shrewd_basic_json_error_t error;
+
+    /* Export cfg's schema and re-parse it (the self-consistency loop). */
+    expect_eq_int("check schema export",
+                  shrewd_basic_json_schema(&cfg_reflect, &cfg_json, &text, NULL,
+                                           NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("check schema parse",
+                  shrewd_basic_json_parse(text, strlen(text), &schema, NULL,
+                                          NULL),
+                  SHREWD_BASIC_ERR_OK);
+    shrewd_basic_json_text_free(text);
+
+    /* A conforming document passes. */
+    expect_eq_int("check doc parse",
+                  shrewd_basic_json_parse("{\"age\":20,\"name\":\"ab\"}", strlen("{\"age\":20,\"name\":\"ab\"}"),
+                                          &doc, NULL, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("check ok",
+                  shrewd_basic_json_schema_check(doc, schema, &error),
+                  SHREWD_BASIC_ERR_OK);
+    shrewd_basic_json_value_free(doc);
+
+    /* Wrong type. */
+    expect_eq_int("check bad type parse",
+                  shrewd_basic_json_parse("{\"age\":\"x\",\"name\":\"ab\"}", strlen("{\"age\":\"x\",\"name\":\"ab\"}"),
+                                          &doc, NULL, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("check bad type",
+                  shrewd_basic_json_schema_check(doc, schema, &error),
+                  SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH);
+    expect_streq("check bad type path", error.path, "/age");
+    shrewd_basic_json_value_free(doc);
+
+    /* Bounds and required. */
+    expect_eq_int("check bounds parse",
+                  shrewd_basic_json_parse("{\"age\":200,\"name\":\"ab\"}", strlen("{\"age\":200,\"name\":\"ab\"}"),
+                                          &doc, NULL, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("check bounds",
+                  shrewd_basic_json_schema_check(doc, schema, &error),
+                  SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH);
+    expect_true("check bounds msg",
+                NULL != strstr(error.message, "maximum"));
+    shrewd_basic_json_value_free(doc);
+    expect_eq_int("check required parse",
+                  shrewd_basic_json_parse("{\"age\":1}", strlen("{\"age\":1}"), &doc, NULL, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("check required",
+                  shrewd_basic_json_schema_check(doc, schema, &error),
+                  SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH);
+    expect_streq("check required path", error.path, "/name_id");
+    shrewd_basic_json_value_free(doc);
+    shrewd_basic_json_value_free(schema);
+
+    /* Union bodies discriminate through oneOf (+ required per variant). */
+    expect_eq_int("check union schema",
+                  shrewd_basic_json_schema(&msg_reflect, NULL, &text, NULL, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("check union parse",
+                  shrewd_basic_json_parse(text, strlen(text), &schema, NULL,
+                                          NULL),
+                  SHREWD_BASIC_ERR_OK);
+    shrewd_basic_json_text_free(text);
+    expect_eq_int("check union doc",
+                  shrewd_basic_json_parse("{\"kind\":\"MSG_POINT\",\"body\":{\"point\":{\"x\":1,\"y\":2}}}", strlen("{\"kind\":\"MSG_POINT\",\"body\":{\"point\":{\"x\":1,\"y\":2}}}"), &doc, NULL, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("check union ok",
+                  shrewd_basic_json_schema_check(doc, schema, &error),
+                  SHREWD_BASIC_ERR_OK);
+    shrewd_basic_json_value_free(doc);
+    expect_eq_int("check union bad parse",
+                  shrewd_basic_json_parse("{\"kind\":\"MSG_POINT\",\"body\":{\"nope\":1}}", strlen("{\"kind\":\"MSG_POINT\",\"body\":{\"nope\":1}}"), &doc, NULL, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("check union bad",
+                  shrewd_basic_json_schema_check(doc, schema, &error),
+                  SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH);
+    shrewd_basic_json_value_free(doc);
+    shrewd_basic_json_value_free(schema);
+}
+
 int main(void)
 {
     test_key_aliases();
@@ -855,5 +943,6 @@ int main(void)
     test_schema_export();
     test_schema_sync();
     test_decode_pointer();
+    test_schema_check();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

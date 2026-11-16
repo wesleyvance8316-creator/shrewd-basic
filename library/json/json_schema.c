@@ -1,3 +1,4 @@
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -302,6 +303,17 @@ static int schema_union(schema_ctx_t *ctx,
             }
         }
         if (SHREWD_BASIC_ERR_OK == status) {
+            /* Variant fields are required in their case so oneOf can
+               discriminate between overlapping shapes. */
+            shrewd_basic_json_value_t *need = NULL;
+            (void)shrewd_basic_json_new(SHREWD_BASIC_JSON_ARRAY, &need);
+            for (size_t f = 0; f < variant->sb_refl_field_count; ++f) {
+                shrewd_basic_json_value_t *mark = NULL;
+                (void)shrewd_basic_json_new_string(
+                        variant->sb_refl_fields[f].sb_refl_name, &mark);
+                (void)shrewd_basic_json_append(need, mark);
+            }
+            (void)shrewd_basic_json_set(body, "required", need);
             status = shrewd_basic_json_set(body, "properties", props);
         } else {
             shrewd_basic_json_value_free(props);
@@ -478,15 +490,30 @@ static int schema_type(schema_ctx_t *ctx, const shrewd_basic_reflect_type_t *typ
             } else {
                 status = schema_value_inner(ctx, field, info, &view, &one);
             }
-            if ((SHREWD_BASIC_ERR_OK == status) && (1 < view.key_count)) {
+            if (SHREWD_BASIC_ERR_OK == status) {
+                /* Every accepted key except the canonical is an alias -
+                   including the member name decode always accepts. */
                 shrewd_basic_json_value_t *aliases = NULL;
-                (void)shrewd_basic_json_new(SHREWD_BASIC_JSON_ARRAY, &aliases);
-                for (size_t k = 1; k < view.key_count; ++k) {
-                    shrewd_basic_json_value_t *alias = NULL;
-                    (void)shrewd_basic_json_new_string(view.keys[k], &alias);
-                    (void)shrewd_basic_json_append(aliases, alias);
+                int extra = (0 != strcmp(view.keys[0], field->sb_refl_name)) ? 1 : 0;
+                if ((size_t)(1 + extra) <= view.key_count) {
+                    (void)shrewd_basic_json_new(SHREWD_BASIC_JSON_ARRAY, &aliases);
+                    for (size_t k = 1; k < view.key_count; ++k) {
+                        shrewd_basic_json_value_t *alias = NULL;
+                        (void)shrewd_basic_json_new_string(view.keys[k], &alias);
+                        (void)shrewd_basic_json_append(aliases, alias);
+                    }
+                    if (0 != extra) {
+                        shrewd_basic_json_value_t *alias = NULL;
+                        (void)shrewd_basic_json_new_string(field->sb_refl_name,
+                                                           &alias);
+                        (void)shrewd_basic_json_append(aliases, alias);
+                    }
+                    if (0 < shrewd_basic_json_count(aliases)) {
+                        (void)shrewd_basic_json_set(one, "x-aliases", aliases);
+                    } else {
+                        shrewd_basic_json_value_free(aliases);
+                    }
                 }
-                (void)shrewd_basic_json_set(one, "x-aliases", aliases);
             }
             if ((SHREWD_BASIC_ERR_OK == status) && (NULL != view.format)) {
                 shrewd_basic_json_value_t *fmt = NULL;
@@ -615,4 +642,368 @@ int shrewd_basic_json_schema(const shrewd_basic_reflect_type_t *type,
     shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_json_log,
                      "schema", "schema ok (%s)\n", path);
     return status;
+}
+
+/* --- schema validation ------------------------------------------------ */
+
+/*
+ * Validates a document against a schema produced by
+ * shrewd_basic_json_schema() - the supported keywords are exactly the
+ * emitted set (type/enum/minimum/maximum/maxLength/maxItems/required/
+ * properties/items/oneOf/anyOf/$ref into $defs), so "exported schemas
+ * always validate". format/pattern pass through unvalidated.
+ */
+typedef struct schema_check_ctx {
+    const shrewd_basic_json_value_t *root;
+    shrewd_basic_json_error_t *error;
+    char path[256];
+    size_t path_len;
+} schema_check_ctx_t;
+
+static int schema_check_value(schema_check_ctx_t *ctx,
+                              const shrewd_basic_json_value_t *doc,
+                              const shrewd_basic_json_value_t *schema);
+
+/* Numeric bound in a schema keyword (0 when absent). */
+static double schema_number(const shrewd_basic_json_value_t *node,
+                            const char *key)
+{
+    double value = 0.0;
+    const shrewd_basic_json_value_t *item = shrewd_basic_json_get(node, key);
+    if (NULL != item) {
+        (void)shrewd_basic_json_to_f64(item, &value);
+    }
+    return value;
+}
+
+/* Count bound in a schema keyword (0 when absent). */
+static size_t schema_count_bound(const shrewd_basic_json_value_t *node,
+                                 const char *key, int *present)
+{
+    uint64_t value = 0;
+    const shrewd_basic_json_value_t *item = shrewd_basic_json_get(node, key);
+    *present = (NULL != item) ? 1 : 0;
+    if (NULL != item) {
+        (void)shrewd_basic_json_to_u64(item, &value);
+    }
+    return (size_t)value;
+}
+
+static void schema_check_push(schema_check_ctx_t *ctx, const char *text)
+{
+    size_t room = (sizeof(ctx->path) - 1) - ctx->path_len;
+    size_t used = strlen(text);
+    if (used > room) {
+        used = room;
+    }
+    memcpy(ctx->path + ctx->path_len, text, used);
+    ctx->path_len += used;
+    ctx->path[ctx->path_len] = '\0';
+}
+
+static int schema_check_fail(schema_check_ctx_t *ctx, const char *fmt, ...)
+{
+    if (NULL != ctx->error) {
+        va_list ap;
+        va_start(ap, fmt);
+        (void)vsnprintf(ctx->error->message, sizeof(ctx->error->message), fmt,
+                        ap);
+        va_end(ap);
+        (void)snprintf(ctx->error->path, sizeof(ctx->error->path), "%s",
+                       (0 != ctx->path_len) ? ctx->path : "(root)");
+    }
+    return SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH;
+}
+
+static int schema_value_equals(const shrewd_basic_json_value_t *a,
+                               const shrewd_basic_json_value_t *b)
+{
+    if (shrewd_basic_json_kind(a) != shrewd_basic_json_kind(b)) {
+        return 0;
+    }
+    switch (shrewd_basic_json_kind(a)) {
+    case SHREWD_BASIC_JSON_STRING:
+        return (0 == strcmp(shrewd_basic_json_to_string(a),
+                            shrewd_basic_json_to_string(b))) ? 1 : 0;
+    case SHREWD_BASIC_JSON_BOOL: {
+        bool x = false;
+        bool y = true;
+        (void)shrewd_basic_json_to_bool(a, &x);
+        (void)shrewd_basic_json_to_bool(b, &y);
+        return (x == y) ? 1 : 0;
+    }
+    case SHREWD_BASIC_JSON_NUMBER: {
+        double x = 0.0;
+        double y = 1.0;
+        (void)shrewd_basic_json_to_f64(a, &x);
+        (void)shrewd_basic_json_to_f64(b, &y);
+        return (x == y) ? 1 : 0;
+    }
+    default:
+        return 1; /* containers are not compared by value here */
+    }
+}
+
+static const shrewd_basic_json_value_t *schema_resolve(
+        schema_check_ctx_t *ctx, const shrewd_basic_json_value_t *schema)
+{
+    const char *ref = NULL;
+    const shrewd_basic_json_value_t *defs = NULL;
+    if (SHREWD_BASIC_JSON_STRING != shrewd_basic_json_kind(
+                shrewd_basic_json_get(schema, "$ref"))) {
+        return schema;
+    }
+    ref = shrewd_basic_json_to_string(shrewd_basic_json_get(schema, "$ref"));
+    defs = shrewd_basic_json_get(ctx->root, "$defs");
+    if ((NULL == defs) || (0 != strncmp(ref, "#/$defs/", 8))) {
+        return NULL;
+    }
+    return shrewd_basic_json_get(defs, ref + 8);
+}
+
+/*
+ * The document member matching a property: its canonical key or any
+ * x-alias (validation honors the same alias set decode does).
+ */
+static const shrewd_basic_json_value_t *schema_doc_member(
+        const shrewd_basic_json_value_t *doc, const char *canonical,
+        const shrewd_basic_json_value_t *sub)
+{
+    const shrewd_basic_json_value_t *member = shrewd_basic_json_get(doc, canonical);
+    const shrewd_basic_json_value_t *aliases = NULL;
+    if (NULL != member) {
+        return member;
+    }
+    aliases = (NULL != sub) ? shrewd_basic_json_get(sub, "x-aliases") : NULL;
+    if (NULL != aliases) {
+        for (size_t i = 0; i < shrewd_basic_json_count(aliases); ++i) {
+            member = shrewd_basic_json_get(
+                    doc, shrewd_basic_json_to_string(
+                                 shrewd_basic_json_at(aliases, i)));
+            if (NULL != member) {
+                return member;
+            }
+        }
+    }
+    return NULL;
+}
+
+/* The property whose canonical key or x-alias matches @p key. */
+static const shrewd_basic_json_value_t *schema_find_property(
+        const shrewd_basic_json_value_t *properties, const char *key)
+{
+    for (size_t p = 0; p < shrewd_basic_json_count(properties); ++p) {
+        const shrewd_basic_json_value_t *sub = shrewd_basic_json_at(properties, p);
+        const shrewd_basic_json_value_t *aliases = NULL;
+        if (0 == strcmp(shrewd_basic_json_key_at(properties, p), key)) {
+            return sub;
+        }
+        aliases = shrewd_basic_json_get(sub, "x-aliases");
+        for (size_t a = 0; (NULL != aliases) && (a < shrewd_basic_json_count(aliases));
+             ++a) {
+            if (0 == strcmp(shrewd_basic_json_to_string(
+                                   shrewd_basic_json_at(aliases, a)), key)) {
+                return sub;
+            }
+        }
+    }
+    return NULL;
+}
+
+static int schema_check_object(schema_check_ctx_t *ctx,
+                               const shrewd_basic_json_value_t *doc,
+                               const shrewd_basic_json_value_t *schema)
+{
+    const shrewd_basic_json_value_t *required =
+            shrewd_basic_json_get(schema, "required");
+    const shrewd_basic_json_value_t *properties =
+            shrewd_basic_json_get(schema, "properties");
+    if (NULL != required) {
+        for (size_t i = 0; i < shrewd_basic_json_count(required); ++i) {
+            const char *key = shrewd_basic_json_to_string(
+                    shrewd_basic_json_at(required, i));
+            if (NULL == schema_doc_member(doc, key,
+                                          shrewd_basic_json_get(properties, key))) {
+                size_t mark = ctx->path_len;
+                schema_check_push(ctx, "/");
+                schema_check_push(ctx, key);
+                {
+                    int status = schema_check_fail(ctx, "required key missing");
+                    ctx->path_len = mark;
+                    ctx->path[mark] = '\0';
+                    return status;
+                }
+            }
+        }
+    }
+    if (NULL != properties) {
+        for (size_t i = 0; i < shrewd_basic_json_count(doc); ++i) {
+            const char *key = shrewd_basic_json_key_at(doc, i);
+            const shrewd_basic_json_value_t *sub =
+                    schema_find_property(properties, key);
+            size_t mark = 0;
+            int status;
+            if (NULL == sub) {
+                continue; /* unknown keys are ignored, like decode */
+            }
+            mark = ctx->path_len;
+            schema_check_push(ctx, "/");
+            schema_check_push(ctx, key);
+            status = schema_check_value(ctx, shrewd_basic_json_at(doc, i), sub);
+            ctx->path_len = mark;
+            ctx->path[mark] = '\0';
+            if (SHREWD_BASIC_ERR_OK != status) {
+                return status;
+            }
+        }
+    }
+    return SHREWD_BASIC_ERR_OK;
+}
+
+static int schema_check_value(schema_check_ctx_t *ctx,
+                              const shrewd_basic_json_value_t *doc,
+                              const shrewd_basic_json_value_t *schema)
+{
+    const shrewd_basic_json_value_t *node = schema_resolve(ctx, schema);
+    const shrewd_basic_json_value_t *one = NULL;
+    const shrewd_basic_json_value_t *kind = NULL;
+    if (NULL == node) {
+        return schema_check_fail(ctx, "cannot resolve $ref");
+    }
+    one = shrewd_basic_json_get(node, "oneOf");
+    if (NULL == one) {
+        one = shrewd_basic_json_get(node, "anyOf");
+    }
+    if (NULL != one) {
+        size_t matches = 0;
+        int strict = (NULL != shrewd_basic_json_get(node, "oneOf"));
+        for (size_t i = 0; i < shrewd_basic_json_count(one); ++i) {
+            schema_check_ctx_t probe = *ctx;
+            probe.error = NULL;
+            if (SHREWD_BASIC_ERR_OK
+                    == schema_check_value(&probe, doc,
+                                          shrewd_basic_json_at(one, i))) {
+                ++matches;
+            }
+        }
+        if ((0 != strict) ? (1 != matches) : (0 == matches)) {
+            return schema_check_fail(ctx,
+                                     strict ? "oneOf matched %zu variants"
+                                            : "anyOf matched nothing",
+                                     matches);
+        }
+        return SHREWD_BASIC_ERR_OK;
+    }
+    kind = shrewd_basic_json_get(node, "type");
+    if (NULL != kind) {
+        const char *want = shrewd_basic_json_to_string(kind);
+        const char *have = "null";
+        switch (shrewd_basic_json_kind(doc)) {
+        case SHREWD_BASIC_JSON_BOOL: have = "boolean"; break;
+        case SHREWD_BASIC_JSON_NUMBER: {
+            int64_t integral = 0;
+            if (SHREWD_BASIC_ERR_OK == shrewd_basic_json_to_i64(doc, &integral)) {
+                have = "integer";
+            } else {
+                have = "number";
+            }
+            break;
+        }
+        case SHREWD_BASIC_JSON_STRING: have = "string"; break;
+        case SHREWD_BASIC_JSON_ARRAY: have = "array"; break;
+        case SHREWD_BASIC_JSON_OBJECT: have = "object"; break;
+        default: break;
+        }
+        if (0 != strcmp(want, have)) {
+            /* "number" accepts integers too. */
+            if (!((0 == strcmp(want, "number"))
+                    && (0 == strcmp(have, "integer")))) {
+                return schema_check_fail(ctx, "expected %s, got %s", want, have);
+            }
+        }
+    }
+    {
+        const shrewd_basic_json_value_t *list = shrewd_basic_json_get(node, "enum");
+        if (NULL != list) {
+            int hit = 0;
+            for (size_t i = 0; i < shrewd_basic_json_count(list); ++i) {
+                if (0 != schema_value_equals(doc, shrewd_basic_json_at(list, i))) {
+                    hit = 1;
+                    break;
+                }
+            }
+            if (0 == hit) {
+                return schema_check_fail(ctx, "value not in enum");
+            }
+        }
+    }
+    if (SHREWD_BASIC_JSON_NUMBER == shrewd_basic_json_kind(doc)) {
+        double value = 0.0;
+        (void)shrewd_basic_json_to_f64(doc, &value);
+        if ((NULL != shrewd_basic_json_get(node, "minimum"))
+                && (value < schema_number(node, "minimum"))) {
+            return schema_check_fail(ctx, "below minimum");
+        }
+        if ((NULL != shrewd_basic_json_get(node, "maximum"))
+                && (value > schema_number(node, "maximum"))) {
+            return schema_check_fail(ctx, "above maximum");
+        }
+    }
+    if (SHREWD_BASIC_JSON_STRING == shrewd_basic_json_kind(doc)) {
+        int present = 0;
+        size_t bound = schema_count_bound(node, "maxLength", &present);
+        if ((0 != present)
+                && (strlen(shrewd_basic_json_to_string(doc)) > bound)) {
+            return schema_check_fail(ctx, "string longer than maxLength");
+        }
+    }
+    if (SHREWD_BASIC_JSON_ARRAY == shrewd_basic_json_kind(doc)) {
+        const shrewd_basic_json_value_t *items =
+                shrewd_basic_json_get(node, "items");
+        int present = 0;
+        size_t bound = schema_count_bound(node, "maxItems", &present);
+        if ((0 != present) && (shrewd_basic_json_count(doc) > bound)) {
+            return schema_check_fail(ctx, "more elements than maxItems");
+        }
+        if (NULL != items) {
+            for (size_t i = 0; i < shrewd_basic_json_count(doc); ++i) {
+                char step[24];
+                size_t mark = ctx->path_len;
+                int status;
+                (void)snprintf(step, sizeof(step), "/%zu", i);
+                schema_check_push(ctx, step);
+                status = schema_check_value(ctx, shrewd_basic_json_at(doc, i),
+                                            items);
+                ctx->path_len = mark;
+                ctx->path[mark] = '\0';
+                if (SHREWD_BASIC_ERR_OK != status) {
+                    return status;
+                }
+            }
+        }
+    }
+    if (SHREWD_BASIC_JSON_OBJECT == shrewd_basic_json_kind(doc)) {
+        return schema_check_object(ctx, doc, node);
+    }
+    return SHREWD_BASIC_ERR_OK;
+}
+
+int shrewd_basic_json_schema_check(const shrewd_basic_json_value_t *document,
+                                   const shrewd_basic_json_value_t *schema,
+                                   shrewd_basic_json_error_t *error)
+{
+    schema_check_ctx_t ctx;
+    if ((NULL == document) || (NULL == schema)) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    if (NULL != error) {
+        error->offset = 0;
+        error->path[0] = '\0';
+        error->message[0] = '\0';
+    }
+    ctx.root = schema;
+    ctx.error = error;
+    ctx.path[0] = '\0';
+    ctx.path_len = 0;
+    return schema_check_value(&ctx, document, schema);
 }
