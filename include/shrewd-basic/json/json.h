@@ -361,6 +361,7 @@ typedef struct shrewd_basic_json_key_info {
     double min;                 /**< RANGE bounds (with F_RANGE). */
     double max;
     const shrewd_basic_json_ops_t *ops; /**< Custom hooks, or NULL. */
+    int elem_ops;               /**< The hooks apply per element (arrays). */
     int union_style;            /**< SHREWD_BASIC_JSON_UNION_*. */
 } shrewd_basic_json_key_info_t;
 
@@ -373,6 +374,7 @@ typedef struct shrewd_basic_json_field_policy {
     double min;
     double max;
     const shrewd_basic_json_ops_t *ops;
+    int elem_ops;
     int union_style;
     int has_union_style;
 } shrewd_basic_json_field_policy_t;
@@ -418,7 +420,7 @@ struct shrewd_basic_json_info {
         .key_count = (sizeof((const char *const[]){ __VA_ARGS__, NULL })       \
                       / sizeof(const char *)) - 1,                             \
         .flags = 0, .min = 0.0, .max = 0.0,                                    \
-        .ops = NULL, .union_style = 0, .has_union_style = 0                    \
+        .ops = NULL, .elem_ops = 0, .union_style = 0, .has_union_style = 0                    \
     }
 
 /** Skip a zero-valued field on encode (false/0/""/NULL/empty containers). */
@@ -426,7 +428,7 @@ struct shrewd_basic_json_info {
     {                                                                          \
         .field = #member, .keys = NULL, .key_count = 0,                         \
         .flags = SHREWD_BASIC_JSON_F_OMIT_EMPTY, .min = 0.0, .max = 0.0,       \
-        .ops = NULL, .union_style = 0, .has_union_style = 0                    \
+        .ops = NULL, .elem_ops = 0, .union_style = 0, .has_union_style = 0                    \
     }
 
 /** The key must be present on decode. */
@@ -434,7 +436,7 @@ struct shrewd_basic_json_info {
     {                                                                          \
         .field = #member, .keys = NULL, .key_count = 0,                         \
         .flags = SHREWD_BASIC_JSON_F_REQUIRED, .min = 0.0, .max = 0.0,         \
-        .ops = NULL, .union_style = 0, .has_union_style = 0                    \
+        .ops = NULL, .elem_ops = 0, .union_style = 0, .has_union_style = 0                    \
     }
 
 /** The field never appears in JSON (neither direction). */
@@ -442,7 +444,7 @@ struct shrewd_basic_json_info {
     {                                                                          \
         .field = #member, .keys = NULL, .key_count = 0,                         \
         .flags = SHREWD_BASIC_JSON_F_HIDDEN, .min = 0.0, .max = 0.0,           \
-        .ops = NULL, .union_style = 0, .has_union_style = 0                    \
+        .ops = NULL, .elem_ops = 0, .union_style = 0, .has_union_style = 0                    \
     }
 
 /** Numeric bounds checked on encode and decode. */
@@ -451,14 +453,22 @@ struct shrewd_basic_json_info {
         .field = #member, .keys = NULL, .key_count = 0,                         \
         .flags = SHREWD_BASIC_JSON_F_RANGE, .min = (double)(lo),               \
         .max = (double)(hi),                                                   \
-        .ops = NULL, .union_style = 0, .has_union_style = 0                    \
+        .ops = NULL, .elem_ops = 0, .union_style = 0, .has_union_style = 0                    \
     }
 
 /** Custom encode/decode/check hooks for one field. */
 #define SHREWD_BASIC_JSON_OPS(member, ops_ref)                                  \
     {                                                                          \
         .field = #member, .keys = NULL, .key_count = 0, .flags = 0,             \
-        .min = 0.0, .max = 0.0, .ops = &(ops_ref),                             \
+        .min = 0.0, .max = 0.0, .ops = &(ops_ref), .elem_ops = 0,                 \
+        .union_style = 0, .has_union_style = 0                                 \
+    }
+
+/** Custom hooks applied PER ELEMENT of an array-shaped field. */
+#define SHREWD_BASIC_JSON_OPS_ELEM(member, ops_ref)                            \
+    {                                                                          \
+        .field = #member, .keys = NULL, .key_count = 0, .flags = 0,             \
+        .min = 0.0, .max = 0.0, .ops = &(ops_ref), .elem_ops = 1,               \
         .union_style = 0, .has_union_style = 0                                 \
     }
 
@@ -466,7 +476,7 @@ struct shrewd_basic_json_info {
 #define SHREWD_BASIC_JSON_UNION_STYLE(member, style)                            \
     {                                                                          \
         .field = #member, .keys = NULL, .key_count = 0, .flags = 0,             \
-        .min = 0.0, .max = 0.0, .ops = NULL,                                   \
+        .min = 0.0, .max = 0.0, .ops = NULL, .elem_ops = 0,                       \
         .union_style = (int)(style), .has_union_style = 1                      \
     }
 

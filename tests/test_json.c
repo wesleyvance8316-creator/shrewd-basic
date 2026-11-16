@@ -599,6 +599,63 @@ static void test_pointer(void)
     shrewd_basic_json_value_free(root);
 }
 
+/* --- inline container storage ----------------------------------------- */
+
+static void test_inline_containers(void)
+{
+    shrewd_basic_json_value_t *v = NULL;
+    char *text = NULL;
+
+    /* Tiny containers live entirely inline; growth spills to the heap. */
+    v = parse_ok("inline obj", "{\"a\":1}");
+    {
+        shrewd_basic_json_value_t *one = NULL;
+        shrewd_basic_json_value_t *two = NULL;
+        shrewd_basic_json_value_t *three = NULL;
+        int64_t number = 0;
+        (void)shrewd_basic_json_new_i64(2, &one);
+        expect_eq_int("inline set replace",
+                      shrewd_basic_json_set(v, "a", one), SHREWD_BASIC_ERR_OK);
+        (void)shrewd_basic_json_new_i64(3, &two);
+        expect_eq_int("inline add b",
+                      shrewd_basic_json_set(v, "b", two), SHREWD_BASIC_ERR_OK);
+        (void)shrewd_basic_json_new_i64(4, &three);
+        expect_eq_int("inline spill c",
+                      shrewd_basic_json_set(v, "c", three), SHREWD_BASIC_ERR_OK);
+        expect_true("inline count", (size_t)3 == shrewd_basic_json_count(v));
+        expect_eq_int("inline get a",
+                      shrewd_basic_json_to_i64(shrewd_basic_json_get(v, "a"),
+                                               &number),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("inline a value", 2 == number);
+        expect_eq_int("inline remove b",
+                      shrewd_basic_json_remove(v, "b"), SHREWD_BASIC_ERR_OK);
+        expect_true("inline count after remove",
+                    (size_t)2 == shrewd_basic_json_count(v));
+        expect_eq_int("inline serialize",
+                      shrewd_basic_json_serialize(v, &text, NULL, NULL),
+                      SHREWD_BASIC_ERR_OK);
+        expect_streq("inline text", text, "{\"a\":2,\"c\":4}");
+        shrewd_basic_json_text_free(text);
+    }
+    shrewd_basic_json_value_free(v);
+
+    /* Arrays behave the same; inline elements free their subtrees. */
+    v = parse_ok("inline array", "[\"a\",\"b\"]");
+    {
+        shrewd_basic_json_value_t *extra = NULL;
+        (void)shrewd_basic_json_new_string("c", &extra);
+        expect_eq_int("inline append third",
+                      shrewd_basic_json_append(v, extra), SHREWD_BASIC_ERR_OK);
+        expect_eq_int("inline remove first",
+                      shrewd_basic_json_remove_at(v, 0), SHREWD_BASIC_ERR_OK);
+        expect_true("inline array count", (size_t)2 == shrewd_basic_json_count(v));
+        expect_streq("inline array first",
+                     shrewd_basic_json_to_string(shrewd_basic_json_at(v, 0)), "b");
+    }
+    shrewd_basic_json_value_free(v);
+}
+
 int main(void)
 {
     test_parse_scalars();
@@ -611,5 +668,6 @@ int main(void)
     test_roundtrip();
     test_sinks_and_text();
     test_pointer();
+    test_inline_containers();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

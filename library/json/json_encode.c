@@ -293,15 +293,61 @@ static int json_encode_field(json_map_ctx_t *ctx,
     const unsigned char *at = object + field->sb_refl_offset;
     *out = NULL;
     if ((NULL != view->ops) && (NULL != view->ops->encode)) {
-        /* Custom hook replaces the metadata mapping. */
-        const void *target = at;
-        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
-            target = reflect_load_ptr(at);
-            if (NULL == target) {
-                return shrewd_basic_json_new(SHREWD_BASIC_JSON_NULL, out);
+        if ((0 != view->elem_ops)
+                && (0u != (field->sb_refl_flags
+                           & (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY
+                              | SHREWD_BASIC_REFLECT_FIELD_F_DARRAY)))) {
+            /* Element-scope hook: one call per element, glued into an
+               JSON array. */
+            reflect_array_view_t view_slots = reflect_array_view(object, field);
+            shrewd_basic_json_value_t *list = NULL;
+            int status = shrewd_basic_json_new(SHREWD_BASIC_JSON_ARRAY, &list);
+            for (size_t i = 0; (SHREWD_BASIC_ERR_OK == status)
+                    && (i < view_slots.count); ++i) {
+                const unsigned char *elem =
+                        view_slots.base + (i * view_slots.stride);
+                shrewd_basic_json_value_t *item = NULL;
+                if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
+                    void *pointer = reflect_load_ptr(elem);
+                    status = (NULL == pointer)
+                            ? shrewd_basic_json_new(SHREWD_BASIC_JSON_NULL, &item)
+                            : view->ops->encode(pointer, &item);
+                } else {
+                    status = view->ops->encode(elem, &item);
+                }
+                if ((SHREWD_BASIC_ERR_OK == status) && (NULL != view->ops->check)) {
+                    const void *target = (0u != (field->sb_refl_flags
+                                                 & SHREWD_BASIC_REFLECT_FIELD_F_PTR))
+                            ? reflect_load_ptr(elem) : elem;
+                    if (NULL != target) {
+                        status = view->ops->check(target);
+                    }
+                }
+                if (SHREWD_BASIC_ERR_OK == status) {
+                    status = shrewd_basic_json_append(list, item);
+                }
+                if (SHREWD_BASIC_ERR_OK != status) {
+                    shrewd_basic_json_value_free(item);
+                }
             }
+            if (SHREWD_BASIC_ERR_OK != status) {
+                shrewd_basic_json_value_free(list);
+                return status;
+            }
+            *out = list;
+            return SHREWD_BASIC_ERR_OK;
         }
-        return view->ops->encode(target, out);
+        /* Custom hook replaces the metadata mapping. */
+        {
+            const void *target = at;
+            if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
+                target = reflect_load_ptr(at);
+                if (NULL == target) {
+                    return shrewd_basic_json_new(SHREWD_BASIC_JSON_NULL, out);
+                }
+            }
+            return view->ops->encode(target, out);
+        }
     }
     if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_BITS)) {
         uint64_t unit = reflect_load_u64(at, field->sb_refl_size);
@@ -315,16 +361,7 @@ static int json_encode_field(json_map_ctx_t *ctx,
                 (const char *)at,
                 reflect_strn_len((const char *)at, field->sb_refl_count), out);
     }
-    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
-        void *pointer = reflect_load_ptr(at);
-        if (NULL == pointer) {
-            return shrewd_basic_json_new(SHREWD_BASIC_JSON_NULL, out);
-        }
-        return json_encode_node(ctx, field->sb_refl_type,
-                                (const unsigned char *)pointer,
-                                field->sb_refl_type->sb_refl_size,
-                                reflect_field_ops(field), depth, out);
-    }
+
     if ((0u != (field->sb_refl_flags
                 & (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY
                    | SHREWD_BASIC_REFLECT_FIELD_F_DARRAY)))) {
@@ -369,6 +406,16 @@ static int json_encode_field(json_map_ctx_t *ctx,
         }
         *out = array;
         return SHREWD_BASIC_ERR_OK;
+    }
+    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
+        void *pointer = reflect_load_ptr(at);
+        if (NULL == pointer) {
+            return shrewd_basic_json_new(SHREWD_BASIC_JSON_NULL, out);
+        }
+        return json_encode_node(ctx, field->sb_refl_type,
+                                (const unsigned char *)pointer,
+                                field->sb_refl_type->sb_refl_size,
+                                reflect_field_ops(field), depth, out);
     }
     return json_encode_node(ctx, field->sb_refl_type, at, field->sb_refl_stride,
                             reflect_field_ops(field), depth, out);
@@ -484,7 +531,8 @@ static int json_encode_fields(json_map_ctx_t *ctx,
                 }
             }
             if ((SHREWD_BASIC_ERR_OK == status) && (NULL != view.ops)
-                    && (NULL != view.ops->check) && (NULL != target)) {
+                    && (NULL != view.ops->check) && (NULL != target)
+                    && (0 == view.elem_ops)) {
                 status = view.ops->check(target);
                 if (SHREWD_BASIC_ERR_OK != status) {
                     (void)json_map_fail(ctx, status, "ops->check rejected the value");

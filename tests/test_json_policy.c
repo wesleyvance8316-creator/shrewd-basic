@@ -689,12 +689,82 @@ static void test_schema_export(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
+/* --- element-scope ops fixture ---------------------------------------- */
+
+typedef struct {
+    int32_t values[3];
+    int32_t *handles[2];
+} elem_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(elem_reflect, elem_t,
+    SHREWD_BASIC_REFLECT_FIELD_ARRAY(elem_t, values, shrewd_basic_reflect_int32),
+    SHREWD_BASIC_REFLECT_FIELD_PTR_ARRAY(elem_t, handles, shrewd_basic_reflect_int32));
+
+SHREWD_BASIC_JSON_DEFINE(elem_json, elem_reflect,
+    SHREWD_BASIC_JSON_OPS_ELEM(values, g_score_ops),
+    SHREWD_BASIC_JSON_OPS_ELEM(handles, g_handle_json_ops));
+
+static void test_elem_ops(void)
+{
+    elem_t source;
+    int32_t h1 = 10;
+    int32_t h2 = 20;
+    char *text = NULL;
+    memset(&source, 0, sizeof(source));
+    source.values[0] = 1;
+    source.values[1] = 2;
+    source.values[2] = 3;
+    source.handles[0] = &h1;
+    source.handles[1] = &h2;
+
+    /* Encode runs the hooks per element. */
+    expect_encode("elem ops encode", &source, &elem_reflect, &elem_json,
+                  "{\"values\":[2,3,4],\"handles\":[10,20]}");
+
+    /* Decode runs them per element; handles allocate targets. */
+    g_handle_destroys = 0;
+    {
+        elem_t *target = NULL;
+        void *block = NULL;
+        (void)shrewd_basic_platform_calloc(&block, 1, sizeof(elem_t));
+        target = block;
+        expect_eq_int("elem ops decode",
+                      decode_into("{\"values\":[2,3,4],\"handles\":[7,8]}", target,
+                                  &elem_reflect, &elem_json, NULL, NULL),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("elem ops decoded",
+                    (1 == target->values[0]) && (3 == target->values[2])
+                    && (NULL != target->handles[0])
+                    && (7 == *target->handles[0])
+                    && (8 == *target->handles[1]));
+        expect_eq_int("elem ops free",
+                      shrewd_basic_json_free(target, &elem_reflect, &elem_json),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("elem ops destroy x2", 2 == g_handle_destroys);
+        (void)shrewd_basic_platform_free(&block);
+    }
+
+    /* Per-element check rejects bad elements with the index in the path. */
+    {
+        shrewd_basic_json_error_t error;
+        elem_t target;
+        memset(&target, 0, sizeof(target));
+        expect_eq_int("elem ops check",
+                      decode_into("{\"values\":[1,2,-2]}", &target, &elem_reflect,
+                                  &elem_json, NULL, &error),
+                      SHREWD_BASIC_ERR_ARG_INVALID);
+        expect_true("elem ops check msg", NULL != strstr(error.message, "element"));
+    }
+    (void)text;
+}
+
 int main(void)
 {
     test_key_aliases();
     test_keep_defaults();
     test_loose_keys();
     test_ops_targets();
+    test_elem_ops();
     test_required_range_check();
     test_union_styles();
     test_keys_export();

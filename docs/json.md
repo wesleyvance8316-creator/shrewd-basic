@@ -186,6 +186,7 @@ encode/decode 的 `info` 参数携带策略(NULL = 纯元数据,行为不变)。
 | `OMIT_EMPTY` | encode 省略零值(false/0/""/NULL/空容器,按 **C 值**判断,不受 ops 变换影响) |
 | `RANGE(lo, hi)` | encode/decode 双向校验数值范围 |
 | `OPS(field, json_ops)` | `encode/decode/check` 三钩子替换该字段的映射(值语义按目标,指针字段取指目标;NULL 指针直接映射 null) |
+| `OPS_ELEM(field, json_ops)` | 同一套钩子按**元素**作用于数组字段(逐元素编解码/校验/释放,指针元素的槽位语义同字段级) |
 | `UNION_STYLE(field, s)` | `NESTED`(F1,默认)/ `FLAT`(F4,变体字段平铺到父对象,body 键消失)/ `UNWRAP`(F2,单字段变体直出其值) |
 
 - 同一字段的多行策略**按方面合并**(后行覆盖同行方面);
@@ -233,7 +234,8 @@ encode/decode 的 `info` 参数携带策略(NULL = 纯元数据,行为不变)。
   union 形态覆盖/键清单导出/严格模式;
 - demo `programs/json_demo.c`:encode(紧凑/pretty)、decode、DOM 查询修改、策略;
 - 基准 `tools/json_bench.sh`:parse/serialize/查询/encode/decode 的 ns/op 基线;
-- 性能:数字 token 与短字符串**内联**在值节点中(≤31 字节零分配),解析吞吐
-  较内联前提升约 27%;arena 与 encode 直写经评估暂缓(见提交说明);
+- 性能:数字 token、短字符串与**容器前 2 个成员**共享值节点的内联存储
+  (同一块 32 字节,kind 互斥),小容器文档解析提升约 23%,宽文档持平;
+  arena 与 encode 直写经评估暂缓(见提交说明);
 - 构建随库源码自动 glob,子项目集成零污染;验证纪律同全库
   (GCC/Clang 严格告警、valgrind、ASan/UBSan)。

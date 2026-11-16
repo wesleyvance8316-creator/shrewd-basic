@@ -114,18 +114,45 @@ int json_buf_string(json_buf_t *buf, const char *text)
 static int json_value_alloc(shrewd_basic_json_kind_t kind,
                             shrewd_basic_json_value_t **out)
 {
+    shrewd_basic_json_value_t *node = NULL;
     void *block = NULL;
     if (NULL == out) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     *out = NULL;
     if (SHREWD_BASIC_ERR_OK
-            != shrewd_basic_platform_calloc(&block, 1,
-                                            sizeof(shrewd_basic_json_value_t))) {
+            != shrewd_basic_platform_alloc(&block,
+                                           sizeof(shrewd_basic_json_value_t))) {
         return SHREWD_BASIC_ERR_MEM_NOMEM;
     }
-    ((shrewd_basic_json_value_t *)block)->kind = kind;
-    *out = block;
+    node = block;
+    node->kind = kind;
+    /* Initialize only the live head of the union - the inline slots are
+       written before they are read, so they skip the zeroing traffic. */
+    switch (kind) {
+    case SHREWD_BASIC_JSON_ARRAY:
+        node->u.array.items = NULL;
+        node->u.array.count = 0;
+        node->u.array.cap = 0;
+        break;
+    case SHREWD_BASIC_JSON_OBJECT:
+        node->u.object.entries = NULL;
+        node->u.object.count = 0;
+        node->u.object.cap = 0;
+        break;
+    case SHREWD_BASIC_JSON_BOOL:
+        node->u.boolean = false;
+        break;
+    case SHREWD_BASIC_JSON_NUMBER:
+        node->u.number.raw = NULL;
+        break;
+    case SHREWD_BASIC_JSON_STRING:
+        node->u.string = NULL;
+        break;
+    default:
+        break;
+    }
+    *out = node;
     return SHREWD_BASIC_ERR_OK;
 }
 
@@ -159,11 +186,11 @@ int json_value_new_number(const char *raw, size_t n,
     if (SHREWD_BASIC_ERR_OK != status) {
         return status;
     }
-    if (n < sizeof((*out)->local)) {
+    if (n < sizeof((*out)->local.bytes)) {
         /* Inline: short tokens avoid a malloc each. */
-        memcpy((*out)->local, raw, n);
-        (*out)->local[n] = '\0';
-        (*out)->u.number.raw = (*out)->local;
+        memcpy((*out)->local.bytes, raw, n);
+        (*out)->local.bytes[n] = '\0';
+        (*out)->u.number.raw = (*out)->local.bytes;
         return SHREWD_BASIC_ERR_OK;
     }
     {
@@ -224,13 +251,13 @@ int shrewd_basic_json_new_string_n(const char *text, size_t n,
     if (SHREWD_BASIC_ERR_OK != status) {
         return status;
     }
-    if (n < sizeof((*out)->local)) {
+    if (n < sizeof((*out)->local.bytes)) {
         /* Inline: short strings avoid a malloc each. */
         if ((NULL != text) && (0 < n)) {
-            memcpy((*out)->local, text, n);
+            memcpy((*out)->local.bytes, text, n);
         }
-        (*out)->local[n] = '\0';
-        (*out)->u.string = (*out)->local;
+        (*out)->local.bytes[n] = '\0';
+        (*out)->u.string = (*out)->local.bytes;
         return SHREWD_BASIC_ERR_OK;
     }
     {
@@ -263,12 +290,12 @@ void shrewd_basic_json_value_free(shrewd_basic_json_value_t *value)
     }
     switch (value->kind) {
     case SHREWD_BASIC_JSON_NUMBER:
-        if (value->u.number.raw != value->local) {
+        if (value->u.number.raw != value->local.bytes) {
             (void)shrewd_basic_platform_free((void **)&value->u.number.raw);
         }
         break;
     case SHREWD_BASIC_JSON_STRING:
-        if (value->u.string != value->local) {
+        if (value->u.string != value->local.bytes) {
             (void)shrewd_basic_platform_free((void **)&value->u.string);
         }
         break;
@@ -276,7 +303,9 @@ void shrewd_basic_json_value_free(shrewd_basic_json_value_t *value)
         for (size_t i = 0; i < value->u.array.count; ++i) {
             shrewd_basic_json_value_free(value->u.array.items[i]);
         }
-        (void)shrewd_basic_platform_free((void **)&value->u.array.items);
+        if (0 != value->u.array.cap) {
+            (void)shrewd_basic_platform_free((void **)&value->u.array.items);
+        }
         break;
     case SHREWD_BASIC_JSON_OBJECT:
         for (size_t i = 0; i < value->u.object.count; ++i) {
@@ -284,7 +313,9 @@ void shrewd_basic_json_value_free(shrewd_basic_json_value_t *value)
                     (void **)&value->u.object.entries[i].key);
             shrewd_basic_json_value_free(value->u.object.entries[i].value);
         }
-        (void)shrewd_basic_platform_free((void **)&value->u.object.entries);
+        if (0 != value->u.object.cap) {
+            (void)shrewd_basic_platform_free((void **)&value->u.object.entries);
+        }
         break;
     default:
         break;
@@ -492,11 +523,19 @@ static int json_object_grow(shrewd_basic_json_value_t *object)
     }
     {
         size_t cap = (0 == object->u.object.cap) ? 4 : (object->u.object.cap * 2);
+        size_t have = object->u.object.count;
         void *block = NULL;
         if (SHREWD_BASIC_ERR_OK
-                != shrewd_basic_platform_realloc(&block, object->u.object.entries,
-                                                 cap * sizeof(shrewd_basic_json_entry_t))) {
+                != shrewd_basic_platform_alloc(&block,
+                                               cap * sizeof(shrewd_basic_json_entry_t))) {
             return SHREWD_BASIC_ERR_MEM_NOMEM;
+        }
+        if (0 < have) {
+            memcpy(block, object->u.object.entries,
+                   have * sizeof(shrewd_basic_json_entry_t));
+        }
+        if (0 != object->u.object.cap) {
+            (void)shrewd_basic_platform_free((void **)&object->u.object.entries);
         }
         object->u.object.entries = block;
         object->u.object.cap = cap;
@@ -531,6 +570,25 @@ int json_object_add(shrewd_basic_json_value_t *object, const char *key,
             || (NULL == key) || (NULL == item)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
+    if (0 == object->u.object.cap) {
+        if (NULL == object->u.object.entries) {
+            object->u.object.entries = (shrewd_basic_json_entry_t *)
+                (void *)object->local.bytes;
+        }
+        if (object->u.object.count < 2) {
+            void *key_block = NULL;
+            size_t key_len = strlen(key);
+            if (SHREWD_BASIC_ERR_OK
+                    != shrewd_basic_platform_alloc(&key_block, key_len + 1)) {
+                return SHREWD_BASIC_ERR_MEM_NOMEM;
+            }
+            memcpy(key_block, key, key_len + 1);
+            object->u.object.entries[object->u.object.count].key = key_block;
+            object->u.object.entries[object->u.object.count].value = item;
+            object->u.object.count += 1;
+            return SHREWD_BASIC_ERR_OK;
+        }
+    }
     status = json_object_grow(object);
     if (SHREWD_BASIC_ERR_OK != status) {
         return status;
@@ -553,13 +611,33 @@ int shrewd_basic_json_append(shrewd_basic_json_value_t *array,
             || (NULL == item)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
+    if (0 == array->u.array.cap) {
+        /* Inline storage until the third element forces a spill. */
+        if (NULL == array->u.array.items) {
+            array->u.array.items = (shrewd_basic_json_value_t **)
+                (void *)array->local.bytes;
+        }
+        if (array->u.array.count < 2) {
+            array->u.array.items[array->u.array.count] = item;
+            array->u.array.count += 1;
+            return SHREWD_BASIC_ERR_OK;
+        }
+    }
     if (array->u.array.count >= array->u.array.cap) {
         size_t cap = (0 == array->u.array.cap) ? 4 : (array->u.array.cap * 2);
         void *block = NULL;
+        size_t have = array->u.array.count;
         if (SHREWD_BASIC_ERR_OK
-                != shrewd_basic_platform_realloc(&block, array->u.array.items,
-                                                 cap * sizeof(shrewd_basic_json_value_t *))) {
+                != shrewd_basic_platform_alloc(&block,
+                                               cap * sizeof(shrewd_basic_json_value_t *))) {
             return SHREWD_BASIC_ERR_MEM_NOMEM;
+        }
+        if (0 < have) {
+            memcpy(block, array->u.array.items,
+                   have * sizeof(shrewd_basic_json_value_t *));
+        }
+        if (0 != array->u.array.cap) {
+            (void)shrewd_basic_platform_free((void **)&array->u.array.items);
         }
         array->u.array.items = block;
         array->u.array.cap = cap;

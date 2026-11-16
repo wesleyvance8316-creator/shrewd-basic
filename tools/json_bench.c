@@ -75,6 +75,35 @@ int main(void)
 
     printf("json_bench: document %d objects, %zu bytes\n", N, len);
 
+    /* Small-container document: 1-member objects (the inline case). */
+    {
+        enum { M = 4000, SMALL_MAX = 131072 };
+        static char small[SMALL_MAX];
+        size_t small_len = 0;
+        shrewd_basic_json_value_t *tiny = NULL;
+        small_len = (size_t)snprintf(small, sizeof(small), "[");
+        for (int i = 0; i < M; ++i) {
+            small_len += (size_t)snprintf(small + small_len,
+                                          sizeof(small) - small_len,
+                                          "%s{\"k%d\":%d}", (0 != i) ? "," : "",
+                                          i, i);
+        }
+        (void)snprintf(small + small_len, sizeof(small) - small_len, "]");
+        small_len = strlen(small);
+        printf("small-container document %d objects, %zu bytes\n", M, small_len);
+        {
+            long iters = 100;
+            double start = now_ns();
+            for (long i = 0; i < iters; ++i) {
+                shrewd_basic_json_value_free(tiny);
+                tiny = NULL;
+                (void)shrewd_basic_json_parse(small, small_len, &tiny, NULL, NULL);
+            }
+            report("parse (tiny containers)", iters, now_ns() - start);
+            shrewd_basic_json_value_free(tiny);
+        }
+    }
+
     /* parse */
     {
         long iters = 200;

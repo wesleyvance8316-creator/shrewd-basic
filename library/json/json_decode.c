@@ -459,7 +459,8 @@ static int json_decode_field(json_map_ctx_t *ctx,
                              const shrewd_basic_json_key_info_t *view)
 {
     unsigned char *at = object + field->sb_refl_offset;
-    if ((NULL != view->ops) && (NULL != view->ops->decode)) {
+    if ((NULL != view->ops) && (NULL != view->ops->decode)
+            && (0 == view->elem_ops)) {
         /* Custom hook replaces the metadata mapping: the field storage
            for value fields, the pointer slot for pointer fields (the ops
            allocates the target - json_free releases it via ops->destroy). */
@@ -497,9 +498,8 @@ static int json_decode_field(json_map_ctx_t *ctx,
         }
         return SHREWD_BASIC_ERR_OK;
     }
-    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
-        return json_decode_pointer(ctx, value, field->sb_refl_type, at, depth);
-    }
+    /* Array shapes come before the single-pointer case: a pointer table
+       is an array first and a pointer second. */
     if (0u != (field->sb_refl_flags
                & (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY
                   | SHREWD_BASIC_REFLECT_FIELD_F_DARRAY))) {
@@ -549,7 +549,19 @@ static int json_decode_field(json_map_ctx_t *ctx,
             size_t mark = json_map_mark(ctx);
             int status;
             json_map_index(ctx, i);
-            if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
+            if ((NULL != view->ops) && (NULL != view->ops->decode)
+                    && (0 != view->elem_ops)) {
+                /* Element-scope hook: the slot per element (the ops owns
+                   pointer allocations exactly like at field level). */
+                status = view->ops->decode(item, slot);
+                if ((SHREWD_BASIC_ERR_OK == status) && (NULL != view->ops->check)) {
+                    status = view->ops->check(slot);
+                }
+                if (SHREWD_BASIC_ERR_OK != status) {
+                    (void)json_map_fail(ctx, status,
+                                        "element %zu rejected by ops", i);
+                }
+            } else if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
                 status = json_decode_pointer(ctx, item, field->sb_refl_type,
                                              slot, depth);
             } else {
@@ -562,6 +574,9 @@ static int json_decode_field(json_map_ctx_t *ctx,
             }
         }
         return SHREWD_BASIC_ERR_OK;
+    }
+    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
+        return json_decode_pointer(ctx, value, field->sb_refl_type, at, depth);
     }
     return json_decode_node(ctx, value, field->sb_refl_type, at,
                             field->sb_refl_stride, depth + 1);
@@ -631,7 +646,7 @@ static int json_decode_fields(json_map_ctx_t *ctx,
             }
         }
         if ((SHREWD_BASIC_ERR_OK == status) && (NULL != view.ops)
-                && (NULL != view.ops->check)) {
+                && (NULL != view.ops->check) && (0 == view.elem_ops)) {
             void *target = object + field->sb_refl_offset;
             if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
                 memcpy(&target, target, sizeof(target));
@@ -945,16 +960,27 @@ static void json_release_field(const shrewd_basic_reflect_field_t *field,
             }
             table = (unsigned char *)(uintptr_t)view.base;
         }
-        for (size_t j = 0; j < view.count; ++j) {
-            unsigned char *slot = (NULL != table) ? (table + (j * view.stride))
-                                                  : (at + (j * view.stride));
-            if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
-                void *pointer = NULL;
-                memcpy(&pointer, slot, sizeof(pointer));
-                json_release_pointer(field->sb_refl_type, NULL, pointer, root);
-                memset(slot, 0, sizeof(void *));
-            } else {
-                json_release_value(field->sb_refl_type, slot, info, root);
+        {
+            void (*elem_destroy)(void *target) = NULL;
+            if (0 != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
+                shrewd_basic_json_key_info_t view_ops;
+                json_policy_view(info, field, &view_ops);
+                if ((NULL != view_ops.ops) && (0 != view_ops.elem_ops)) {
+                    elem_destroy = view_ops.ops->destroy;
+                }
+            }
+            for (size_t j = 0; j < view.count; ++j) {
+                unsigned char *slot = (NULL != table) ? (table + (j * view.stride))
+                                                      : (at + (j * view.stride));
+                if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
+                    void *pointer = NULL;
+                    memcpy(&pointer, slot, sizeof(pointer));
+                    json_release_pointer(field->sb_refl_type, elem_destroy,
+                                          pointer, root);
+                    memset(slot, 0, sizeof(void *));
+                } else {
+                    json_release_value(field->sb_refl_type, slot, info, root);
+                }
             }
         }
         if (NULL != table) {
@@ -1001,6 +1027,25 @@ static void json_destroy_ops_fields(const shrewd_basic_reflect_field_t *fields,
         }
         json_policy_view(info, field, &view);
         if ((NULL == view.ops) || (NULL == view.ops->destroy)) {
+            continue;
+        }
+        if ((0 != view.elem_ops)
+                && (0u != (field->sb_refl_flags
+                           & (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY
+                              | SHREWD_BASIC_REFLECT_FIELD_F_DARRAY)))) {
+            reflect_array_view_t slots = reflect_array_view(base, field);
+            for (size_t j = 0; j < slots.count; ++j) {
+                unsigned char *slot = (unsigned char *)(uintptr_t)(
+                        slots.base + (j * slots.stride));
+                if (0u == (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
+                    continue;
+                }
+                memcpy(&pointer, slot, sizeof(pointer));
+                if (NULL != pointer) {
+                    view.ops->destroy(pointer);
+                    memset(slot, 0, sizeof(void *));
+                }
+            }
             continue;
         }
         memcpy(&pointer, at, sizeof(pointer));

@@ -160,12 +160,14 @@ typedef struct {
     point_t *home;
     const char **p_str;
     int32_t *counter;
+    point_t *links[2];
 } refs_t;
 
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(refs_reflect, refs_t,
     SHREWD_BASIC_REFLECT_FIELD_PTR(refs_t, home, point_reflect),
     SHREWD_BASIC_REFLECT_FIELD_PTR(refs_t, p_str, shrewd_basic_reflect_string),
-    SHREWD_BASIC_REFLECT_FIELD_PTR(refs_t, counter, shrewd_basic_reflect_int32));
+    SHREWD_BASIC_REFLECT_FIELD_PTR(refs_t, counter, shrewd_basic_reflect_int32),
+    SHREWD_BASIC_REFLECT_FIELD_PTR_ARRAY(refs_t, links, point_reflect));
 
 typedef struct {
     size_t len;
@@ -582,13 +584,21 @@ static void test_pointers(void)
 {
     refs_t *refs = decode_new(
             "decode refs",
-            "{\"home\":{\"x\":3,\"y\":4},\"p_str\":\"hi\",\"counter\":7}",
+            "{\"home\":{\"x\":3,\"y\":4},\"p_str\":\"hi\",\"counter\":7,"
+            "\"links\":[{\"x\":1,\"y\":2},null]}",
             &refs_reflect, sizeof(refs_t));
     if (NULL != refs) {
         expect_true("decode refs targets",
                     (NULL != refs->home) && (3 == refs->home->x)
                     && (NULL != refs->p_str) && (0 == strcmp(*refs->p_str, "hi"))
                     && (NULL != refs->counter) && (7 == *refs->counter));
+        expect_true("decode refs pointer array",
+                    (NULL != refs->links[0]) && (1 == refs->links[0]->x)
+                    && (NULL == refs->links[1]));
+        /* Metadata pointer arrays round-trip (no ops involved). */
+        expect_encode("encode refs", refs, &refs_reflect,
+                      "{\"home\":{\"x\":3,\"y\":4},\"p_str\":\"hi\",\"counter\":7,"
+                      "\"links\":[{\"x\":1,\"y\":2},null]}");
         expect_eq_int("decode refs free",
                       free_new(refs, &refs_reflect),
                       SHREWD_BASIC_ERR_OK);

@@ -24,7 +24,18 @@ typedef struct shrewd_basic_json_entry {
 
 struct shrewd_basic_json_value {
     shrewd_basic_json_kind_t kind;
-    char local[32]; /* inline storage: short number tokens and strings */
+    /*
+     * Inline storage, shared across kinds: short number tokens and
+     * strings live here (SSO), and so do the first two members of
+     * containers (the slots of a container and the token of a scalar
+     * never coexist). The union gives it the alignment entry pointers
+     * need.
+     */
+    union {
+        char bytes[32];
+        shrewd_basic_json_entry_t entry;
+        shrewd_basic_json_value_t *slot;
+    } local;
     union {
         bool boolean;
         struct {
@@ -34,12 +45,12 @@ struct shrewd_basic_json_value {
         struct {
             shrewd_basic_json_value_t **items;
             size_t count;
-            size_t cap;
+            size_t cap; /* 0 = the inline slots are the storage */
         } array;
         struct {
             shrewd_basic_json_entry_t *entries;
             size_t count;
-            size_t cap;
+            size_t cap; /* 0 = the inline slots are the storage */
         } object;
     } u;
 };
