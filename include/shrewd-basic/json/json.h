@@ -76,7 +76,7 @@ typedef struct shrewd_basic_json_options {
     int strict;               /**< decode: unknown keys and alias conflicts error. */
     int keep_defaults;        /**< decode: missing keys keep pre-set values. */
     int key_match;            /**< decode: SHREWD_BASIC_JSON_KEY_MATCH_*. */
-    int escape_unicode;       /**< serialize: non-ASCII as \uXXXX escapes. */
+    int escape_unicode;       /**< serialize: non-ASCII as \\uXXXX escapes. */
     int validate_utf8;        /**< parse: reject invalid UTF-8 in strings. */
 } shrewd_basic_json_options_t;
 
