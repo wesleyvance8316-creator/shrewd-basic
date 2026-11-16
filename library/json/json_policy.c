@@ -26,6 +26,8 @@ void json_policy_view(const shrewd_basic_json_info_t *info,
     out->ops = NULL;
     out->elem_ops = 0;
     out->union_style = SHREWD_BASIC_JSON_UNION_NESTED;
+    out->format = NULL;
+    out->pattern = NULL;
     if (NULL == info) {
         return;
     }
@@ -49,6 +51,12 @@ void json_policy_view(const shrewd_basic_json_info_t *info,
         }
         if (0 != row->has_union_style) {
             out->union_style = row->union_style;
+        }
+        if (NULL != row->format) {
+            out->format = row->format;
+        }
+        if (NULL != row->pattern) {
+            out->pattern = row->pattern;
         }
     }
 }

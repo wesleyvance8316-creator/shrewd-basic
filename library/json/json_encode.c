@@ -590,10 +590,7 @@ int shrewd_basic_json_encode_value(const void *object,
                              "info describes \"%s\", not \"%s\"",
                              info->type->sb_refl_name, type->sb_refl_name);
     }
-    if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
-        return json_map_fail(&ctx, SHREWD_BASIC_ERR_ARG_INVALID,
-                             "type \"%s\" is not a struct", type->sb_refl_name);
-    }
+
     status = json_encode_node(&ctx, type, (const unsigned char *)object,
                               type->sb_refl_size, type->sb_refl_ops, 0, out);
     if (SHREWD_BASIC_ERR_OK == status) {

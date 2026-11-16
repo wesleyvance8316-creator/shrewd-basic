@@ -187,6 +187,7 @@ encode/decode 的 `info` 参数携带策略(NULL = 纯元数据,行为不变)。
 | `RANGE(lo, hi)` | encode/decode 双向校验数值范围 |
 | `OPS(field, json_ops)` | `encode/decode/check` 三钩子替换该字段的映射(值语义按目标,指针字段取指目标;NULL 指针直接映射 null) |
 | `OPS_ELEM(field, json_ops)` | 同一套钩子按**元素**作用于数组字段(逐元素编解码/校验/释放,指针元素的槽位语义同字段级) |
+| `FORMAT(field, "date-time")` / `PATTERN(field, "^")` | Schema 的 `format`/`pattern` 标注(**仅标注**,不参与 decode 校验——C11 无正则,校验请走 `OPS->check`) |
 | `UNION_STYLE(field, s)` | `NESTED`(F1,默认)/ `FLAT`(F4,变体字段平铺到父对象,body 键消失)/ `UNWRAP`(F2,单字段变体直出其值) |
 
 - 同一字段的多行策略**按方面合并**(后行覆盖同行方面);
@@ -220,7 +221,11 @@ encode/decode 的 `info` 参数携带策略(NULL = 纯元数据,行为不变)。
 | 工具 | 语义 |
 |---|---|
 | `json_pointer(root, "/a/b/0", &out)` | RFC 6901 JSON Pointer 查询(`~0`/`~1` 转义;数组段下标、对象段键名) |
-| `json_schema(type, info, &text)` | 导出 draft-07 子集 Schema:属性/`required`/`minimum`/`maximum`/`enum`/`x-aliases`,嵌套结构体走 `$defs`+`$ref`(自引用安全),union 出 `oneOf` |
+| `json_pointer_set(root, "/a/b/-", item)` | Pointer 写入:末段替换成员/元素或 `"-"` 数组追加;失败时 `item` 仍归调用方 |
+| `json_decode_pointer(value, "/a/b", obj, type, ...)` | 局部解码:把指针指向的子文档映射进对象(根不必是 struct,标量亦可) |
+| `json_replace_at(value, i, item)` | 原位替换数组元素/对象成员(释放旧值) |
+| `json_schema(type, info, &text)` | 导出 draft-07 子集 Schema:属性/`required`/`minimum`/`maximum`/`enum`/`x-aliases`,嵌套结构体走 `$defs`+`$ref`(自引用安全),union 出 `oneOf` 并按
+  `UNION_STYLE` 标注 `x-union-style`(UNWRAP 变体直出裸值) |
 | `json_value_size(value, type, &size)` | FAM 尺寸助手:返回 decode 目标所需字节(头 + JSON 尾长) |
 | `reflect_gen.py` 骨架 | 为每个 struct 产出注释形式的 `SHREWD_BASIC_JSON_DEFINE` 策略模板(解开注释即用) |
 

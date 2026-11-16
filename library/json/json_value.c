@@ -680,6 +680,31 @@ int shrewd_basic_json_remove_at(shrewd_basic_json_value_t *value, size_t index)
     return SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH;
 }
 
+int shrewd_basic_json_replace_at(shrewd_basic_json_value_t *value, size_t index,
+                                 shrewd_basic_json_value_t *item)
+{
+    if ((NULL == value) || (NULL == item)) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    if (SHREWD_BASIC_JSON_ARRAY == value->kind) {
+        if (index >= value->u.array.count) {
+            return SHREWD_BASIC_ERR_KEY_NOTFOUND;
+        }
+        shrewd_basic_json_value_free(value->u.array.items[index]);
+        value->u.array.items[index] = item;
+        return SHREWD_BASIC_ERR_OK;
+    }
+    if (SHREWD_BASIC_JSON_OBJECT == value->kind) {
+        if (index >= value->u.object.count) {
+            return SHREWD_BASIC_ERR_KEY_NOTFOUND;
+        }
+        shrewd_basic_json_value_free(value->u.object.entries[index].value);
+        value->u.object.entries[index].value = item;
+        return SHREWD_BASIC_ERR_OK;
+    }
+    return SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH;
+}
+
 int shrewd_basic_json_remove(shrewd_basic_json_value_t *value, const char *key)
 {
     if ((NULL == value) || (SHREWD_BASIC_JSON_OBJECT != value->kind)

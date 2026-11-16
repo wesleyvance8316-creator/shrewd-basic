@@ -75,6 +75,97 @@ int shrewd_basic_json_pointer(const shrewd_basic_json_value_t *root,
     return SHREWD_BASIC_ERR_OK;
 }
 
+int shrewd_basic_json_pointer_set(shrewd_basic_json_value_t *root,
+                                  const char *pointer,
+                                  shrewd_basic_json_value_t *item)
+{
+    shrewd_basic_json_value_t *cur = root;
+    const char *p = pointer;
+    char segment[256];
+    char last[256];
+    size_t n = 0;
+    if ((NULL == root) || (NULL == pointer) || (NULL == item)) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    if ('/' != *p) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    ++p;
+    for (;;) {
+        /* Decode one segment into "segment"; "last" remembers the one
+           before the cursor advances (the final step applies the set). */
+        n = 0;
+        while (('\0' != *p) && ('/' != *p)) {
+            if ('~' == *p) {
+                ++p;
+                if (('0' != *p) && ('1' != *p)) {
+                    return SHREWD_BASIC_ERR_ARG_INVALID;
+                }
+                segment[n++] = ('0' == *p) ? '~' : '/';
+                ++p;
+            } else {
+                segment[n++] = *p++;
+            }
+            if (n >= sizeof(segment)) {
+                return SHREWD_BASIC_ERR_ARG_INVALID;
+            }
+        }
+        segment[n] = '\0';
+        if ('\0' == *p) {
+            memcpy(last, segment, n + 1);
+            break;
+        }
+        ++p;
+        /* Intermediate step: descend into a container. */
+        if (SHREWD_BASIC_JSON_ARRAY == shrewd_basic_json_kind(cur)) {
+            size_t index = 0;
+            if ('\0' == segment[0]) {
+                return SHREWD_BASIC_ERR_ARG_INVALID;
+            }
+            for (size_t i = 0; i < n; ++i) {
+                if (('0' > segment[i]) || ('9' < segment[i])) {
+                    return SHREWD_BASIC_ERR_ARG_INVALID;
+                }
+                index = (index * 10) + (size_t)(segment[i] - '0');
+            }
+            cur = shrewd_basic_json_at(cur, index);
+        } else if (SHREWD_BASIC_JSON_OBJECT == shrewd_basic_json_kind(cur)) {
+            cur = shrewd_basic_json_get(cur, segment);
+        } else {
+            cur = NULL;
+        }
+        if (NULL == cur) {
+            return SHREWD_BASIC_ERR_KEY_NOTFOUND;
+        }
+    }
+    /* Apply the last step. */
+    if (SHREWD_BASIC_JSON_OBJECT == shrewd_basic_json_kind(cur)) {
+        return shrewd_basic_json_set(cur, last, item);
+    }
+    if (SHREWD_BASIC_JSON_ARRAY == shrewd_basic_json_kind(cur)) {
+        if (0 == strcmp("-", last)) {
+            return shrewd_basic_json_append(cur, item);
+        }
+        {
+            size_t index = 0;
+            shrewd_basic_json_value_t *old = NULL;
+            for (size_t i = 0; last[i] != '\0'; ++i) {
+                if (('0' > last[i]) || ('9' < last[i])) {
+                    return SHREWD_BASIC_ERR_ARG_INVALID;
+                }
+                index = (index * 10) + (size_t)(last[i] - '0');
+            }
+            old = shrewd_basic_json_at(cur, index);
+            if (NULL == old) {
+                return SHREWD_BASIC_ERR_KEY_NOTFOUND;
+            }
+            /* Replace in place: drop the old value, keep the slot. */
+            return shrewd_basic_json_replace_at(cur, index, item);
+        }
+    }
+    return SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH;
+}
+
 /* --- JSON Schema export ----------------------------------------------- */
 
 typedef struct schema_ctx {
@@ -157,11 +248,24 @@ static int schema_union(schema_ctx_t *ctx,
                         shrewd_basic_json_value_t **out)
 {
     const shrewd_basic_reflect_type_t *type = field->sb_refl_type;
+    shrewd_basic_json_key_info_t view;
     shrewd_basic_json_value_t *wrapper = NULL;
     shrewd_basic_json_value_t *cases = NULL;
-    int status = shrewd_basic_json_new(SHREWD_BASIC_JSON_OBJECT, &wrapper);
+    int status;
+    json_policy_view(info, field, &view);
+    status = shrewd_basic_json_new(SHREWD_BASIC_JSON_OBJECT, &wrapper);
     if (SHREWD_BASIC_ERR_OK != status) {
         return status;
+    }
+    if (SHREWD_BASIC_JSON_UNION_NESTED != view.union_style) {
+        /* Record the style: FLAT lifts the variant fields to the parent
+           level, UNWRAP carries the value directly. */
+        shrewd_basic_json_value_t *style = NULL;
+        (void)shrewd_basic_json_new_string(
+                (SHREWD_BASIC_JSON_UNION_FLAT == view.union_style) ? "flat"
+                                                                   : "unwrap",
+                &style);
+        (void)shrewd_basic_json_set(wrapper, "x-union-style", style);
     }
     status = shrewd_basic_json_new(SHREWD_BASIC_JSON_ARRAY, &cases);
     for (size_t v = 0; (SHREWD_BASIC_ERR_OK == status)
@@ -169,6 +273,18 @@ static int schema_union(schema_ctx_t *ctx,
         const shrewd_basic_reflect_variant_t *variant = &type->sb_refl_variants[v];
         shrewd_basic_json_value_t *body = NULL;
         shrewd_basic_json_value_t *props = NULL;
+        if ((SHREWD_BASIC_JSON_UNION_UNWRAP == view.union_style)
+                && (1 == variant->sb_refl_field_count)) {
+            /* Unwrapped variant: the body is the bare value. */
+            shrewd_basic_json_value_t *bare = NULL;
+            status = schema_value(ctx, &variant->sb_refl_fields[0], info, &bare);
+            if (SHREWD_BASIC_ERR_OK == status) {
+                status = shrewd_basic_json_append(cases, bare);
+            } else {
+                shrewd_basic_json_value_free(bare);
+            }
+            continue;
+        }
         status = shrewd_basic_json_new(SHREWD_BASIC_JSON_OBJECT, &body);
         if (SHREWD_BASIC_ERR_OK == status) {
             shrewd_basic_json_value_t *kind = NULL;
@@ -371,6 +487,16 @@ static int schema_type(schema_ctx_t *ctx, const shrewd_basic_reflect_type_t *typ
                     (void)shrewd_basic_json_append(aliases, alias);
                 }
                 (void)shrewd_basic_json_set(one, "x-aliases", aliases);
+            }
+            if ((SHREWD_BASIC_ERR_OK == status) && (NULL != view.format)) {
+                shrewd_basic_json_value_t *fmt = NULL;
+                (void)shrewd_basic_json_new_string(view.format, &fmt);
+                (void)shrewd_basic_json_set(one, "format", fmt);
+            }
+            if ((SHREWD_BASIC_ERR_OK == status) && (NULL != view.pattern)) {
+                shrewd_basic_json_value_t *pat = NULL;
+                (void)shrewd_basic_json_new_string(view.pattern, &pat);
+                (void)shrewd_basic_json_set(one, "pattern", pat);
             }
             if (SHREWD_BASIC_ERR_OK == status) {
                 status = shrewd_basic_json_set(props, view.keys[0], one);

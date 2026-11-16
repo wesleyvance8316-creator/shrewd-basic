@@ -809,10 +809,6 @@ int shrewd_basic_json_decode_value(const shrewd_basic_json_value_t *value,
                              "info describes \"%s\", not \"%s\"",
                              info->type->sb_refl_name, type->sb_refl_name);
     }
-    if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
-        return json_map_fail(&ctx, SHREWD_BASIC_ERR_ARG_INVALID,
-                             "type \"%s\" is not a struct", type->sb_refl_name);
-    }
     return json_decode_node(&ctx, value, type, (unsigned char *)object,
                             type->sb_refl_size, 0);
 }
@@ -1054,6 +1050,29 @@ static void json_destroy_ops_fields(const shrewd_basic_reflect_field_t *fields,
             memset(at, 0, sizeof(void *));
         }
     }
+}
+
+int shrewd_basic_json_decode_pointer(const shrewd_basic_json_value_t *value,
+                                     const char *pointer, void *object,
+                                     const shrewd_basic_reflect_type_t *type,
+                                     const shrewd_basic_json_info_t *info,
+                                     const shrewd_basic_json_options_t *options,
+                                     shrewd_basic_json_error_t *error)
+{
+    const shrewd_basic_json_value_t *sub = NULL;
+    int status;
+    if (NULL != error) {
+        error->offset = 0;
+        (void)snprintf(error->path, sizeof(error->path), "%s",
+                       (NULL != pointer) ? pointer : "");
+        error->message[0] = '\0';
+    }
+    status = shrewd_basic_json_pointer(value, pointer, &sub);
+    if (SHREWD_BASIC_ERR_OK != status) {
+        return status;
+    }
+    return shrewd_basic_json_decode_value(sub, object, type, info, options,
+                                          error);
 }
 
 int shrewd_basic_json_free(void *object, const shrewd_basic_reflect_type_t *type,

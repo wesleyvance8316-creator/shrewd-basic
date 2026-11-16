@@ -656,6 +656,52 @@ static void test_inline_containers(void)
     shrewd_basic_json_value_free(v);
 }
 
+/* --- pointer set / decode_pointer ------------------------------------- */
+
+static void test_pointer_set(void)
+{
+    shrewd_basic_json_value_t *root = NULL;
+    shrewd_basic_json_value_t *item = NULL;
+    char *text = NULL;
+    root = parse_ok("set src", "{\"a\":{\"b\":[10,20]},\"c\":1}");
+
+    /* Replace an object member. */
+    (void)shrewd_basic_json_new_i64(99, &item);
+    expect_eq_int("set object",
+                  shrewd_basic_json_pointer_set(root, "/c", item),
+                  SHREWD_BASIC_ERR_OK);
+    /* Append to an array with "-". */
+    (void)shrewd_basic_json_new_i64(30, &item);
+    expect_eq_int("set append",
+                  shrewd_basic_json_pointer_set(root, "/a/b/-", item),
+                  SHREWD_BASIC_ERR_OK);
+    /* Replace an array element in place. */
+    (void)shrewd_basic_json_new_i64(11, &item);
+    expect_eq_int("set element",
+                  shrewd_basic_json_pointer_set(root, "/a/b/0", item),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("set serialize",
+                  shrewd_basic_json_serialize(root, &text, NULL, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_streq("set result", text,
+                 "{\"a\":{\"b\":[11,20,30]},\"c\":99}");
+    shrewd_basic_json_text_free(text);
+
+    /* Failures leave the item with the caller. */
+    (void)shrewd_basic_json_new_i64(1, &item);
+    expect_eq_int("set missing",
+                  shrewd_basic_json_pointer_set(root, "/zz/b", item),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("set out of range",
+                  shrewd_basic_json_pointer_set(root, "/a/b/9", item),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("set bad pointer",
+                  shrewd_basic_json_pointer_set(root, "x", item),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    shrewd_basic_json_value_free(item);
+    shrewd_basic_json_value_free(root);
+}
+
 int main(void)
 {
     test_parse_scalars();
@@ -669,5 +715,6 @@ int main(void)
     test_sinks_and_text();
     test_pointer();
     test_inline_containers();
+    test_pointer_set();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

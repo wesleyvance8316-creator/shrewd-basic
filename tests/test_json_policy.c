@@ -758,6 +758,90 @@ static void test_elem_ops(void)
     (void)text;
 }
 
+/* --- schema sync + decode_pointer ------------------------------------- */
+
+static void test_schema_sync(void)
+{
+    char *text = NULL;
+    shrewd_basic_json_info_t probe;
+
+    /* FORMAT/PATTERN rows land in the schema as annotations. */
+    {
+        /* Build a one-off policy over cfg_reflect on the stack: the
+           DEFINE macros are for globals, so exercise the rows through
+           the existing cfg_json plus pattern/format in a tiny static. */
+        static const shrewd_basic_json_field_policy_t extras[] = {
+            SHREWD_BASIC_JSON_FORMAT(age, "int32"),
+            SHREWD_BASIC_JSON_PATTERN(name, "^[a-z]+$") };
+        memset(&probe, 0, sizeof(probe));
+        probe.type = &cfg_reflect;
+        probe.fields = extras;
+        probe.field_count = sizeof(extras) / sizeof(extras[0]);
+        expect_eq_int("schema annotations",
+                      shrewd_basic_json_schema(&cfg_reflect, &probe, &text, NULL,
+                                               NULL),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("schema annotation keys",
+                    (NULL != strstr(text, "\"format\":\"int32\""))
+                    && (NULL != strstr(text, "\"pattern\":\"^[a-z]+$\"")));
+        shrewd_basic_json_text_free(text);
+    }
+
+    /* Union styles are recorded and UNWRAP emits bare values. */
+    text = NULL;
+    expect_eq_int("schema unwrap",
+                  shrewd_basic_json_schema(&msg_reflect, &msg_unwrap_json, &text,
+                                           NULL, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("schema unwrap annotation",
+                (NULL != strstr(text, "\"x-union-style\":\"unwrap\""))
+                && (NULL != strstr(text, "oneOf")));
+    shrewd_basic_json_text_free(text);
+    text = NULL;
+    expect_eq_int("schema flat",
+                  shrewd_basic_json_schema(&msg_reflect, &msg_flat_json, &text,
+                                           NULL, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("schema flat annotation",
+                NULL != strstr(text, "\"x-union-style\":\"flat\""));
+    shrewd_basic_json_text_free(text);
+}
+
+static void test_decode_pointer(void)
+{
+    const char *doc =
+            "{\"header\":{\"id\":5},\"items\":[{\"x\":1,\"y\":2},{\"x\":3,\"y\":4}]}";
+    shrewd_basic_json_value_t *root = NULL;
+    shrewd_basic_json_error_t error;
+    point_t target;
+    int32_t id = 0;
+
+    expect_eq_int("decode pointer parse",
+                  shrewd_basic_json_parse(doc, strlen(doc), &root, NULL, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    memset(&target, 0, sizeof(target));
+    expect_eq_int("decode pointer sub",
+                  shrewd_basic_json_decode_pointer(root, "/items/1", &target,
+                                                   &point_reflect, NULL, NULL,
+                                                   &error),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("decode pointer value", (3 == target.x) && (4 == target.y));
+    /* Sub-tree decode allocates nothing for pure values; the header has
+       no strings here either. */
+    expect_eq_int("decode pointer scalar",
+                  shrewd_basic_json_decode_pointer(root, "/header/id", &id,
+                                                   &shrewd_basic_reflect_int32,
+                                                   NULL, NULL, &error),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("decode pointer scalar value", 5 == id);
+    expect_eq_int("decode pointer missing",
+                  shrewd_basic_json_decode_pointer(root, "/zz", &target,
+                                                   &point_reflect, NULL, NULL,
+                                                   &error),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    shrewd_basic_json_value_free(root);
+}
+
 int main(void)
 {
     test_key_aliases();
@@ -769,5 +853,7 @@ int main(void)
     test_union_styles();
     test_keys_export();
     test_schema_export();
+    test_schema_sync();
+    test_decode_pointer();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
