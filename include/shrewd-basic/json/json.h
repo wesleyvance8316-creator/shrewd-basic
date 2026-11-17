@@ -74,7 +74,7 @@ typedef struct shrewd_basic_json_options {
     int allow_nan;            /**< encode: NaN/inf become null (default: error). */
     int allow_unknown_union;  /**< encode: unknown union tag -> null body. */
     int strict;               /**< decode: unknown keys and alias conflicts error. */
-    int keep_defaults;        /**< decode: missing keys keep pre-set values. */
+    int use_defaults;         /**< decode: missing keys materialize DEFAULT values. */
     int key_match;            /**< decode: SHREWD_BASIC_JSON_KEY_MATCH_*. */
     int escape_unicode;       /**< serialize: non-ASCII as \\uXXXX escapes. */
     int validate_utf8;        /**< parse: reject invalid UTF-8 in strings. */
@@ -402,6 +402,12 @@ int shrewd_basic_json_free(void *object, const shrewd_basic_reflect_type_t *type
 #define SHREWD_BASIC_JSON_F_REQUIRED ((uint32_t)2u)   /**< decode: missing key errors. */
 #define SHREWD_BASIC_JSON_F_HIDDEN ((uint32_t)4u)     /**< never encoded or decoded. */
 #define SHREWD_BASIC_JSON_F_RANGE ((uint32_t)8u)      /**< value must sit in [min, max]. */
+#define SHREWD_BASIC_JSON_F_BORROWED ((uint32_t)16u)  /**< pointer is app-owned: never decoded or freed. */
+
+/** How a DEFAULT row stores its value. */
+#define SHREWD_BASIC_JSON_DEF_NONE 0   /**< No default declared. */
+#define SHREWD_BASIC_JSON_DEF_NUM 1    /**< Numeric (def_u bits + def_d value). */
+#define SHREWD_BASIC_JSON_DEF_STR 2    /**< String literal (def_s). */
 
 /**
  * Application callbacks for one field (JSON-flavored counterpart of the
@@ -434,6 +440,10 @@ typedef struct shrewd_basic_json_key_info {
     int union_style;            /**< SHREWD_BASIC_JSON_UNION_*. */
     const char *format;         /**< Schema "format" annotation, or NULL. */
     const char *pattern;        /**< Schema "pattern" annotation, or NULL. */
+    int def_kind;               /**< SHREWD_BASIC_JSON_DEF_*. */
+    uint64_t def_u;             /**< DEF_NUM: integer bit pattern. */
+    double def_d;               /**< DEF_NUM: floating value. */
+    const char *def_s;          /**< DEF_STR: the literal. */
 } shrewd_basic_json_key_info_t;
 
 /** Per-field policy row (produced by the macros below). */
@@ -450,6 +460,10 @@ typedef struct shrewd_basic_json_field_policy {
     int has_union_style;
     const char *format;
     const char *pattern;
+    int def_kind;
+    uint64_t def_u;
+    double def_d;
+    const char *def_s;
 } shrewd_basic_json_field_policy_t;
 
 /** Per-type policy: what SHREWD_BASIC_JSON_DEFINE() produces. */
@@ -506,11 +520,60 @@ struct shrewd_basic_json_info {
         .format = NULL, .pattern = NULL                    \
     }
 
-/** The key must be present on decode. */
+/**
+ * The key must be present on decode - or materialized from a DEFAULT row
+ * when use_defaults is on.
+ */
 #define SHREWD_BASIC_JSON_REQUIRED(member)                                      \
     {                                                                          \
         .field = #member, .keys = NULL, .key_count = 0,                         \
         .flags = SHREWD_BASIC_JSON_F_REQUIRED, .min = 0.0, .max = 0.0,         \
+        .ops = NULL, .elem_ops = 0, .union_style = 0, .has_union_style = 0, \
+        .format = NULL, .pattern = NULL                    \
+    }
+
+/**
+ * Default value materialized when the key is missing and the decode
+ * runs with use_defaults (integers, bools, chars, enums and floats via
+ * one numeric slot; signed values keep their bit pattern). Phase one
+ * covers scalar fields without ops hooks only - struct/array defaults
+ * are ignored. A materialized default satisfies REQUIRED.
+ */
+#define SHREWD_BASIC_JSON_DEFAULT(member, value)                                \
+    {                                                                          \
+        .field = #member, .keys = NULL, .key_count = 0, .flags = 0,             \
+        .min = 0.0, .max = 0.0, .ops = NULL, .elem_ops = 0,                     \
+        .union_style = 0, .has_union_style = 0,                                 \
+        .format = NULL, .pattern = NULL,                                        \
+        .def_kind = SHREWD_BASIC_JSON_DEF_NUM,                                  \
+        .def_u = (uint64_t)(value), .def_d = (double)(value), .def_s = NULL     \
+    }
+
+/**
+ * String default (a C literal) materialized on missing keys under
+ * use_defaults: decode allocates and copies the text, so json_free
+ * releases it like any decoded string.
+ */
+#define SHREWD_BASIC_JSON_DEFAULT_STR(member, text)                             \
+    {                                                                          \
+        .field = #member, .keys = NULL, .key_count = 0, .flags = 0,             \
+        .min = 0.0, .max = 0.0, .ops = NULL, .elem_ops = 0,                     \
+        .union_style = 0, .has_union_style = 0,                                 \
+        .format = NULL, .pattern = NULL,                                        \
+        .def_kind = SHREWD_BASIC_JSON_DEF_STR,                                  \
+        .def_u = 0, .def_d = 0.0, .def_s = (text)                               \
+    }
+
+/**
+ * The pointer field is application-owned: decode never writes it and
+ * json_free never releases it. Assign it after decoding (decode zeroes
+ * the target first) and hand it whatever lifetime you like - a literal,
+ * a borrowed buffer, your own allocation.
+ */
+#define SHREWD_BASIC_JSON_BORROWED(member)                                      \
+    {                                                                          \
+        .field = #member, .keys = NULL, .key_count = 0,                         \
+        .flags = SHREWD_BASIC_JSON_F_BORROWED, .min = 0.0, .max = 0.0,         \
         .ops = NULL, .elem_ops = 0, .union_style = 0, .has_union_style = 0, \
         .format = NULL, .pattern = NULL                    \
     }

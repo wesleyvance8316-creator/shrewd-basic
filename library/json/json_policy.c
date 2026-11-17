@@ -28,6 +28,10 @@ void json_policy_view(const shrewd_basic_json_info_t *info,
     out->union_style = SHREWD_BASIC_JSON_UNION_NESTED;
     out->format = NULL;
     out->pattern = NULL;
+    out->def_kind = SHREWD_BASIC_JSON_DEF_NONE;
+    out->def_u = 0;
+    out->def_d = 0.0;
+    out->def_s = NULL;
     if (NULL == info) {
         return;
     }
@@ -57,6 +61,12 @@ void json_policy_view(const shrewd_basic_json_info_t *info,
         }
         if (NULL != row->pattern) {
             out->pattern = row->pattern;
+        }
+        if (SHREWD_BASIC_JSON_DEF_NONE != row->def_kind) {
+            out->def_kind = row->def_kind;
+            out->def_u = row->def_u;
+            out->def_d = row->def_d;
+            out->def_s = row->def_s;
         }
     }
 }

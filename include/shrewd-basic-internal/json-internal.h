@@ -78,12 +78,9 @@ int json_object_add_steal(shrewd_basic_json_value_t *object, char *key,
  * created (pre-set defaults - static literals or caller allocations -
  * are never touched). Not synchronized; see docs/json.md.
  */
-typedef struct json_owner json_owner_t;
-int json_owner_touch(const void *root);            /* ensure an owner exists */
-int json_owner_calloc(const void *root, void **out, size_t size); /* tracked */
-int json_owner_owns(const void *root, const void *block);
-int json_owner_release(const void *root, void **block); /* free one owned block */
-void json_owner_release_all(const void *root);
+/* Decode allocation tracking is gone: targets start zeroed and every
+ * pointer decode writes is decode-owned (policy BORROWED fields excepted),
+ * so release is a plain recursive walk. */
 
 /*
  * Merged policy view of one field: the identity view (member name as

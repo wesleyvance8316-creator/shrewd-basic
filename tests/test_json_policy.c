@@ -532,37 +532,102 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(collide_reflect, collide_t,
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(collide_t, name_id),
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(collide_t, nameID));
 
-static void test_keep_defaults(void)
+/* --- use_defaults / BORROWED fixture ---------------------------------- */
+
+typedef struct {
+    int32_t level;
+    double ratio;
+    const char *label;
+    const char *unit; /* BORROWED: application-owned */
+} dfl_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(dfl_reflect, dfl_t,
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, level),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, ratio),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, label),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, unit));
+
+SHREWD_BASIC_JSON_DEFINE(dfl_json, dfl_reflect,
+    SHREWD_BASIC_JSON_DEFAULT(level, 7),
+    SHREWD_BASIC_JSON_DEFAULT(ratio, 0.5),
+    SHREWD_BASIC_JSON_DEFAULT_STR(label, "guest"),
+    SHREWD_BASIC_JSON_REQUIRED(label),
+    SHREWD_BASIC_JSON_BORROWED(unit));
+
+static void test_use_defaults(void)
 {
     shrewd_basic_json_options_t options;
-    cfg_t target;
+    dfl_t target;
     memset(&options, 0, sizeof(options));
-    options.keep_defaults = 1;
-    memset(&target, 0, sizeof(target));
-    target.age = 99;
-    target.name = "def"; /* static literal: never freed by json_free */
+    options.use_defaults = 1;
 
-    /* Missing keys keep the pre-set defaults. */
+    /* Missing keys materialize the policy defaults (decode allocates
+       the string); REQUIRED is satisfied by the default. */
+    memset(&target, 0, sizeof(target));
     expect_eq_int("defaults decode",
-                  decode_into("{\"age\":1}", &target, &cfg_reflect, &cfg_json,
+                  decode_into("{}", &target, &dfl_reflect, &dfl_json,
                               &options, NULL),
                   SHREWD_BASIC_ERR_OK);
-    expect_true("defaults kept",
-                (1 == target.age) && (target.name == (const char *)"def"
-                                      || 0 == strcmp(target.name, "def")));
+    expect_true("defaults num", 7 == target.level);
+    expect_true("defaults float", 0.5 == target.ratio);
+    expect_streq("defaults str", target.label, "guest");
     expect_eq_int("defaults free",
-                  shrewd_basic_json_free(&target, &cfg_reflect, &cfg_json),
+                  shrewd_basic_json_free(&target, &dfl_reflect, &dfl_json),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("defaults str released", NULL == target.label);
+
+    /* A present key wins over the default; explicit null is present. */
+    memset(&target, 0, sizeof(target));
+    expect_eq_int("defaults override",
+                  decode_into("{\"level\":3,\"label\":null}", &target,
+                              &dfl_reflect, &dfl_json, &options, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("defaults override level", 3 == target.level);
+    expect_true("defaults override null", NULL == target.label);
+    expect_eq_int("defaults override free",
+                  shrewd_basic_json_free(&target, &dfl_reflect, &dfl_json),
                   SHREWD_BASIC_ERR_OK);
 
-    /* A refill releases what decode allocated, never the default. */
+    /* use_defaults off: missing keys stay zero, missing REQUIRED errors. */
+    memset(&options, 0, sizeof(options));
+    memset(&target, 0, sizeof(target));
+    expect_eq_int("defaults off required",
+                  decode_into("{}", &target, &dfl_reflect, &dfl_json,
+                              &options, NULL),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("defaults off free",
+                  shrewd_basic_json_free(&target, &dfl_reflect, &dfl_json),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("defaults off decode",
+                  decode_into("{\"level\":3}", &target, &dfl_reflect, &dfl_json,
+                              &options, NULL),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND); /* label still required */
+
+    /* Duplicate keys: refill frees the earlier copy, last wins. */
+    options.use_defaults = 1;
+    memset(&target, 0, sizeof(target));
     expect_eq_int("defaults refill",
-                  decode_into("{\"name_id\":\"a\",\"nameID\":\"b\"}", &target,
-                              &cfg_reflect, &cfg_json, &options, NULL),
+                  decode_into("{\"label\":\"a\",\"label\":\"b\"}", &target,
+                              &dfl_reflect, &dfl_json, &options, NULL),
                   SHREWD_BASIC_ERR_OK);
-    expect_streq("defaults refill last wins", target.name, "b");
+    expect_streq("defaults refill last wins", target.label, "b");
     expect_eq_int("defaults refill free",
-                  shrewd_basic_json_free(&target, &cfg_reflect, &cfg_json),
+                  shrewd_basic_json_free(&target, &dfl_reflect, &dfl_json),
                   SHREWD_BASIC_ERR_OK);
+
+    /* BORROWED: decode leaves it NULL, json_free never touches it. */
+    memset(&target, 0, sizeof(target));
+    expect_eq_int("borrowed decode",
+                  decode_into("{\"label\":\"x\"}", &target, &dfl_reflect,
+                              &dfl_json, &options, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("borrowed untouched by decode", NULL == target.unit);
+    target.unit = "kg"; /* static literal, installed after decode */
+    expect_eq_int("borrowed free",
+                  shrewd_basic_json_free(&target, &dfl_reflect, &dfl_json),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("borrowed survives free",
+                (NULL != target.unit) && (0 == strcmp(target.unit, "kg")));
 }
 
 static void test_loose_keys(void)
@@ -933,7 +998,7 @@ static void test_schema_check(void)
 int main(void)
 {
     test_key_aliases();
-    test_keep_defaults();
+    test_use_defaults();
     test_loose_keys();
     test_ops_targets();
     test_elem_ops();

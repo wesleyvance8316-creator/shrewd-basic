@@ -11,12 +11,16 @@
 SHREWD_BASIC_LOG_MODULE_DECLARE(shrewd_basic_json_log);
 
 /*
- * DOM -> struct mapping. The target is zeroed first (missing keys keep
- * zero defaults), then JSON members fill fields; count members are
- * DERIVED from array lengths (JSON count keys are ignored). Arrays may
- * be shorter than their slots (the tail stays zero) but not longer.
- * Strings and pointer targets are allocated through platform_alloc, so
- * shrewd_basic_json_free() - the exact inverse - releases everything.
+ * DOM -> struct mapping. The target is zeroed first, then JSON members
+ * fill fields; count members are DERIVED from array lengths (JSON count
+ * keys are ignored). Arrays may be shorter than their slots (the tail
+ * stays zero) but not longer. Strings and pointer targets are allocated
+ * through platform_alloc, and every pointer decode writes is decode-
+ * owned (policy BORROWED fields excepted), so
+ * shrewd_basic_json_free() - the exact inverse - releases every non-
+ * NULL pointer. Consequence: never decode over an object that still
+ * holds decoded allocations (free first), and hand-install pointers
+ * only into BORROWED fields.
  */
 #define JSON_MAP_MAX_DEPTH 32
 
@@ -25,9 +29,13 @@ typedef struct json_map_ctx {
     size_t path_len;
     const shrewd_basic_json_options_t *options;
     const shrewd_basic_json_info_t *info;
-    const void *root;
     shrewd_basic_json_error_t *error;
 } json_map_ctx_t;
+
+/* Release walk (below): frees what decode allocated in a partial tree. */
+static void json_release_value(const shrewd_basic_reflect_type_t *type,
+                               void *value,
+                               const shrewd_basic_json_info_t *info);
 
 static int json_map_fail(json_map_ctx_t *ctx, int status, const char *fmt, ...)
 {
@@ -229,11 +237,10 @@ static int json_decode_fields(json_map_ctx_t *ctx,
                               const shrewd_basic_reflect_field_t *fields,
                               size_t count, unsigned char *object, size_t depth);
 
-/* Release one field's decoded content (decode-owned blocks only). */
+/* Release one field's decoded content (BORROWED fields excluded). */
 static void json_release_field(const shrewd_basic_reflect_field_t *field,
                                void *object,
-                               const shrewd_basic_json_info_t *info,
-                               const void *root);
+                               const shrewd_basic_json_info_t *info);
 
 static int json_decode_node(json_map_ctx_t *ctx,
                             const shrewd_basic_json_value_t *value,
@@ -318,7 +325,7 @@ static int json_decode_node(json_map_ctx_t *ctx,
         }
         text = shrewd_basic_json_to_string(value);
         if (SHREWD_BASIC_ERR_OK
-                != json_owner_calloc(ctx->root, &block, strlen(text) + 1)) {
+                != shrewd_basic_platform_calloc(&block, 1, strlen(text) + 1)) {
             return SHREWD_BASIC_ERR_MEM_NOMEM;
         }
         memcpy(block, text, strlen(text) + 1);
@@ -390,9 +397,7 @@ static int json_decode_node(json_map_ctx_t *ctx,
         return json_map_fail(ctx, SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH,
                              "expected an object");
     }
-    if (0 == ctx->options->keep_defaults) {
-        memset(target, 0, type->sb_refl_size);
-    }
+    memset(target, 0, type->sb_refl_size);
     return json_decode_fields(ctx, value, type->sb_refl_fields,
                               type->sb_refl_field_count, target, depth + 1);
 }
@@ -438,13 +443,14 @@ static int json_decode_pointer(json_map_ctx_t *ctx,
     } else {
         size = type->sb_refl_size;
     }
-    if (SHREWD_BASIC_ERR_OK != json_owner_calloc(ctx->root, &target, size)) {
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_calloc(&target, 1, size)) {
         return SHREWD_BASIC_ERR_MEM_NOMEM;
     }
     status = json_decode_node(ctx, value, type, (unsigned char *)target, size,
                               depth + 1);
     if (SHREWD_BASIC_ERR_OK != status) {
-        (void)json_owner_release(ctx->root, &target);
+        json_release_value(type, target, ctx->info);
+        (void)shrewd_basic_platform_free(&target);
         return status;
     }
     memcpy(slot, &target, sizeof(target));
@@ -526,7 +532,7 @@ static int json_decode_field(json_map_ctx_t *ctx,
                                              & SHREWD_BASIC_REFLECT_FIELD_F_SENTINEL))
                                      ? 1u : 0u)) * stride;
             if (SHREWD_BASIC_ERR_OK
-                    != json_owner_calloc(ctx->root, (void **)&table, bytes)) {
+                    != shrewd_basic_platform_calloc((void **)&table, 1, bytes)) {
                 return SHREWD_BASIC_ERR_MEM_NOMEM;
             }
             memcpy(at, &table, sizeof(table));
@@ -582,6 +588,103 @@ static int json_decode_field(json_map_ctx_t *ctx,
                             field->sb_refl_stride, depth + 1);
 }
 
+/*
+ * Materialize a policy default into a missing field (use_defaults).
+ * Phase one covers plain scalars and strings without ops hooks; other
+ * shapes stay zero. Returns OK with the field untouched when the row is
+ * out of scope.
+ */
+static int json_decode_default(json_map_ctx_t *ctx,
+                               const shrewd_basic_reflect_field_t *field,
+                               unsigned char *object,
+                               const shrewd_basic_json_key_info_t *view)
+{
+    unsigned char *at = object + field->sb_refl_offset;
+    if (NULL != view->ops) {
+        return SHREWD_BASIC_ERR_OK;
+    }
+    if (0u != (field->sb_refl_flags
+               & (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY
+                  | SHREWD_BASIC_REFLECT_FIELD_F_DARRAY
+                  | SHREWD_BASIC_REFLECT_FIELD_F_PTR
+                  | SHREWD_BASIC_REFLECT_FIELD_F_BITS
+                  | SHREWD_BASIC_REFLECT_FIELD_F_UNION))) {
+        return SHREWD_BASIC_ERR_OK;
+    }
+    if ((SHREWD_BASIC_REFLECT_KIND_STRING == field->sb_refl_type->sb_refl_kind)
+            && (0u != (field->sb_refl_flags
+                       & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF))) {
+        if ((SHREWD_BASIC_JSON_DEF_STR != view->def_kind)
+                || (NULL == view->def_s)) {
+            return SHREWD_BASIC_ERR_OK;
+        }
+        size_t length = strlen(view->def_s);
+        if (length > field->sb_refl_count) {
+            return json_map_fail(ctx, SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH,
+                                 "default longer than %zu", field->sb_refl_count);
+        }
+        memcpy(at, view->def_s, length);
+        if (length < field->sb_refl_count) {
+            at[length] = '\0';
+        }
+        return SHREWD_BASIC_ERR_OK;
+    }
+    switch (field->sb_refl_type->sb_refl_kind) {
+    case SHREWD_BASIC_REFLECT_KIND_STRING: {
+        void *block = NULL;
+        if ((SHREWD_BASIC_JSON_DEF_STR != view->def_kind)
+                || (NULL == view->def_s)) {
+            return SHREWD_BASIC_ERR_OK;
+        }
+        if (SHREWD_BASIC_ERR_OK
+                != shrewd_basic_platform_calloc(&block, 1,
+                                                strlen(view->def_s) + 1)) {
+            return SHREWD_BASIC_ERR_MEM_NOMEM;
+        }
+        memcpy(block, view->def_s, strlen(view->def_s) + 1);
+        memcpy(at, &block, sizeof(block));
+        return SHREWD_BASIC_ERR_OK;
+    }
+    case SHREWD_BASIC_REFLECT_KIND_BOOL:
+        if (SHREWD_BASIC_JSON_DEF_NUM != view->def_kind) {
+            return SHREWD_BASIC_ERR_OK;
+        }
+        reflect_store_u64(at, field->sb_refl_stride,
+                          (0 != view->def_u) ? 1u : 0u);
+        return SHREWD_BASIC_ERR_OK;
+    case SHREWD_BASIC_REFLECT_KIND_FLOAT:
+    case SHREWD_BASIC_REFLECT_KIND_DOUBLE: {
+        if (SHREWD_BASIC_JSON_DEF_NUM != view->def_kind) {
+            return SHREWD_BASIC_ERR_OK;
+        }
+        if (4 == field->sb_refl_stride) {
+            float narrowed = (float)view->def_d;
+            memcpy(at, &narrowed, sizeof(narrowed));
+        } else {
+            memcpy(at, &view->def_d, sizeof(view->def_d));
+        }
+        return SHREWD_BASIC_ERR_OK;
+    }
+    case SHREWD_BASIC_REFLECT_KIND_INT8:
+    case SHREWD_BASIC_REFLECT_KIND_INT16:
+    case SHREWD_BASIC_REFLECT_KIND_INT32:
+    case SHREWD_BASIC_REFLECT_KIND_INT64:
+    case SHREWD_BASIC_REFLECT_KIND_UINT8:
+    case SHREWD_BASIC_REFLECT_KIND_UINT16:
+    case SHREWD_BASIC_REFLECT_KIND_UINT32:
+    case SHREWD_BASIC_REFLECT_KIND_UINT64:
+    case SHREWD_BASIC_REFLECT_KIND_CHAR:
+    case SHREWD_BASIC_REFLECT_KIND_ENUM:
+        if (SHREWD_BASIC_JSON_DEF_NUM != view->def_kind) {
+            return SHREWD_BASIC_ERR_OK;
+        }
+        reflect_store_u64(at, field->sb_refl_stride, view->def_u);
+        return SHREWD_BASIC_ERR_OK;
+    default:
+        return SHREWD_BASIC_ERR_OK;
+    }
+}
+
 static int json_decode_fields(json_map_ctx_t *ctx,
                               const shrewd_basic_json_value_t *value,
                               const shrewd_basic_reflect_field_t *fields,
@@ -611,7 +714,8 @@ static int json_decode_fields(json_map_ctx_t *ctx,
             continue;
         }
         json_policy_view(ctx->info, field, &view);
-        if ((0 != (view.flags & SHREWD_BASIC_JSON_F_HIDDEN))
+        if ((0 != (view.flags & (SHREWD_BASIC_JSON_F_HIDDEN
+                                 | SHREWD_BASIC_JSON_F_BORROWED)))
                 || (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_UNION))
                 || (0 != json_map_is_count_member(fields, count, field))) {
             continue;
@@ -629,10 +733,10 @@ static int json_decode_fields(json_map_ctx_t *ctx,
         member = shrewd_basic_json_at(value, i);
         mark = json_map_mark(ctx);
         json_map_member(ctx, field->sb_refl_name);
-        /* Refill (duplicate keys/aliases, or a second decode over the
-           same object): release what decode put there earlier so "last
-           wins" never leaks. Only decode-owned blocks are touched. */
-        json_release_field(field, object, ctx->info, ctx->root);
+        /* Refill (duplicate keys/aliases within one document): release
+           what decode put there earlier so "last wins" never leaks. The
+           clean-target contract makes the field's content ours. */
+        json_release_field(field, object, ctx->info);
         status = json_decode_field(ctx, member, field, object, depth, &view);
         if ((SHREWD_BASIC_ERR_OK == status)
                 && (0 != (view.flags & SHREWD_BASIC_JSON_F_RANGE))
@@ -674,7 +778,8 @@ static int json_decode_fields(json_map_ctx_t *ctx,
             continue;
         }
         json_policy_view(ctx->info, field, &view);
-        if (0 != (view.flags & SHREWD_BASIC_JSON_F_HIDDEN)) {
+        if (0 != (view.flags & (SHREWD_BASIC_JSON_F_HIDDEN
+                                | SHREWD_BASIC_JSON_F_BORROWED))) {
             continue;
         }
         for (size_t j = 0; j < shrewd_basic_json_count(value); ++j) {
@@ -745,16 +850,18 @@ static int json_decode_fields(json_map_ctx_t *ctx,
             return status;
         }
     }
-    /* Pass 3: REQUIRED keys must be present - unless keep_defaults is
-       on, where a pre-set default satisfies the requirement. */
-    if (0 != ctx->options->keep_defaults) {
-        return SHREWD_BASIC_ERR_OK;
-    }
+    /* Pass 3: materialize policy defaults for missing keys
+       (use_defaults); a JSON key or a materialized default satisfies
+       REQUIRED. */
     for (size_t i = 0; i < count; ++i) {
         shrewd_basic_json_key_info_t view;
         int present = 0;
         json_policy_view(ctx->info, &fields[i], &view);
-        if (0 == (view.flags & SHREWD_BASIC_JSON_F_REQUIRED)) {
+        if (0 != (view.flags & (SHREWD_BASIC_JSON_F_HIDDEN
+                                | SHREWD_BASIC_JSON_F_BORROWED))
+                || (0u != (fields[i].sb_refl_flags
+                           & SHREWD_BASIC_REFLECT_FIELD_F_UNION))
+                || (0 != json_map_is_count_member(fields, count, &fields[i]))) {
             continue;
         }
         for (size_t j = 0; j < shrewd_basic_json_count(value); ++j) {
@@ -764,7 +871,16 @@ static int json_decode_fields(json_map_ctx_t *ctx,
                 break;
             }
         }
-        if (0 == present) {
+        if ((0 == present) && (0 != ctx->options->use_defaults)
+                && (SHREWD_BASIC_JSON_DEF_NONE != view.def_kind)) {
+            int status = json_decode_default(ctx, &fields[i], object, &view);
+            if (SHREWD_BASIC_ERR_OK != status) {
+                return status;
+            }
+            present = 1;
+        }
+        if ((0 == present)
+                && (0 != (view.flags & SHREWD_BASIC_JSON_F_REQUIRED))) {
             size_t mark = json_map_mark(ctx);
             int status;
             json_map_member(ctx, fields[i].sb_refl_name);
@@ -799,11 +915,7 @@ int shrewd_basic_json_decode_value(const shrewd_basic_json_value_t *value,
     memset(&ctx, 0, sizeof(ctx));
     ctx.options = (NULL != options) ? options : &plain;
     ctx.info = info;
-    ctx.root = object;
     ctx.error = error;
-    if (SHREWD_BASIC_ERR_OK != json_owner_touch(object)) {
-        return SHREWD_BASIC_ERR_MEM_NOMEM;
-    }
     if ((NULL != info) && (info->type != type)) {
         return json_map_fail(&ctx, SHREWD_BASIC_ERR_ARG_INVALID,
                              "info describes \"%s\", not \"%s\"",
@@ -853,18 +965,14 @@ int shrewd_basic_json_decode(const char *text, size_t length, void *object,
  * produced by an ops->decode hook are released through its destroy
  * callback instead (they are not registry-tracked).
  */
-static void json_release_value(const shrewd_basic_reflect_type_t *type,
-                               void *value,
-                               const shrewd_basic_json_info_t *info,
-                               const void *root);
 static void json_release_fields(const shrewd_basic_reflect_field_t *fields,
                                 size_t count, void *object,
-                                const shrewd_basic_json_info_t *info,
-                                const void *root);
+                                const shrewd_basic_json_info_t *info);
 
 static void json_release_pointer(const shrewd_basic_reflect_type_t *type,
                                  void (*destroy)(void *target),
-                                 void *pointer, const void *root)
+                                 void *pointer,
+                                 const shrewd_basic_json_info_t *info)
 {
     if (NULL == pointer) {
         return;
@@ -877,23 +985,23 @@ static void json_release_pointer(const shrewd_basic_reflect_type_t *type,
         /* A followed string: the pointee cell holds the content. */
         void *text = NULL;
         memcpy(&text, pointer, sizeof(text));
-        (void)json_owner_release(root, &text);
+        shrewd_basic_platform_free(&text);
     } else if ((SHREWD_BASIC_REFLECT_KIND_STRUCT == type->sb_refl_kind)
             || (SHREWD_BASIC_REFLECT_KIND_ARRAY == type->sb_refl_kind)) {
-        json_release_value(type, pointer, NULL, root);
+        json_release_value(type, pointer, info);
     }
-    (void)json_owner_release(root, &pointer);
+    (void)shrewd_basic_platform_free(&pointer);
 }
 
 static void json_release_value(const shrewd_basic_reflect_type_t *type,
                                void *value,
-                               const shrewd_basic_json_info_t *info,
-                               const void *root)
+                               const shrewd_basic_json_info_t *info)
 {
     if (SHREWD_BASIC_REFLECT_KIND_STRING == type->sb_refl_kind) {
         void *text = NULL;
         memcpy(&text, value, sizeof(text));
-        (void)json_owner_release(root, &text);
+        shrewd_basic_platform_free(&text);
+        memset(value, 0, sizeof(void *));
         return;
     }
     if (SHREWD_BASIC_REFLECT_KIND_ARRAY == type->sb_refl_kind) {
@@ -901,30 +1009,34 @@ static void json_release_value(const shrewd_basic_reflect_type_t *type,
             json_release_value(type->sb_refl_elem,
                                (unsigned char *)value
                                        + (i * type->sb_refl_elem_stride),
-                               info, root);
+                               info);
         }
         return;
     }
     if (SHREWD_BASIC_REFLECT_KIND_STRUCT == type->sb_refl_kind) {
         json_release_fields(type->sb_refl_fields, type->sb_refl_field_count,
-                            value, info, root);
+                            value, info);
     }
 }
 
 static void json_release_field(const shrewd_basic_reflect_field_t *field,
                                void *object,
-                               const shrewd_basic_json_info_t *info,
-                               const void *root)
+                               const shrewd_basic_json_info_t *info)
 {
     unsigned char *base = (unsigned char *)object;
     unsigned char *at = base + field->sb_refl_offset;
+    shrewd_basic_json_key_info_t view;
     void (*destroy)(void *target) = NULL;
+    json_policy_view(info, field, &view);
+    if (0 != (view.flags & SHREWD_BASIC_JSON_F_BORROWED)) {
+        return; /* application-owned: never ours to release */
+    }
     if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_UNION)) {
         const shrewd_basic_reflect_variant_t *variant =
                 reflect_union_variant(field, at);
         if (NULL != variant) {
             json_release_fields(variant->sb_refl_fields,
-                                variant->sb_refl_field_count, at, info, root);
+                                variant->sb_refl_field_count, at, info);
         }
         return;
     }
@@ -933,68 +1045,62 @@ static void json_release_field(const shrewd_basic_reflect_field_t *field,
     }
     if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
         void *pointer = NULL;
-        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
-            shrewd_basic_json_key_info_t view;
-            json_policy_view(info, field, &view);
-            if (NULL != view.ops) {
-                destroy = view.ops->destroy;
-            }
+        if (NULL != view.ops) {
+            destroy = view.ops->destroy;
         }
         memcpy(&pointer, at, sizeof(pointer));
-        json_release_pointer(field->sb_refl_type, destroy, pointer, root);
+        json_release_pointer(field->sb_refl_type, destroy, pointer, info);
         memset(at, 0, sizeof(void *));
         return;
     }
     if (0u != (field->sb_refl_flags
                & (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY
                   | SHREWD_BASIC_REFLECT_FIELD_F_DARRAY))) {
-        reflect_array_view_t view = reflect_array_view(base, field);
+        reflect_array_view_t slots = reflect_array_view(base, field);
         unsigned char *table = NULL;
         if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_DARRAY)) {
-            if (NULL == view.base) {
+            if (NULL == slots.base) {
                 return;
             }
-            table = (unsigned char *)(uintptr_t)view.base;
+            table = (unsigned char *)(uintptr_t)slots.base;
         }
         {
             void (*elem_destroy)(void *target) = NULL;
             if (0 != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
-                shrewd_basic_json_key_info_t view_ops;
-                json_policy_view(info, field, &view_ops);
-                if ((NULL != view_ops.ops) && (0 != view_ops.elem_ops)) {
-                    elem_destroy = view_ops.ops->destroy;
+                if ((NULL != view.ops) && (0 != view.elem_ops)) {
+                    elem_destroy = view.ops->destroy;
                 }
             }
-            for (size_t j = 0; j < view.count; ++j) {
-                unsigned char *slot = (NULL != table) ? (table + (j * view.stride))
-                                                      : (at + (j * view.stride));
+            for (size_t j = 0; j < slots.count; ++j) {
+                unsigned char *slot = (NULL != table)
+                        ? (table + (j * slots.stride))
+                        : (at + (j * slots.stride));
                 if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
                     void *pointer = NULL;
                     memcpy(&pointer, slot, sizeof(pointer));
                     json_release_pointer(field->sb_refl_type, elem_destroy,
-                                          pointer, root);
+                                          pointer, info);
                     memset(slot, 0, sizeof(void *));
                 } else {
-                    json_release_value(field->sb_refl_type, slot, info, root);
+                    json_release_value(field->sb_refl_type, slot, info);
                 }
             }
         }
         if (NULL != table) {
-            (void)json_owner_release(root, (void **)&table);
+            (void)shrewd_basic_platform_free((void **)&table);
             memset(at, 0, sizeof(void *));
         }
         return;
     }
-    json_release_value(field->sb_refl_type, at, info, root);
+    json_release_value(field->sb_refl_type, at, info);
 }
 
 static void json_release_fields(const shrewd_basic_reflect_field_t *fields,
                                 size_t count, void *object,
-                                const shrewd_basic_json_info_t *info,
-                                const void *root)
+                                const shrewd_basic_json_info_t *info)
 {
     for (size_t i = 0; i < count; ++i) {
-        json_release_field(&fields[i], object, info, root);
+        json_release_field(&fields[i], object, info);
     }
 }
 
@@ -1022,7 +1128,8 @@ static void json_destroy_ops_fields(const shrewd_basic_reflect_field_t *fields,
             continue;
         }
         json_policy_view(info, field, &view);
-        if ((NULL == view.ops) || (NULL == view.ops->destroy)) {
+        if ((0 != (view.flags & SHREWD_BASIC_JSON_F_BORROWED))
+                || (NULL == view.ops) || (NULL == view.ops->destroy)) {
             continue;
         }
         if ((0 != view.elem_ops)
@@ -1085,7 +1192,8 @@ int shrewd_basic_json_free(void *object, const shrewd_basic_reflect_type_t *type
     }
     json_destroy_ops_fields(type->sb_refl_fields, type->sb_refl_field_count,
                             object, info);
-    json_owner_release_all(object);
+    json_release_fields(type->sb_refl_fields, type->sb_refl_field_count,
+                        object, info);
     shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_json_log,
                      "free", "free ok (%s)\n", type->sb_refl_name);
     return SHREWD_BASIC_ERR_OK;
