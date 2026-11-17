@@ -2,11 +2,14 @@
  * @file json_demo.c
  * @brief Walkthrough of the json module: value model and struct mapping.
  *
- * Three sections: (1) encode a reflect-described struct to JSON text,
+ * Five sections: (1) encode a reflect-described struct to JSON text,
  * (2) decode text back into a struct and release it, (3) use the DOM
  * directly - parse an arbitrary document, query and modify it, write it
- * back. The struct mapping covers scalars, enums, strings, text buffers
- * and a tagged union (F1 form).
+ * back, (4) policy: key aliases, omission and union styles, (5)
+ * use_defaults + BORROWED: policy defaults materialized by decode,
+ * application-owned pointers that json_free never touches. The struct
+ * mapping covers scalars, enums, strings, text buffers and a tagged
+ * union (F1 form).
  */
 
 #include <stdbool.h>
@@ -69,6 +72,23 @@ SHREWD_BASIC_JSON_DEFINE(msg_json, msg_reflect,
     SHREWD_BASIC_JSON_KEY(id, "msg_id"),
     SHREWD_BASIC_JSON_OMIT_EMPTY(name),
     SHREWD_BASIC_JSON_UNION_STYLE(body, SHREWD_BASIC_JSON_UNION_UNWRAP));
+
+/* Defaults / borrowed fixture for section 5. */
+typedef struct {
+    int32_t level;
+    const char *label;
+    const char *unit; /* BORROWED: application-owned */
+} dfl_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(dfl_reflect, dfl_t,
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, level),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, label),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, unit));
+
+SHREWD_BASIC_JSON_DEFINE(dfl_json, dfl_reflect,
+    SHREWD_BASIC_JSON_DEFAULT(level, 7),
+    SHREWD_BASIC_JSON_DEFAULT_STR(label, "guest"),
+    SHREWD_BASIC_JSON_BORROWED(unit));
 
 static void print_status(const char *what, int status)
 {
@@ -185,6 +205,25 @@ int main(void)
                          shrewd_basic_json_free(decoded, &msg_reflect, NULL));
             (void)shrewd_basic_platform_free(&block);
         }
+    }
+
+    printf("\n=== 5. use_defaults + BORROWED: policy defaults, app-owned pointers ===\n");
+    {
+        shrewd_basic_json_options_t options;
+        dfl_t cfg;
+        memset(&options, 0, sizeof(options));
+        options.use_defaults = 1;
+        memset(&cfg, 0, sizeof(cfg));
+        print_status("decode(\"{}\", use_defaults)",
+                     shrewd_basic_json_decode("{}", 2, &cfg, &dfl_reflect,
+                                              &dfl_json, &options, NULL));
+        printf("  level=%d label=\"%s\" (materialized by decode)\n",
+               cfg.level, cfg.label);
+        cfg.unit = "kg"; /* borrowed: installed after decode */
+        print_status("json_free",
+                     shrewd_basic_json_free(&cfg, &dfl_reflect, &dfl_json));
+        printf("  after free: label=%s unit=\"%s\" (borrowed survives)\n",
+               (NULL == cfg.label) ? "(null)" : cfg.label, cfg.unit);
     }
 
     printf("\nDemo done. See docs/json.md for the full reference.\n");

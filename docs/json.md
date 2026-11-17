@@ -145,21 +145,36 @@ decode 对 `null` body 放行、非 null 报错。
 
 ### decode 规则
 
-- 目标**先清零**(除非 `opt->keep_defaults`:缺失键保留**预置默认值**,
-  REQUIRED 也由默认值满足——配置合并场景);
+- 目标**先清零**;`opt->use_defaults` 开启时,缺失键由策略 `DEFAULT` 行
+  **物化默认值**(decode 分配,与正常值同源),`REQUIRED` 由"键出现
+  **或**默认值物化"满足;
 - **计数成员由数组长度驱动**(JSON 里的计数键被忽略);
 - 数组可**短于**槽位(尾部保持零),不可更长;字符串缓冲恰满可无 NUL,超长报错;
 - 未知键忽略;整数/浮点按值宽窄校验(越界报 `JSON_TYPE_MISMATCH`);
 - 每个错误都带 JSON 路径(`err->path`,如 `body.point.x`);
 - FAM 根的分配由调用方按 JSON 尾长预留:`sizeof(T) + n * sizeof(elem)`。
 
-### 映射层所有权
+### 映射层所有权(契约模型,无登记表)
 
-decode 的每个分配都记入**按根对象索引的登记表**;`shrewd_basic_json_free()`
-只释放登记在册的块(含普通字符串、指针目标、动态表)——**预置默认值
-(静态字面量或调用方分配)永远不会被误释放**,重复键/二次 merge 覆盖旧值
-时也只回收 decode 自己的分配。`ops->decode` 产出的目标由 `ops->destroy`
-释放。**根存储归调用方**(decode 不分配它)。登记表为静态侧表(见并发说明)。
+所有权由三条契约静态确定,`shrewd_basic_json_free()` 递归释放**一切非空
+指针**即精确无误——没有任何运行时记账:
+
+1. **decode 目标先清零**:decode 写入的每个指针都是 decode 分配的;
+2. **默认值由策略声明、decode 物化**(`use_defaults` + `DEFAULT` 行),
+   不是结构体里的预置字节——来源与正常值统一;
+3. **`BORROWED` 字段是应用自己的指针**:decode 不写、free 不碰。decode 会
+   先清零整个目标,故在 **decode 之后**给它赋值(静态字面量、借用缓冲、
+   自有分配皆可,生命周期自理)。
+
+由契约派生的使用规则:
+
+- **不得在仍持有 decode 产物的对象上再次 decode**(先 `json_free`;
+  清零会让旧块变孤儿);decode 失败后用 `json_free` 清理半成品;
+- 不得往解码对象里手装外来指针(BORROWED 字段除外);
+- 文档内重复键/别名的 last-wins 会先释放前值(契约保证那必是本次
+  decode 的分配);
+- `ops->decode` 产出的目标由 `ops->destroy` 释放(第四类来源,按字段
+  静态已知,不需运行时判定)。**根存储归调用方**(decode 不分配它)。
 
 ### 键匹配策略
 
@@ -187,7 +202,9 @@ encode/decode 的 `info` 参数携带策略(NULL = 纯元数据,行为不变)。
 | 策略 | 语义 |
 |---|---|
 | `KEY(field, 规键, 别名...)` | encode 永远输出**规键**(第 1 个);decode 接受任意别名,**成员名本身始终可接受** |
-| `REQUIRED` | decode 时键必须出现(别名任一命中即可),缺失 → `KEY_NOTFOUND` 带路径 |
+| `REQUIRED` | decode 时键必须出现(别名任一命中即可),缺失 → `KEY_NOTFOUND` 带路径;`use_defaults` 下**默认值物化也可满足** |
+| `DEFAULT(field, v)` / `DEFAULT_STR(field, "s")` | 缺失键的默认值(`use_defaults` 下由 decode 物化:数值含整数/枚举/bool/char/浮点,字符串为拷贝分配;一期不含 struct/数组/ops 字段) |
+| `BORROWED(field)` | 指针字段归应用:decode 不写、`json_free` 不碰(decode 后赋值,任意来源、任意生命周期) |
 | `HIDDEN` | 双向跳过 |
 | `OMIT_EMPTY` | encode 省略零值(false/0/""/NULL/空容器,按 **C 值**判断,不受 ops 变换影响) |
 | `RANGE(lo, hi)` | encode/decode 双向校验数值范围 |
@@ -239,19 +256,15 @@ encode/decode 的 `info` 参数携带策略(NULL = 纯元数据,行为不变)。
 ## 10. 并发说明
 
 值树支持并发**只读**共享(访问器与序列化均为只读);任何修改由应用自行同步。
-reflect 的字段查找缓存是 `_Thread_local` 的(多线程安全,见 reflect 文档);
-json 侧仍有两张全局侧表按单线程宿主设计,不提供加锁机制——多线程使用时由
-应用串行化:
+reflect 的字段查找缓存是 `_Thread_local` 的(多线程安全,见 reflect 文档)。
 
-- **解码分配登记**(`json_owner`):`json_decode` / `json_decode_value` /
-  `json_decode_pointer` / `json_free` 之间必须互斥——登记表是全局映射,
-  与是否同一对象无关;
-- **log 注册**(`log` 模块):默认无锁。并发使用时安装
-  `shrewd_basic_log_set_lock()` 锁钩子——注册表、换流(含 fclose 旧流)与
-  整条记录的输出全程互斥,记录不再交错;禁用级别的短路仍在锁外(并发
-  `set_level` 最迟一条日志后生效)。不装钩子则由应用串行化
-  `log_module_*`/`log_set_global_*` 与所有日志输出。无论哪种方式,
-  "不销毁仍可能被他人使用的模块"始终是应用契约。
+**`json_decode*` 与 `json_free` 多线程自由使用**——所有权契约模型下映射层
+没有任何共享状态(解码分配登记表已删除)。模块内仅剩 log 侧的全局状态:
+默认无锁,并发使用时安装 `shrewd_basic_log_set_lock()` 锁钩子——注册表、
+换流(含 fclose 旧流)与整条记录的输出全程互斥,记录不再交错;禁用级别的
+短路仍在锁外(并发 `set_level` 最迟一条日志后生效)。不装钩子则由应用
+串行化 `log_module_*`/`log_set_global_*` 与所有日志输出。无论哪种方式,
+"不销毁仍可能被他人使用的模块"始终是应用契约。
 
 ## 11. 工程配套
 
