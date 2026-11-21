@@ -1026,6 +1026,36 @@ int shrewd_basic_reflect_field_set(void *object,
  */
 int shrewd_basic_reflect_describe(const shrewd_basic_reflect_type_t *type);
 
+/** One field's layout report line (shrewd_basic_reflect_layout()). */
+typedef struct shrewd_basic_reflect_layout_entry {
+    const shrewd_basic_reflect_field_t *field; /**< The field described. */
+    size_t offset;                            /**< Byte offset in the type. */
+    size_t size;                              /**< Field storage width. */
+    size_t align;                             /**< Effective alignment. */
+    size_t pad_before;                        /**< Padding since the previous field's end (0 on overlap). */
+} shrewd_basic_reflect_layout_entry_t;
+
+/**
+ * Layout callback. Return SHREWD_BASIC_ERR_OK to keep walking; any
+ * other code aborts the walk and is returned by
+ * shrewd_basic_reflect_layout().
+ */
+typedef int (*shrewd_basic_reflect_layout_fn)(
+        void *ctx, const shrewd_basic_reflect_layout_entry_t *entry);
+
+/**
+ * Report a STRUCT type's memory layout (pahole-lite): one callback per
+ * field in ascending offset order (declaration order on ties), each
+ * carrying offset, size, effective alignment and the padding before
+ * it. Overlapping bit groups report pad_before 0; trailing padding is
+ * type->sb_refl_size minus the last field's end. Nested structs report
+ * as one entry - recurse with their own descriptor for detail. Returns
+ * SHREWD_BASIC_ERR_OK, SHREWD_BASIC_ERR_ARG_INVALID (NULL arguments or
+ * a non-struct type) or the callback's abort code.
+ */
+int shrewd_basic_reflect_layout(const shrewd_basic_reflect_type_t *type,
+                                shrewd_basic_reflect_layout_fn fn, void *ctx);
+
 /**
  * Pretty-print @p object according to @p type through the "reflect" log
  * module as a single log record (one prefix line, then the unprefixed

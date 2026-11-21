@@ -4282,6 +4282,94 @@ static void test_anonymous(void)
     expect_true("anon ay read", 6 == value);
 }
 
+/* Layout fixture: deterministic padding on every verified ABI. */
+typedef struct {
+    char c;
+    int32_t n;
+    char d;
+    double f;
+} pad_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_pad_reflect, pad_t,
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(pad_t, c),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(pad_t, n),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(pad_t, d),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(pad_t, f));
+
+typedef struct {
+    shrewd_basic_reflect_layout_entry_t entries[8];
+    size_t count;
+    int abort_status;
+} layout_cap_t;
+
+static int layout_collect(void *ctx,
+                          const shrewd_basic_reflect_layout_entry_t *entry)
+{
+    layout_cap_t *cap = (layout_cap_t *)ctx;
+    if (cap->count < (sizeof(cap->entries) / sizeof(cap->entries[0]))) {
+        cap->entries[cap->count] = *entry;
+        ++cap->count;
+    }
+    return (0 != cap->abort_status) ? cap->abort_status : SHREWD_BASIC_ERR_OK;
+}
+
+static void test_layout(void)
+{
+    layout_cap_t cap;
+    size_t total = 0;
+
+    memset(&cap, 0, sizeof(cap));
+    expect_eq_int("layout person",
+                  shrewd_basic_reflect_layout(&g_pad_reflect, layout_collect,
+                                              &cap),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("layout field count",
+                cap.count == g_pad_reflect.sb_refl_field_count);
+
+    /* Entries arrive sorted by offset with correct gaps. */
+    total = 0;
+    for (size_t i = 0; i < cap.count; ++i) {
+        const shrewd_basic_reflect_layout_entry_t *e = &cap.entries[i];
+        if (0 != i) {
+            expect_true("layout sorted",
+                        cap.entries[i - 1].offset <= e->offset);
+        }
+        expect_true("layout offset", e->offset == e->field->sb_refl_offset);
+        expect_true("layout size", e->size == e->field->sb_refl_size);
+        total += e->pad_before + e->size;
+    }
+    /* Every byte of the type is accounted: pads + fields + trailing. */
+    {
+        const shrewd_basic_reflect_layout_entry_t *last =
+                &cap.entries[cap.count - 1];
+        size_t trailing = g_pad_reflect.sb_refl_size
+                - (last->offset + last->size);
+        expect_true("layout accounts all bytes",
+                    (total + trailing) == sizeof(pad_t));
+    }
+    /* Precise padding shape: n follows c (gap), f follows d (gap). */
+    expect_true("layout pad before n",
+                cap.entries[1].pad_before
+                        == (offsetof(pad_t, n) - (offsetof(pad_t, c) + 1)));
+    expect_true("layout pad before f",
+                cap.entries[3].pad_before
+                        == (offsetof(pad_t, f) - (offsetof(pad_t, d) + 1)));
+
+    /* Callback aborts propagate; bad arguments are rejected. */
+    cap.abort_status = SHREWD_BASIC_ERR_KEY_NOTFOUND;
+    expect_eq_int("layout abort",
+                  shrewd_basic_reflect_layout(&g_pad_reflect, layout_collect,
+                                              &cap),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("layout NULL",
+                  shrewd_basic_reflect_layout(NULL, layout_collect, &cap),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("layout not struct",
+                  shrewd_basic_reflect_layout(&shrewd_basic_reflect_int32,
+                                              layout_collect, &cap),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+}
+
 int main(void)
 {
     test_describe();
@@ -4292,6 +4380,7 @@ int main(void)
     test_descriptor_meta();
     test_describe_type();
     test_anonymous();
+    test_layout();
     test_get_set_scalars();
     test_get_set_string();
     test_nested();

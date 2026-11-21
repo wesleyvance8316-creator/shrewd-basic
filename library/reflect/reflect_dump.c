@@ -679,3 +679,62 @@ int shrewd_basic_reflect_describe(const shrewd_basic_reflect_type_t *type)
     (void)shrewd_basic_platform_free((void **)&ctx.buf);
     return status;
 }
+
+/* --- layout report ---------------------------------------------------- */
+
+int shrewd_basic_reflect_layout(const shrewd_basic_reflect_type_t *type,
+                                shrewd_basic_reflect_layout_fn fn, void *ctx)
+{
+    size_t cursor = 0;
+    if ((NULL == type) || (NULL == fn)
+            || (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "layout", "layout: type or fn is NULL, or not a struct\n");
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    /* Emit in ascending (offset, declaration index) order by selecting,
+       per rank, the field with exactly `rank` predecessors - no scratch
+       allocation needed for a diagnostic walk. */
+    for (size_t rank = 0; rank < type->sb_refl_field_count; ++rank) {
+        const shrewd_basic_reflect_field_t *pick = NULL;
+        for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
+            const shrewd_basic_reflect_field_t *field =
+                    &type->sb_refl_fields[i];
+            size_t before = 0;
+            for (size_t j = 0; j < type->sb_refl_field_count; ++j) {
+                const shrewd_basic_reflect_field_t *other =
+                        &type->sb_refl_fields[j];
+                if (j == i) {
+                    continue;
+                }
+                if ((other->sb_refl_offset < field->sb_refl_offset)
+                        || ((other->sb_refl_offset == field->sb_refl_offset)
+                            && (j < i))) {
+                    ++before;
+                }
+            }
+            if (before == rank) {
+                pick = field;
+                break;
+            }
+        }
+        if (NULL == pick) {
+            break; /* unreachable: every rank has a holder */
+        }
+        shrewd_basic_reflect_layout_entry_t entry;
+        entry.field = pick;
+        entry.offset = pick->sb_refl_offset;
+        entry.size = pick->sb_refl_size;
+        entry.align = shrewd_basic_reflect_field_align(pick);
+        entry.pad_before = (pick->sb_refl_offset > cursor)
+                ? (pick->sb_refl_offset - cursor) : 0;
+        if (cursor < (pick->sb_refl_offset + pick->sb_refl_size)) {
+            cursor = pick->sb_refl_offset + pick->sb_refl_size;
+        }
+        int status = fn(ctx, &entry);
+        if (SHREWD_BASIC_ERR_OK != status) {
+            return status;
+        }
+    }
+    return SHREWD_BASIC_ERR_OK;
+}
