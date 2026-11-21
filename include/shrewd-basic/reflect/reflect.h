@@ -663,8 +663,9 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
  * bit_width come from the register map or protocol spec. Multiple
  * groups may share one unit. get/set exchange the group zero-extended to
  * the unit's width (read-modify-write); equal/diff/hash compare the
- * group's bits only. C bit-field members themselves cannot be described
- * (implementation-defined layout) - this macro covers explicit units.
+ * group's bits only. C bit-field members themselves cannot use offsetof
+ * on their storage - describe those with
+ * SHREWD_BASIC_REFLECT_FIELD_BITS_UNIT instead.
  */
 #define SHREWD_BASIC_REFLECT_FIELD_BITS(struct_type, unit, name, bit_offset, bit_width)            \
     {.sb_refl_name = #name,                                                                        \
@@ -673,6 +674,32 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
      .sb_refl_size = sizeof(((struct_type *)0)->unit),                                             \
      .sb_refl_count = (size_t)1,                                                                   \
      .sb_refl_stride = sizeof(((struct_type *)0)->unit),                                           \
+     .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_BITS,                                           \
+     .sb_refl_bit_offset = (size_t)(bit_offset),                                                   \
+     .sb_refl_bit_width = (size_t)(bit_width)}
+
+/*
+ * Describe a bit group whose storage unit is placed explicitly - the
+ * companion of SHREWD_BASIC_REFLECT_FIELD_BITS for C bit-field members,
+ * whose unit has no member name and cannot be reached with offsetof.
+ * @p unit_ref is the unit's integer descriptor passed without '&' (e.g.
+ * shrewd_basic_reflect_uint32), @p unit_offset/@p unit_size place the
+ * unit inside the owner, and @p bit_offset/@p bit_width the group inside
+ * the unit. C bit-field layout is implementation-defined - take these
+ * numbers from the compiler (tools/reflect_gen.py DWARF mode) rather
+ * than computing them by hand. Groups sharing one unit repeat its
+ * placement; value semantics match
+ * SHREWD_BASIC_REFLECT_FIELD_BITS. @p name is the group's label (the
+ * member name for real bit-fields).
+ */
+#define SHREWD_BASIC_REFLECT_FIELD_BITS_UNIT(                                                      \
+    struct_type, name, unit_ref, unit_offset, unit_size, bit_offset, bit_width)                    \
+    {.sb_refl_name = #name,                                                                        \
+     .sb_refl_type = &(unit_ref),                                                                  \
+     .sb_refl_offset = (size_t)(unit_offset),                                                      \
+     .sb_refl_size = (size_t)(unit_size),                                                          \
+     .sb_refl_count = (size_t)1,                                                                   \
+     .sb_refl_stride = (size_t)(unit_size),                                                        \
      .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_BITS,                                           \
      .sb_refl_bit_offset = (size_t)(bit_offset),                                                   \
      .sb_refl_bit_width = (size_t)(bit_width)}

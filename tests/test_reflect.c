@@ -3110,6 +3110,119 @@ static void test_bits(void) {
                   SHREWD_BASIC_ERR_OK);
 }
 
+/* --- C bit-field fixtures (FIELD_BITS_UNIT) ---------------------------- */
+
+/*
+ * Real C bit-fields: the storage unit has no member name, so placement
+ * is explicit numbers (as the reflect_gen DWARF mode derives them). The
+ * unit is the single unsigned word at offset 0; every supported toolchain
+ * packs same-declared-type bit-fields LSB-first into one unit, so the
+ * numbers are stable across the verification matrix.
+ */
+typedef struct {
+    unsigned ok : 1;
+    unsigned level : 3;
+    unsigned mode : 4;
+    unsigned rest : 24;
+} cbit_t;
+
+/* "rest" stays undescribed on purpose: only described bits survive. */
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(
+    g_cbit_reflect,
+    cbit_t,
+    SHREWD_BASIC_REFLECT_FIELD_BITS_UNIT(
+        cbit_t, ok, shrewd_basic_reflect_uint32, 0, sizeof(uint32_t), 0, 1),
+    SHREWD_BASIC_REFLECT_FIELD_BITS_UNIT(
+        cbit_t, level, shrewd_basic_reflect_uint32, 0, sizeof(uint32_t), 1, 3),
+    SHREWD_BASIC_REFLECT_FIELD_BITS_UNIT(
+        cbit_t, mode, shrewd_basic_reflect_uint32, 0, sizeof(uint32_t), 4, 4));
+
+static void test_cbit(void) {
+    /* Descriptor shape: explicit unit placement plus group position. */
+    const shrewd_basic_reflect_field_t *field = find_or_fail("cbit", &g_cbit_reflect, "mode");
+    if (NULL == field) {
+        return;
+    }
+    expect_true(
+        "cbit shape",
+        (SHREWD_BASIC_REFLECT_FIELD_F_BITS == field->sb_refl_flags)
+            && ((size_t)0 == field->sb_refl_offset) && (sizeof(uint32_t) == field->sb_refl_size)
+            && ((size_t)4 == field->sb_refl_bit_offset) && ((size_t)4 == field->sb_refl_bit_width)
+            && (&shrewd_basic_reflect_uint32 == field->sb_refl_type));
+    expect_eq_int(
+        "cbit check_type", shrewd_basic_reflect_check_type(&g_cbit_reflect), SHREWD_BASIC_ERR_OK);
+
+    /* C bit-fields and the descriptors agree: read what C wrote. */
+    cbit_t reg = {0};
+    memset(&reg, 0, sizeof(reg));
+    reg.ok = 1;
+    reg.level = 5;
+    reg.mode = 9;
+    reg.rest = 0xabcdef;
+    uint32_t word = 0;
+    field = find_or_fail("cbit", &g_cbit_reflect, "ok");
+    if (NULL != field) {
+        expect_eq_int("cbit get ok",
+                      shrewd_basic_reflect_field_get(&reg, field, &word, sizeof(word)),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("cbit ok value", 1u == word);
+    }
+    field = find_or_fail("cbit", &g_cbit_reflect, "level");
+    if (NULL != field) {
+        expect_eq_int("cbit get level",
+                      shrewd_basic_reflect_field_get(&reg, field, &word, sizeof(word)),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("cbit level value", 5u == word);
+    }
+    field = find_or_fail("cbit", &g_cbit_reflect, "mode");
+    if (NULL != field) {
+        expect_eq_int("cbit get mode",
+                      shrewd_basic_reflect_field_get(&reg, field, &word, sizeof(word)),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("cbit mode value", 9u == word);
+    }
+
+    /* ...and write what reflection inserts (read-modify-write). */
+    word = 3;
+    field = find_or_fail("cbit", &g_cbit_reflect, "mode");
+    if (NULL != field) {
+        expect_eq_int("cbit set mode",
+                      shrewd_basic_reflect_field_set(&reg, field, &word, sizeof(word)),
+                      SHREWD_BASIC_ERR_OK);
+    }
+    expect_true("cbit set wrote", 3u == reg.mode);
+    expect_true("cbit set kept neighbors", (1u == reg.ok) && (5u == reg.level));
+
+    /* Undescribed group bits are invisible to equal/hash. */
+    cbit_t other = {0};
+    memset(&other, 0, sizeof(other));
+    other.ok = 1;
+    other.level = 5;
+    other.mode = 3;
+    other.rest = 1;
+    bool same = false;
+    expect_eq_int("cbit equal",
+                  shrewd_basic_reflect_equal(&reg, &other, &g_cbit_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("cbit equal yes", same);
+    size_t ha = 0;
+    size_t hb = 0;
+    expect_eq_int(
+        "cbit hash a", shrewd_basic_reflect_hash(&reg, &g_cbit_reflect, &ha), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("cbit hash b",
+                  shrewd_basic_reflect_hash(&other, &g_cbit_reflect, &hb),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("cbit hash same", ha == hb);
+
+    /* A described-group difference is a first-class difference. */
+    other.level = 4;
+    char path[64] = {0};
+    expect_eq_int("cbit diff",
+                  shrewd_basic_reflect_diff(&reg, &other, &g_cbit_reflect, path, sizeof(path)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("cbit diff path", 0 == strcmp(path, "level"));
+}
+
 /* --- multi-dimension array fixtures ------------------------------------ */
 
 /* int32_t m[2][3]: a matrix of 2 rows x 3 columns. */
@@ -4422,6 +4535,7 @@ int main(void) {
     test_stringbuf();
     test_owned_strings();
     test_bits();
+    test_cbit();
     test_multidim();
     test_union();
     test_graph_ops();
