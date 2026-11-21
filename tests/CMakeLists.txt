@@ -53,11 +53,20 @@ target_link_libraries(shrewd-basic-json-policy-tests
             shrewd-basic
             shrewd-basic-warnings)
 
+# Bin format tests (binary struct mapping over reflect metadata).
+add_executable(shrewd-basic-bin-tests test_bin.c)
+
+target_link_libraries(shrewd-basic-bin-tests
+        PRIVATE
+            shrewd-basic
+            shrewd-basic-warnings)
+
 # Test binary returns non-zero on failure, so a plain COMMAND run is enough.
 add_test(NAME shrewd-basic.unit COMMAND shrewd-basic-tests)
 add_test(NAME shrewd-basic.ds COMMAND shrewd-basic-ds-tests)
 add_test(NAME shrewd-basic.log COMMAND shrewd-basic-log-tests)
 add_test(NAME shrewd-basic.reflect COMMAND shrewd-basic-reflect-tests)
+add_test(NAME shrewd-basic.bin COMMAND shrewd-basic-bin-tests)
 add_test(NAME shrewd-basic.json COMMAND shrewd-basic-json-tests)
 add_test(NAME shrewd-basic.json-map COMMAND shrewd-basic-json-map-tests)
 add_test(NAME shrewd-basic.json-policy COMMAND shrewd-basic-json-policy-tests)
