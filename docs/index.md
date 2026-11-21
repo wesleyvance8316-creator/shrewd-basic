@@ -16,6 +16,10 @@ compile-time reflection module.
   its full name, exact prototype, parameters and return codes, grouped
   by concern (metadata, values, paths, lookup lists, graph algorithms,
   traversal).
+- [reflect roadmap](reflect-roadmap.md) - planned and candidate
+  features with design sketches: type registry, type-system extensions,
+  query/diff upgrades, a binary serialization module, toolchain work
+  and explicit non-goals.
 - [json reference](json.md) - the json module: layered architecture, the
   value model (DOM), the strict RFC 8259 parser/serializer and the wire
   format contract.
