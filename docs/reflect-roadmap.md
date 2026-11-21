@@ -213,6 +213,8 @@ int shrewd_basic_reflect_describe(const shrewd_basic_reflect_type_t *type);
 
 ### C2. 布局报告(padding/holes,pahole-lite)
 
+> 状态:**已完成**(2026-11-21,提交 4687408)
+
 **拟议形态**:`describe` 的机器可读版或回调式
 `shrewd_basic_reflect_layout(type, cb, ctx)` 输出:逐字段
 offset/size/align、**填充字节区间**、总大小与"紧凑尺寸"的差。嵌入式排障
@@ -220,6 +222,8 @@ offset/size/align、**填充字节区间**、总大小与"紧凑尺寸"的差。
 **依赖**:B5(alignof)增强效果。**规模**:约 150 行。**优先级:P2**。
 
 ### C3. diff_all:收集全部差异
+
+> 状态:**已完成**(2026-11-21,提交 4d4a2d7)
 
 **现状**:`diff` 只报**首个**差异路径。
 
@@ -257,6 +261,8 @@ int shrewd_basic_reflect_diff_all(const void *a, const void *b,
 
 ### D1. 环哈希规范化(消除 caveat)
 
+> 状态:**已完成**(2026-11-21,提交 aa932b6)
+
 **现状**:hash 对环"按形状折叠",双相似但形状不同的环(两者在 equal 下
 相等)可能哈希不同——文档已注明的 caveat。
 
@@ -267,6 +273,8 @@ int shrewd_basic_reflect_diff_all(const void *a, const void *b,
 若 hash 进哈希表键场景再做)。
 
 ### D2. copy/destroy 的分配器注入
+
+> 状态:**已完成**(2026-11-21,提交 2ab9dad)
 
 **现状**:copy 走 `shrewd_basic_platform_calloc`;嵌入式若要池分配,只能
 整替换平台层或走 `ops->copy`。

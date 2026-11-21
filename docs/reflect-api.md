@@ -294,6 +294,23 @@ union 按变体分组。注册调试与文档素材用。
 - **返回**:`SHREWD_BASIC_ERR_OK`;`SHREWD_BASIC_ERR_MEM_NOMEM`;
   `SHREWD_BASIC_ERR_ARG_INVALID`。
 
+### shrewd_basic_reflect_layout(type, fn, ctx)
+
+```c
+int shrewd_basic_reflect_layout(const shrewd_basic_reflect_type_t *type,
+                                shrewd_basic_reflect_layout_fn fn, void *ctx);
+```
+
+shrewd_basic_reflect_layout() 报告 STRUCT 的内存布局(pahole-lite):按偏移升序
+逐字段回调 `shrewd_basic_reflect_layout_entry_t`(字段、偏移、尺寸、有效对齐、
+前置填充)。位组同址重叠报 pad_before 0;尾部填充 = 类型尺寸 - 末字段结束;嵌套
+结构体作单条目(用其描述符再调一层)。零分配,回调返回非 OK 即中止并透传。
+
+- **传参**:`type` — STRUCT 描述符;`fn` — `shrewd_basic_reflect_layout_fn`
+  回调;`ctx` — 回调上下文。
+- **返回**:`SHREWD_BASIC_ERR_OK`;`SHREWD_BASIC_ERR_ARG_INVALID`;回调的
+  中止码。
+
 ### shrewd_basic_reflect_dump(type, object, label) 宏 / shrewd_basic_reflect_dump_write(type, object, label, file, line, func)
 
 ```c
@@ -556,6 +573,20 @@ shrewd_basic_reflect_copy() 深拷贝(clone-out):指针目标克隆,F_STRING_OWN
 - **返回**:`SHREWD_BASIC_ERR_OK`;`SHREWD_BASIC_ERR_MEM_NOMEM`;
   `SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED`;`SHREWD_BASIC_ERR_ARG_INVALID`。
 
+### shrewd_basic_reflect_copy_with(alloc, out, object, type)
+
+```c
+int shrewd_basic_reflect_copy_with(const shrewd_basic_reflect_allocator_t *alloc,
+                                   void **out, const void *object,
+                                   const shrewd_basic_reflect_type_t *type);
+```
+
+shrewd_basic_reflect_copy_with() 带分配器注入的深拷贝:克隆块、owned 串拷贝、
+动态表与 copy 的记账节点全部经 `shrewd_basic_reflect_allocator_t`(alloc 需返回
+清零内存)进出,与 shrewd_basic_reflect_destroy_with() 严格配对——池/自定义
+分配器无需替换平台层。NULL = 平台分配器(即 shrewd_basic_reflect_copy())。
+传参与返回同 shrewd_basic_reflect_copy()。
+
 ### shrewd_basic_reflect_destroy(object, type)
 
 ```c
@@ -571,6 +602,17 @@ shrewd_basic_reflect_destroy() 是 shrewd_basic_reflect_copy() 的逆:释放
 - **返回**:`SHREWD_BASIC_ERR_OK`;`SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED`;
   `SHREWD_BASIC_ERR_ARG_INVALID`。借用目标与无 `ops->destroy` 的 opaque
   目标不碰。
+
+### shrewd_basic_reflect_destroy_with(alloc, object, type)
+
+```c
+int shrewd_basic_reflect_destroy_with(
+        const shrewd_basic_reflect_allocator_t *alloc, void *object,
+        const shrewd_basic_reflect_type_t *type);
+```
+
+shrewd_basic_reflect_destroy_with() 以同一分配器释放 copy_with 的产物。传参与
+返回同 shrewd_basic_reflect_destroy()。
 
 ### shrewd_basic_reflect_equal(a, b, type, out_equal)
 
@@ -604,6 +646,24 @@ shrewd_basic_reflect_diff() 比较并报告首个差异的路径。
   (`"home.y"`/`"pair[2].x"`,根为 `"(root)"`;数组变长报字段名);
   `SHREWD_BASIC_ERR_ARG_INVALID`。缓冲总是 NUL 结尾,过小则截断。
 
+### shrewd_basic_reflect_diff_all(a, b, type, fn, ctx)
+
+```c
+int shrewd_basic_reflect_diff_all(const void *a, const void *b,
+                                  const shrewd_basic_reflect_type_t *type,
+                                  shrewd_basic_reflect_diff_fn fn, void *ctx);
+```
+
+shrewd_basic_reflect_diff_all() 报告**全部**差异(不为首差停步):每处不符经
+`shrewd_basic_reflect_diff_fn` 回调给出同 diff 语法的路径与类别
+(`SHREWD_BASIC_REFLECT_DIFF_VALUE` 叶值/ops 不符,`SHREWD_BASIC_REFLECT_DIFF_SHAPE`
+指针空/数组长度/union 标签)。语义镜像 equal 位组/字符串缓冲/活动变体/环对只访
+一次;回调返回 OK 继续,其他码中止并透传。
+
+- **传参**:`a`、`b` — 两实例;`type` — 类型;`fn` — 回调;`ctx` — 回调上下文。
+- **返回**:`SHREWD_BASIC_ERR_OK`(走完;相等图零报告);回调中止码;
+  `SHREWD_BASIC_ERR_ARG_INVALID`。
+
 ### shrewd_basic_reflect_hash(object, type, out_hash)
 
 ```c
@@ -614,7 +674,8 @@ int shrewd_basic_reflect_hash(const void *object,
 
 shrewd_basic_reflect_hash() 与 equal 一致的 64 位 FNV-1a 泛型哈希:整数
 按值、浮点折叠 -0.0、字符串按内容、opaque 按地址,跨端序/宽度稳定;
-`ops->hash` 覆盖单节点。环按形状折叠(双相似环可能不同哈希)。
+`ops->hash` 覆盖单节点。共享/环目标经**迭代颜色细化**折叠(双模拟不变:自环、
+二元环、长环、菱形共享尾哈希一致);超深度封顶区两侧折标记(与 equal 封顶一致)。
 
 - **传参**:`object` — 实例;`type` — 类型;`out_hash` — 出参。
 - **返回**:`SHREWD_BASIC_ERR_OK`;`SHREWD_BASIC_ERR_ARG_INVALID`。
