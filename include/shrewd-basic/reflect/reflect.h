@@ -1334,6 +1334,27 @@ int shrewd_basic_reflect_copy(void **out, const void *object,
                               const shrewd_basic_reflect_type_t *type);
 
 /**
+ * Allocation context for shrewd_basic_reflect_copy_with() and
+ * shrewd_basic_reflect_destroy_with(): alloc must return zeroed memory
+ * (calloc semantics) and free must release it. The generic copy's
+ * bookkeeping nodes go through the same pair, so every byte a
+ * copy_with call allocates is released by the matching destroy_with.
+ * NULL selects the platform allocator (what the plain copy/destroy
+ * use). The context is not stored anywhere - two calls may use
+ * different allocators.
+ */
+typedef struct shrewd_basic_reflect_allocator {
+    int (*alloc)(void *ctx, void **out, size_t size);
+    void (*free)(void *ctx, void *ptr);
+    void *ctx;
+} shrewd_basic_reflect_allocator_t;
+
+/** shrewd_basic_reflect_copy() with an injected allocator. */
+int shrewd_basic_reflect_copy_with(const shrewd_basic_reflect_allocator_t *alloc,
+                                   void **out, const void *object,
+                                   const shrewd_basic_reflect_type_t *type);
+
+/**
  * Destroy an object and everything the generic copy would have cloned -
  * the inverse of shrewd_basic_reflect_copy(). Only run it on graphs that
  * own their pointer targets; borrowed (string) targets and opaque
@@ -1341,6 +1362,11 @@ int shrewd_basic_reflect_copy(void **out, const void *object,
  */
 int shrewd_basic_reflect_destroy(void *object,
                                  const shrewd_basic_reflect_type_t *type);
+
+/** shrewd_basic_reflect_destroy() with an injected allocator. */
+int shrewd_basic_reflect_destroy_with(const shrewd_basic_reflect_allocator_t *alloc,
+                                      void *object,
+                                      const shrewd_basic_reflect_type_t *type);
 
 /**
  * Compare two objects of @p type for equality into @p *out_equal. Values

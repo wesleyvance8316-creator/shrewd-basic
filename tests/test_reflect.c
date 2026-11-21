@@ -4475,6 +4475,79 @@ static void test_diff_all(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
+typedef struct {
+    int allocs;
+    int frees;
+    int fail_at; /* -1 = never; n = fail the (n+1)-th allocation */
+} tally_t;
+
+static int tally_alloc(void *ctx, void **out, size_t size)
+{
+    tally_t *tally = (tally_t *)ctx;
+    if ((0 <= tally->fail_at) && (tally->fail_at == tally->allocs)) {
+        *out = NULL;
+        return SHREWD_BASIC_ERR_MEM_NOMEM;
+    }
+    ++tally->allocs;
+    return shrewd_basic_platform_calloc(out, 1, size);
+}
+
+static void tally_free(void *ctx, void *ptr)
+{
+    tally_t *tally = (tally_t *)ctx;
+    void *block = ptr;
+    ++tally->frees;
+    (void)shrewd_basic_platform_free(&block);
+}
+
+static void test_allocator(void)
+{
+    tally_t tally;
+    shrewd_basic_reflect_allocator_t alloc;
+    node_t tail;
+    node_t head;
+    node_t *clone = NULL;
+
+    alloc.alloc = tally_alloc;
+    alloc.free = tally_free;
+    alloc.ctx = &tally;
+    memset(&tally, 0, sizeof(tally));
+    tally.fail_at = -1;
+    memset(&tail, 0, sizeof(tail));
+    memset(&head, 0, sizeof(head));
+    tail.data = 2;
+    head.data = 1;
+    head.next = &tail;
+
+    /* A two-node graph cloneable and destroyable entirely through the
+       injected allocator (blocks and copy bookkeeping alike). */
+    expect_eq_int("alloc copy_with",
+                  shrewd_basic_reflect_copy_with(&alloc, (void **)&clone, &head,
+                                                 &g_node_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("alloc counted", 2 <= tally.allocs);
+    expect_true("alloc clone graph",
+                (NULL != clone) && (1 == clone->data)
+                && (NULL != clone->next) && (2 == clone->next->data)
+                && (&tail != clone->next));
+    expect_eq_int("alloc destroy_with",
+                  shrewd_basic_reflect_destroy_with(&alloc, clone,
+                                                    &g_node_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("alloc balanced", tally.frees == tally.allocs);
+
+    /* Failure injection: the copy cleans up whatever it created. */
+    memset(&tally, 0, sizeof(tally));
+    tally.fail_at = 2;
+    clone = NULL;
+    expect_eq_int("alloc fail",
+                  shrewd_basic_reflect_copy_with(&alloc, (void **)&clone, &head,
+                                                 &g_node_reflect),
+                  SHREWD_BASIC_ERR_MEM_NOMEM);
+    expect_true("alloc fail balanced",
+                (0 < tally.allocs) && (tally.frees == tally.allocs));
+}
+
 int main(void)
 {
     test_describe();
@@ -4487,6 +4560,7 @@ int main(void)
     test_anonymous();
     test_layout();
     test_diff_all();
+    test_allocator();
     test_get_set_scalars();
     test_get_set_string();
     test_nested();

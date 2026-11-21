@@ -1244,12 +1244,53 @@ static int reflect_map_lookup(shrewd_basic_rbtree_t *map, const void *src,
     return SHREWD_BASIC_ERR_OK;
 }
 
-static int reflect_map_insert(shrewd_basic_rbtree_t *map, const void *src, void *dst,
+/* Injected allocation for copy/destroy (shrewd_basic_reflect_allocator_t):
+ * alloc must return zeroed memory (calloc semantics); NULL selects the
+ * platform allocator. Bookkeeping nodes of the copy map go through the
+ * same allocator, so copy_with/destroy_with pair up perfectly. */
+static int reflect_alloc_default(void *ctx, void **out, size_t size)
+{
+    (void)ctx;
+    return shrewd_basic_platform_calloc(out, 1, size);
+}
+
+static void reflect_alloc_default_free(void *ctx, void *ptr)
+{
+    void *block = ptr;
+    (void)ctx;
+    (void)shrewd_basic_platform_free(&block);
+}
+
+static const shrewd_basic_reflect_allocator_t *reflect_alloc_or_default(
+        const shrewd_basic_reflect_allocator_t *alloc)
+{
+    static const shrewd_basic_reflect_allocator_t fallback = {
+        reflect_alloc_default, reflect_alloc_default_free, NULL };
+    return (NULL != alloc) ? alloc : &fallback;
+}
+
+static int reflect_alloc_block(const shrewd_basic_reflect_allocator_t *alloc,
+                               void **out, size_t size)
+{
+    *out = NULL;
+    return alloc->alloc(alloc->ctx, out, size);
+}
+
+static void reflect_alloc_free(const shrewd_basic_reflect_allocator_t *alloc,
+                               void *ptr)
+{
+    if (NULL != ptr) {
+        alloc->free(alloc->ctx, ptr);
+    }
+}
+
+static int reflect_map_insert(shrewd_basic_rbtree_t *map, const shrewd_basic_reflect_allocator_t *alloc,
+                              const void *src, void *dst,
                               const shrewd_basic_reflect_ops_t *ops)
 {
     reflect_pair_t *pair = NULL;
     void *block = NULL;
-    int status = shrewd_basic_platform_alloc(&block, sizeof(*pair));
+    int status = reflect_alloc_block(alloc, &block, sizeof(*pair));
     if (SHREWD_BASIC_ERR_OK != status) {
         return status;
     }
@@ -1259,7 +1300,7 @@ static int reflect_map_insert(shrewd_basic_rbtree_t *map, const void *src, void 
     pair->ops = ops;
     status = shrewd_basic_rbtree_insert(map, pair);
     if (SHREWD_BASIC_ERR_OK != status) {
-        (void)shrewd_basic_platform_free(&block);
+        (void)reflect_alloc_free(alloc, block);
     }
     return status;
 }
@@ -1269,7 +1310,9 @@ static int reflect_map_insert(shrewd_basic_rbtree_t *map, const void *src, void 
  * well (ops clones through ops->destroy) - the cleanup path of a failed
  * copy, where the map is the authoritative list of what was created.
  */
-static void reflect_map_release(shrewd_basic_rbtree_t *map, int free_dst)
+static void reflect_map_release(shrewd_basic_rbtree_t *map,
+                                    const shrewd_basic_reflect_allocator_t *alloc,
+                                    int free_dst)
 {
     if (NULL == map) {
         return;
@@ -1287,12 +1330,12 @@ static void reflect_map_release(shrewd_basic_rbtree_t *map, int free_dst)
                     pair->ops->destroy(pair->dst);
                 }
             } else {
-                (void)shrewd_basic_platform_free(&pair->dst);
+                (void)reflect_alloc_free(alloc, pair->dst);
             }
         }
         void *removed = NULL;
         (void)shrewd_basic_rbtree_remove(map, pair, &removed);
-        (void)shrewd_basic_platform_free((void **)&pair);
+        (void)reflect_alloc_free(alloc, pair);
     }
     (void)shrewd_basic_rbtree_destroy(map);
 }
@@ -1317,8 +1360,7 @@ static int reflect_check_fields(const shrewd_basic_reflect_field_t *fields, size
             if (NULL != variant) {
                 int status = reflect_check_fields(variant->sb_refl_fields,
                                                   variant->sb_refl_field_count,
-                                                  base + field->sb_refl_offset,
-                                                  visited, depth + 1);
+                                                  base + field->sb_refl_offset, visited, depth + 1);
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
                 }
@@ -1344,8 +1386,7 @@ static int reflect_check_fields(const shrewd_basic_reflect_field_t *fields, size
                 }
                 target = pointer;
             }
-            int status = reflect_check_node(field->sb_refl_type, target, field_ops,
-                                            visited, depth + 1);
+            int status = reflect_check_node(field->sb_refl_type, target, field_ops, visited, depth + 1);
             if (SHREWD_BASIC_ERR_OK != status) {
                 return status;
             }
@@ -1416,10 +1457,14 @@ int shrewd_basic_reflect_check(const void *object,
 }
 
 static int reflect_destroy_value(const shrewd_basic_reflect_type_t *type, void *value,
-                                 shrewd_basic_rbtree_t *visited, size_t depth);
+                                 shrewd_basic_rbtree_t *visited,
+                                 const shrewd_basic_reflect_allocator_t *alloc,
+                                 size_t depth);
 static int reflect_copy_value(const shrewd_basic_reflect_type_t *type,
                               const unsigned char *src, unsigned char *dst,
-                              shrewd_basic_rbtree_t *map, size_t depth);
+                              shrewd_basic_rbtree_t *map,
+                                 const shrewd_basic_reflect_allocator_t *alloc,
+                                 size_t depth);
 
 /*
  * Clone an object (a pointee, or the root of copy): ops->copy handles
@@ -1430,7 +1475,9 @@ static int reflect_copy_value(const shrewd_basic_reflect_type_t *type,
  */
 static int reflect_clone_target(const shrewd_basic_reflect_type_t *type, const void *src,
                                 const shrewd_basic_reflect_ops_t *ops,
-                                void **out, shrewd_basic_rbtree_t *map, size_t depth)
+                                void **out, shrewd_basic_rbtree_t *map,
+                                const shrewd_basic_reflect_allocator_t *alloc,
+                                 size_t depth)
 {
     int found = 0;
     void *existing = NULL;
@@ -1448,7 +1495,7 @@ static int reflect_clone_target(const shrewd_basic_reflect_type_t *type, const v
             /* Tracked so failure cleanup can call ops->destroy; the
                insert is best-effort (a lost record would only leak the
                clone of a copy that is being discarded anyway). */
-            (void)reflect_map_insert(map, src, *out, ops);
+            (void)reflect_map_insert(map, alloc, src, *out, ops);
         }
         return status;
     }
@@ -1468,34 +1515,34 @@ static int reflect_clone_target(const shrewd_basic_reflect_type_t *type, const v
     }
     if (SHREWD_BASIC_REFLECT_KIND_STRUCT == type->sb_refl_kind) {
         void *block = NULL;
-        status = shrewd_basic_platform_calloc(&block, 1,
-                                              reflect_object_size((const unsigned char *)src, type));
+        status = reflect_alloc_block(alloc, &block,
+                                     reflect_object_size((const unsigned char *)src, type));
         if (SHREWD_BASIC_ERR_OK != status) {
             return status;
         }
         /* Register before recursing so back-edges find the clone; after
            registration the map owns cleanup on failure. */
-        status = reflect_map_insert(map, src, block, NULL);
+        status = reflect_map_insert(map, alloc, src, block, NULL);
         if (SHREWD_BASIC_ERR_OK != status) {
-            (void)shrewd_basic_platform_free(&block);
+            (void)reflect_alloc_free(alloc, block);
             return status;
         }
         status = reflect_copy_value(type, (const unsigned char *)src,
-                                    (unsigned char *)block, map, depth);
+                                    (unsigned char *)block, map, alloc, depth);
         if (SHREWD_BASIC_ERR_OK == status) {
             *out = block;
         }
         return status;
     }
     void *block = NULL;
-    status = shrewd_basic_platform_alloc(&block, type->sb_refl_size);
+    status = reflect_alloc_block(alloc, &block, type->sb_refl_size);
     if (SHREWD_BASIC_ERR_OK != status) {
         return status;
     }
     memcpy(block, src, type->sb_refl_size);
-    status = reflect_map_insert(map, src, block, NULL);
+    status = reflect_map_insert(map, alloc, src, block, NULL);
     if (SHREWD_BASIC_ERR_OK != status) {
-        (void)shrewd_basic_platform_free(&block);
+        (void)reflect_alloc_free(alloc, block);
         return status;
     }
     *out = block;
@@ -1505,7 +1552,9 @@ static int reflect_clone_target(const shrewd_basic_reflect_type_t *type, const v
 /* Copy one field list - a struct's fields or an active union variant's. */
 static int reflect_copy_fields(const shrewd_basic_reflect_field_t *fields, size_t count,
                                const unsigned char *src, unsigned char *dst,
-                               shrewd_basic_rbtree_t *map, size_t depth)
+                               shrewd_basic_rbtree_t *map,
+                                 const shrewd_basic_reflect_allocator_t *alloc,
+                                 size_t depth)
 {
     for (size_t i = 0; i < count; ++i) {
         const shrewd_basic_reflect_field_t *field = &fields[i];
@@ -1525,7 +1574,7 @@ static int reflect_copy_fields(const shrewd_basic_reflect_field_t *fields, size_
             if (NULL != variant) {
                 int status = reflect_copy_fields(
                         variant->sb_refl_fields, variant->sb_refl_field_count,
-                        src + field->sb_refl_offset, dst_at, map, depth + 1);
+                        src + field->sb_refl_offset, dst_at, map, alloc, depth + 1);
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
                 }
@@ -1556,13 +1605,13 @@ static int reflect_copy_fields(const shrewd_basic_reflect_field_t *fields, size_
                 bytes += view.stride; /* keep the NULL terminator slot */
             }
             void *table = NULL;
-            status = shrewd_basic_platform_calloc(&table, 1, bytes);
+            status = reflect_alloc_block(alloc, &table, bytes);
             if (SHREWD_BASIC_ERR_OK != status) {
                 return status;
             }
-            status = reflect_map_insert(map, view.base, table, NULL);
+            status = reflect_map_insert(map, alloc, view.base, table, NULL);
             if (SHREWD_BASIC_ERR_OK != status) {
-                (void)shrewd_basic_platform_free(&table);
+                (void)reflect_alloc_free(alloc, table);
                 return status;
             }
             memcpy(dst_at, &table, sizeof(table));
@@ -1587,7 +1636,7 @@ static int reflect_copy_fields(const shrewd_basic_reflect_field_t *fields, size_
                 void *clone = NULL;
                 int status = reflect_clone_target(field->sb_refl_type, pointer,
                                                   reflect_field_ops(field),
-                                                  &clone, map, depth + 1);
+                                                  &clone, map, alloc, depth + 1);
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
                 }
@@ -1596,7 +1645,7 @@ static int reflect_copy_fields(const shrewd_basic_reflect_field_t *fields, size_
                        || (SHREWD_BASIC_REFLECT_KIND_ARRAY
                            == field->sb_refl_type->sb_refl_kind)) {
                 int status = reflect_copy_value(field->sb_refl_type, src_elem,
-                                                dst_elem, map, depth + 1);
+                                                dst_elem, map, alloc, depth + 1);
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
                 }
@@ -1625,14 +1674,14 @@ static int reflect_copy_fields(const shrewd_basic_reflect_field_t *fields, size_
                 }
                 void *copy = NULL;
                 size_t length = strlen(text) + 1;
-                status = shrewd_basic_platform_alloc(&copy, length);
+                status = reflect_alloc_block(alloc, &copy, length);
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
                 }
                 memcpy(copy, text, length);
-                status = reflect_map_insert(map, text, copy, NULL);
+                status = reflect_map_insert(map, alloc, text, copy, NULL);
                 if (SHREWD_BASIC_ERR_OK != status) {
-                    (void)shrewd_basic_platform_free(&copy);
+                    (void)reflect_alloc_free(alloc, copy);
                     return status;
                 }
                 memcpy(dst_elem, &copy, sizeof(copy));
@@ -1647,7 +1696,9 @@ static int reflect_copy_fields(const shrewd_basic_reflect_field_t *fields, size_
 /* Copy a value's contents into existing dst storage (zero-initialized). */
 static int reflect_copy_value(const shrewd_basic_reflect_type_t *type,
                               const unsigned char *src, unsigned char *dst,
-                              shrewd_basic_rbtree_t *map, size_t depth)
+                              shrewd_basic_rbtree_t *map,
+                                 const shrewd_basic_reflect_allocator_t *alloc,
+                                 size_t depth)
 {
     if (SHREWD_BASIC_REFLECT_KIND_ARRAY == type->sb_refl_kind) {
         /* A fixed array value (a row): element-wise like a field array. */
@@ -1659,7 +1710,7 @@ static int reflect_copy_value(const shrewd_basic_reflect_type_t *type,
                     || (SHREWD_BASIC_REFLECT_KIND_ARRAY
                         == type->sb_refl_elem->sb_refl_kind)) {
                 int status = reflect_copy_value(type->sb_refl_elem, src_elem,
-                                                dst_elem, map, depth + 1);
+                                                dst_elem, map, alloc, depth + 1);
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
                 }
@@ -1674,17 +1725,19 @@ static int reflect_copy_value(const shrewd_basic_reflect_type_t *type,
         return SHREWD_BASIC_ERR_OK;
     }
     return reflect_copy_fields(type->sb_refl_fields, type->sb_refl_field_count,
-                               src, dst, map, depth);
+                               src, dst, map, alloc, depth);
 }
 
-int shrewd_basic_reflect_copy(void **out, const void *object,
-                              const shrewd_basic_reflect_type_t *type)
+int shrewd_basic_reflect_copy_with(const shrewd_basic_reflect_allocator_t *alloc,
+                                   void **out, const void *object,
+                                   const shrewd_basic_reflect_type_t *type)
 {
     if ((NULL == out) || (NULL == object) || (NULL == type)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
                          "field", "copy: out, object or type is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
+    alloc = reflect_alloc_or_default(alloc);
     shrewd_basic_rbtree_t *map = NULL;
     int status = shrewd_basic_rbtree_create(reflect_cmp_pair, NULL, &map);
     if (SHREWD_BASIC_ERR_OK != status) {
@@ -1694,7 +1747,7 @@ int shrewd_basic_reflect_copy(void **out, const void *object,
     }
     if ((NULL != type->sb_refl_ops) && (NULL != type->sb_refl_ops->copy)) {
         status = type->sb_refl_ops->copy(out, object);
-        reflect_map_release(map, (SHREWD_BASIC_ERR_OK != status) ? 1 : 0);
+        reflect_map_release(map, alloc, (SHREWD_BASIC_ERR_OK != status) ? 1 : 0);
         if (SHREWD_BASIC_ERR_OK == status) {
             shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
                              "field", "copy ok (%s)\n", type->sb_refl_name);
@@ -1708,29 +1761,29 @@ int shrewd_basic_reflect_copy(void **out, const void *object,
         return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
     }
     void *block = NULL;
-    status = shrewd_basic_platform_calloc(&block, 1,
-                                          reflect_object_size((const unsigned char *)object, type));
+    status = reflect_alloc_block(alloc, &block,
+                                 reflect_object_size((const unsigned char *)object, type));
     if (SHREWD_BASIC_ERR_OK != status) {
         (void)shrewd_basic_rbtree_destroy(map);
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_reflect_log,
                          "field", "copy: allocation failed\n");
         return status;
     }
-    status = reflect_map_insert(map, object, block, NULL);
+    status = reflect_map_insert(map, alloc, object, block, NULL);
     if (SHREWD_BASIC_ERR_OK == status) {
         status = reflect_copy_value(type, (const unsigned char *)object,
-                                    (unsigned char *)block, map, 0);
+                                    (unsigned char *)block, map, alloc, 0);
     }
     if (SHREWD_BASIC_ERR_OK != status) {
         /* The map is the authoritative record of every clone made;
            releasing it frees the partial graph (ops clones included). */
-        reflect_map_release(map, 1);
+        reflect_map_release(map, alloc, 1);
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
                          "field", "copy: failed (%s)\n",
                          shrewd_basic_error_name(status));
         return status;
     }
-    reflect_map_release(map, 0);
+    reflect_map_release(map, alloc, 0);
     *out = block;
     shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
                      "field", "copy ok (%s)\n", type->sb_refl_name);
@@ -1746,7 +1799,9 @@ int shrewd_basic_reflect_copy(void **out, const void *object,
  */
 static int reflect_destroy_target(const shrewd_basic_reflect_type_t *type, void *pointee,
                                   const shrewd_basic_reflect_ops_t *ops,
-                                  shrewd_basic_rbtree_t *visited, size_t depth)
+                                  shrewd_basic_rbtree_t *visited,
+                                 const shrewd_basic_reflect_allocator_t *alloc,
+                                 size_t depth)
 {
     if (REFLECT_MAX_DEPTH <= depth) {
         return SHREWD_BASIC_ERR_OK;
@@ -1764,11 +1819,12 @@ static int reflect_destroy_target(const shrewd_basic_reflect_type_t *type, void 
         return SHREWD_BASIC_ERR_OK;
     }
     if (SHREWD_BASIC_REFLECT_KIND_STRUCT == type->sb_refl_kind) {
-        status = reflect_destroy_value(type, pointee, visited, depth);
+        status = reflect_destroy_value(type, pointee, visited, alloc, depth);
         if (SHREWD_BASIC_ERR_OK != status) {
             return status;
         }
-        return shrewd_basic_platform_free(&pointee);
+        reflect_alloc_free(alloc, pointee);
+        return SHREWD_BASIC_ERR_OK;
     }
     if (SHREWD_BASIC_REFLECT_KIND_STRING == type->sb_refl_kind) {
         return SHREWD_BASIC_ERR_OK;
@@ -1776,12 +1832,15 @@ static int reflect_destroy_target(const shrewd_basic_reflect_type_t *type, void 
     if (SHREWD_BASIC_REFLECT_KIND_OPAQUE == type->sb_refl_kind) {
         return SHREWD_BASIC_ERR_OK;
     }
-    return shrewd_basic_platform_free(&pointee);
+    reflect_alloc_free(alloc, pointee);
+        return SHREWD_BASIC_ERR_OK;
 }
 
 /* Release one field list's targets - a struct's or a union variant's. */
 static int reflect_destroy_fields(const shrewd_basic_reflect_field_t *fields, size_t count,
-                                  void *value, shrewd_basic_rbtree_t *visited, size_t depth)
+                                  void *value, shrewd_basic_rbtree_t *visited,
+                                 const shrewd_basic_reflect_allocator_t *alloc,
+                                 size_t depth)
 {
     unsigned char *base = (unsigned char *)value;
     for (size_t i = 0; i < count; ++i) {
@@ -1797,7 +1856,7 @@ static int reflect_destroy_fields(const shrewd_basic_reflect_field_t *fields, si
             if (NULL != variant) {
                 int status = reflect_destroy_fields(variant->sb_refl_fields,
                                                     variant->sb_refl_field_count,
-                                                    at, visited, depth + 1);
+                                                    at, visited, alloc, depth + 1);
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
                 }
@@ -1829,15 +1888,14 @@ static int reflect_destroy_fields(const shrewd_basic_reflect_field_t *fields, si
                     continue;
                 }
                 int status = reflect_destroy_target(field->sb_refl_type, pointer,
-                                                    field_ops, visited, depth + 1);
+                                                    field_ops, visited, alloc, depth + 1);
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
                 }
             } else if ((SHREWD_BASIC_REFLECT_KIND_STRUCT == field->sb_refl_type->sb_refl_kind)
                        || (SHREWD_BASIC_REFLECT_KIND_ARRAY
                            == field->sb_refl_type->sb_refl_kind)) {
-                int status = reflect_destroy_value(field->sb_refl_type, elem,
-                                                   visited, depth + 1);
+                int status = reflect_destroy_value(field->sb_refl_type, elem, visited, alloc, depth + 1);
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
                 }
@@ -1854,19 +1912,13 @@ static int reflect_destroy_fields(const shrewd_basic_reflect_field_t *fields, si
                         return status;
                     }
                     if (0 == seen) {
-                        status = shrewd_basic_platform_free(&target);
-                        if (SHREWD_BASIC_ERR_OK != status) {
-                            return status;
-                        }
+                        reflect_alloc_free(alloc, target);
                     }
                 }
             }
         }
         if (NULL != table) {
-            int status = shrewd_basic_platform_free((void **)&table);
-            if (SHREWD_BASIC_ERR_OK != status) {
-                return status;
-            }
+            reflect_alloc_free(alloc, table);
         }
     }
     return SHREWD_BASIC_ERR_OK;
@@ -1874,7 +1926,9 @@ static int reflect_destroy_fields(const shrewd_basic_reflect_field_t *fields, si
 
 /* Release the pointer targets of a value; the value storage is untouched. */
 static int reflect_destroy_value(const shrewd_basic_reflect_type_t *type, void *value,
-                                 shrewd_basic_rbtree_t *visited, size_t depth)
+                                 shrewd_basic_rbtree_t *visited,
+                                 const shrewd_basic_reflect_allocator_t *alloc,
+                                 size_t depth)
 {
     if (SHREWD_BASIC_REFLECT_KIND_ARRAY == type->sb_refl_kind) {
         for (size_t i = 0; i < type->sb_refl_elem_count; ++i) {
@@ -1885,8 +1939,7 @@ static int reflect_destroy_value(const shrewd_basic_reflect_type_t *type, void *
             }
             int status = reflect_destroy_value(
                     type->sb_refl_elem,
-                    (unsigned char *)value + (i * type->sb_refl_elem_stride),
-                    visited, depth + 1);
+                    (unsigned char *)value + (i * type->sb_refl_elem_stride), visited, alloc, depth + 1);
             if (SHREWD_BASIC_ERR_OK != status) {
                 return status;
             }
@@ -1897,17 +1950,25 @@ static int reflect_destroy_value(const shrewd_basic_reflect_type_t *type, void *
         return SHREWD_BASIC_ERR_OK;
     }
     return reflect_destroy_fields(type->sb_refl_fields, type->sb_refl_field_count,
-                                  value, visited, depth);
+                                  value, visited, alloc, depth);
 }
 
-int shrewd_basic_reflect_destroy(void *object,
-                                 const shrewd_basic_reflect_type_t *type)
+int shrewd_basic_reflect_copy(void **out, const void *object,
+                              const shrewd_basic_reflect_type_t *type)
+{
+    return shrewd_basic_reflect_copy_with(NULL, out, object, type);
+}
+
+int shrewd_basic_reflect_destroy_with(const shrewd_basic_reflect_allocator_t *alloc,
+                                      void *object,
+                                      const shrewd_basic_reflect_type_t *type)
 {
     if ((NULL == object) || (NULL == type)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
                          "field", "destroy: object or type is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
+    alloc = reflect_alloc_or_default(alloc);
     if ((NULL != type->sb_refl_ops) && (NULL != type->sb_refl_ops->destroy)) {
         type->sb_refl_ops->destroy(object);
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
@@ -1931,10 +1992,10 @@ int shrewd_basic_reflect_destroy(void *object,
     int seen = 0;
     status = reflect_visited_check(visited, object, &seen);
     if (SHREWD_BASIC_ERR_OK == status) {
-        status = reflect_destroy_value(type, object, visited, 0);
+        status = reflect_destroy_value(type, object, visited, alloc, 0);
     }
     if (SHREWD_BASIC_ERR_OK == status) {
-        status = shrewd_basic_platform_free(&object);
+        reflect_alloc_free(alloc, object);
     }
     (void)shrewd_basic_rbtree_destroy(visited);
     if (SHREWD_BASIC_ERR_OK == status) {
@@ -1945,4 +2006,10 @@ int shrewd_basic_reflect_destroy(void *object,
                          "field", "destroy: free failed\n");
     }
     return status;
+}
+
+int shrewd_basic_reflect_destroy(void *object,
+                                 const shrewd_basic_reflect_type_t *type)
+{
+    return shrewd_basic_reflect_destroy_with(NULL, object, type);
 }
