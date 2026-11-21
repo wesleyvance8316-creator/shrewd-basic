@@ -4,8 +4,7 @@
 
 #include "shrewd-basic/config/build.h"
 
-int main(void)
-{
+int main(void) {
     const char *version = NULL;
     int major = 0;
     int minor = 0;

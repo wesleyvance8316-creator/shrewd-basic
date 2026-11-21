@@ -1,7 +1,6 @@
 #include "shrewd-basic/platform/error.h"
 
-const char *shrewd_basic_error_name(int status)
-{
+const char *shrewd_basic_error_name(int status) {
     switch (status) {
     case SHREWD_BASIC_ERR_OK:
         return "SHREWD_BASIC_ERR_OK";

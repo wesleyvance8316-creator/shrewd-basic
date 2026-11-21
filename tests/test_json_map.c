@@ -23,24 +23,21 @@
 
 static int g_failures = 0;
 
-static void expect_eq_int(const char *name, int actual, int expected)
-{
+static void expect_eq_int(const char *name, int actual, int expected) {
     if (actual != expected) {
         fprintf(stderr, "FAIL %s: got %d, want %d\n", name, actual, expected);
         ++g_failures;
     }
 }
 
-static void expect_true(const char *name, int condition)
-{
+static void expect_true(const char *name, int condition) {
     if (0 == condition) {
         fprintf(stderr, "FAIL %s\n", name);
         ++g_failures;
     }
 }
 
-static void expect_streq(const char *name, const char *actual, const char *expected)
-{
+static void expect_streq(const char *name, const char *actual, const char *expected) {
     if ((NULL == actual) || (NULL == expected) || (0 != strcmp(actual, expected))) {
         fprintf(stderr,
                 "FAIL %s: got \"%s\", want \"%s\"\n",
@@ -204,8 +201,7 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(node_reflect,
 static void expect_encode(const char *name,
                           const void *object,
                           const shrewd_basic_reflect_type_t *type,
-                          const char *expected)
-{
+                          const char *expected) {
     char *text = NULL;
     int status = shrewd_basic_json_encode(object, type, NULL, &text, NULL, NULL);
     if (SHREWD_BASIC_ERR_OK != status) {
@@ -218,9 +214,10 @@ static void expect_encode(const char *name,
 }
 
 /* Decode @p text into a fresh heap graph and return it (NULL on failure). */
-static void *
-decode_new(const char *name, const char *text, const shrewd_basic_reflect_type_t *type, size_t size)
-{
+static void *decode_new(const char *name,
+                        const char *text,
+                        const shrewd_basic_reflect_type_t *type,
+                        size_t size) {
     shrewd_basic_json_error_t error = {0};
     void *block = NULL;
     int status = 0;
@@ -244,15 +241,13 @@ decode_new(const char *name, const char *text, const shrewd_basic_reflect_type_t
 }
 
 /* Release a decode_new() graph: internals first, then the root. */
-static int free_new(void *object, const shrewd_basic_reflect_type_t *type)
-{
+static int free_new(void *object, const shrewd_basic_reflect_type_t *type) {
     int status = shrewd_basic_json_free(object, type, NULL);
     (void)shrewd_basic_platform_free(&object);
     return status;
 }
 
-static int map_sink_write(void *ctx, const char *data, size_t length)
-{
+static int map_sink_write(void *ctx, const char *data, size_t length) {
     char **cursor = (char **)ctx;
     memcpy(*cursor, data, length);
     *cursor += length;
@@ -260,8 +255,7 @@ static int map_sink_write(void *ctx, const char *data, size_t length)
     return SHREWD_BASIC_ERR_OK;
 }
 
-static void test_encode_person(void)
-{
+static void test_encode_person(void) {
     person_t person = {0};
     memset(&person, 0, sizeof(person));
     person.active = true;
@@ -336,8 +330,7 @@ static void test_encode_person(void)
     }
 }
 
-static void test_decode_rules(void)
-{
+static void test_decode_rules(void) {
     /* Decode fills fields; missing keys keep zero; count members are
        derived from array lengths; short arrays zero their tail. */
     person_t *person = decode_new("decode person",
@@ -450,8 +443,7 @@ static void test_decode_rules(void)
     }
 }
 
-static void test_union(void)
-{
+static void test_union(void) {
     message_t message = {0};
     memset(&message, 0, sizeof(message));
     message.kind = PAYLOAD_POINT;
@@ -524,8 +516,7 @@ static void test_union(void)
     }
 }
 
-static void test_arrays_and_bits(void)
-{
+static void test_arrays_and_bits(void) {
     /* Dynamic arrays: counts are derived from array lengths. */
     dyn_t *dyn = decode_new("decode dyn",
                             "{\"values\":[7,8,9],\"value_count\":999,\"argv\":[\"ls\",\"-l\"]}",
@@ -591,8 +582,7 @@ static void test_arrays_and_bits(void)
     }
 }
 
-static void test_pointers(void)
-{
+static void test_pointers(void) {
     refs_t *refs = decode_new("decode refs",
                               "{\"home\":{\"x\":3,\"y\":4},\"p_str\":\"hi\",\"counter\":7,"
                               "\"links\":[{\"x\":1,\"y\":2},null]}",
@@ -677,8 +667,7 @@ static void test_pointers(void)
     }
 }
 
-static void test_encode_options(void)
-{
+static void test_encode_options(void) {
     person_t person = {0};
     char *text = NULL;
     shrewd_basic_json_options_t options = {0};
@@ -712,8 +701,7 @@ static void test_encode_options(void)
     shrewd_basic_json_text_free(text);
 }
 
-int main(void)
-{
+int main(void) {
     /* The mapping traces are noisy; silence the reflect/json modules. */
     shrewd_basic_log_module_t *module = NULL;
     if (SHREWD_BASIC_ERR_OK == shrewd_basic_log_module_find("reflect", &module)) {

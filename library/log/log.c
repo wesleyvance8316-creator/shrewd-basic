@@ -48,22 +48,19 @@ static void (*g_lock_fn)(void *ctx) = NULL;
 static void (*g_unlock_fn)(void *ctx) = NULL;
 static void *g_lock_ctx = NULL;
 
-static void log_lock(void)
-{
+static void log_lock(void) {
     if (NULL != g_lock_fn) {
         g_lock_fn(g_lock_ctx);
     }
 }
 
-static void log_unlock(void)
-{
+static void log_unlock(void) {
     if (NULL != g_unlock_fn) {
         g_unlock_fn(g_lock_ctx);
     }
 }
 
-static void log_touch(shrewd_basic_log_module_t *module)
-{
+static void log_touch(shrewd_basic_log_module_t *module) {
     if (0 == module->registered) {
         module->next = g_modules;
         g_modules = module;
@@ -71,8 +68,7 @@ static void log_touch(shrewd_basic_log_module_t *module)
     }
 }
 
-static void log_unlink(shrewd_basic_log_module_t *module)
-{
+static void log_unlink(shrewd_basic_log_module_t *module) {
     if (0 == module->registered) {
         return;
     }
@@ -88,16 +84,14 @@ static void log_unlink(shrewd_basic_log_module_t *module)
     module->registered = 0;
 }
 
-static FILE *log_output(shrewd_basic_log_module_t *module)
-{
+static FILE *log_output(shrewd_basic_log_module_t *module) {
     if (NULL != module->out) {
         return module->out;
     }
     return (NULL != g_global_out) ? g_global_out : stderr;
 }
 
-static const char *log_level_name(shrewd_basic_log_level_t level)
-{
+static const char *log_level_name(shrewd_basic_log_level_t level) {
     const char *name = "UNKNOWN";
     switch (level) {
     case SHREWD_BASIC_LOG_LEVEL_FATAL:
@@ -127,8 +121,7 @@ static const char *log_level_name(shrewd_basic_log_level_t level)
     return name;
 }
 
-static const char *log_level_color(shrewd_basic_log_level_t level)
-{
+static const char *log_level_color(shrewd_basic_log_level_t level) {
     const char *color = "\033[1;37m"; /* bold white */
     switch (level) {
     case SHREWD_BASIC_LOG_LEVEL_FATAL:
@@ -159,13 +152,11 @@ static const char *log_level_color(shrewd_basic_log_level_t level)
 }
 
 /* Colors only reach real terminals; files and pipes get plain text. */
-static int log_use_color(FILE *stream)
-{
+static int log_use_color(FILE *stream) {
     return 0 != log_isatty(stream);
 }
 
-static const char *log_basename(const char *path)
-{
+static const char *log_basename(const char *path) {
     const char *base = path;
     const char *cursor = path;
     while ('\0' != *cursor) {
@@ -178,8 +169,7 @@ static const char *log_basename(const char *path)
 }
 
 /* "[YYYY-MM-DD HH:mm:ss.xxxxxx]", local time, microseconds. */
-static void log_timestamp(char *buf, size_t size)
-{
+static void log_timestamp(char *buf, size_t size) {
     struct timespec ts = {0};
     char timebuf[32] = {0};
 
@@ -197,13 +187,11 @@ static void log_timestamp(char *buf, size_t size)
     snprintf(buf, size, "[%s.%06d]", timebuf, (int)(ts.tv_nsec / 1000));
 }
 
-static int log_enabled(const shrewd_basic_log_module_t *module, shrewd_basic_log_level_t level)
-{
+static int log_enabled(const shrewd_basic_log_module_t *module, shrewd_basic_log_level_t level) {
     return 0u != (module->level_mask & (uint32_t)level);
 }
 
-int shrewd_basic_log_set_lock(void (*lock_fn)(void *ctx), void (*unlock_fn)(void *ctx), void *ctx)
-{
+int shrewd_basic_log_set_lock(void (*lock_fn)(void *ctx), void (*unlock_fn)(void *ctx), void *ctx) {
     if (((NULL == lock_fn) && (NULL != unlock_fn)) || ((NULL != lock_fn) && (NULL == unlock_fn))) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -215,8 +203,7 @@ int shrewd_basic_log_set_lock(void (*lock_fn)(void *ctx), void (*unlock_fn)(void
 
 int shrewd_basic_log_module_create(const char *name,
                                    uint32_t level_mask,
-                                   shrewd_basic_log_module_t **out)
-{
+                                   shrewd_basic_log_module_t **out) {
     if ((NULL == name) || (NULL == out)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -236,8 +223,7 @@ int shrewd_basic_log_module_create(const char *name,
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_log_module_destroy(shrewd_basic_log_module_t *module)
-{
+int shrewd_basic_log_module_destroy(shrewd_basic_log_module_t *module) {
     int status = SHREWD_BASIC_ERR_OK;
     if (NULL == module) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
@@ -256,8 +242,7 @@ int shrewd_basic_log_module_destroy(shrewd_basic_log_module_t *module)
     return status;
 }
 
-int shrewd_basic_log_module_register(shrewd_basic_log_module_t *module)
-{
+int shrewd_basic_log_module_register(shrewd_basic_log_module_t *module) {
     if (NULL == module) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -267,8 +252,7 @@ int shrewd_basic_log_module_register(shrewd_basic_log_module_t *module)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_log_module_find(const char *name, shrewd_basic_log_module_t **out)
-{
+int shrewd_basic_log_module_find(const char *name, shrewd_basic_log_module_t **out) {
     if ((NULL == name) || (NULL == out)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -286,8 +270,7 @@ int shrewd_basic_log_module_find(const char *name, shrewd_basic_log_module_t **o
     return SHREWD_BASIC_ERR_KEY_NOTFOUND;
 }
 
-int shrewd_basic_log_module_set_level(shrewd_basic_log_module_t *module, uint32_t level_mask)
-{
+int shrewd_basic_log_module_set_level(shrewd_basic_log_module_t *module, uint32_t level_mask) {
     if (NULL == module) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -298,8 +281,7 @@ int shrewd_basic_log_module_set_level(shrewd_basic_log_module_t *module, uint32_
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_log_module_set_stream(shrewd_basic_log_module_t *module, FILE *stream)
-{
+int shrewd_basic_log_module_set_stream(shrewd_basic_log_module_t *module, FILE *stream) {
     if ((NULL == module) || (NULL == stream)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -314,8 +296,7 @@ int shrewd_basic_log_module_set_stream(shrewd_basic_log_module_t *module, FILE *
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_log_module_set_file(shrewd_basic_log_module_t *module, const char *path)
-{
+int shrewd_basic_log_module_set_file(shrewd_basic_log_module_t *module, const char *path) {
     if ((NULL == module) || (NULL == path)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -334,8 +315,7 @@ int shrewd_basic_log_module_set_file(shrewd_basic_log_module_t *module, const ch
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_log_set_global_stream(FILE *stream)
-{
+int shrewd_basic_log_set_global_stream(FILE *stream) {
     if (NULL == stream) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -349,8 +329,7 @@ int shrewd_basic_log_set_global_stream(FILE *stream)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_log_set_global_file(const char *path)
-{
+int shrewd_basic_log_set_global_file(const char *path) {
     if (NULL == path) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -375,8 +354,7 @@ int shrewd_basic_log_write(shrewd_basic_log_level_t level,
                            int line,
                            const char *func,
                            const char *fmt,
-                           ...)
-{
+                           ...) {
     if ((NULL == module) || (NULL == label) || (NULL == file) || (NULL == func) || (NULL == fmt)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -434,8 +412,7 @@ int shrewd_basic_log_hex_write(shrewd_basic_log_level_t level,
                                size_t size,
                                const char *file,
                                int line,
-                               const char *func)
-{
+                               const char *func) {
     if ((NULL == module) || (NULL == label) || (NULL == msg) || (NULL == file) || (NULL == func)
         || ((0 != size) && (NULL == data))) {
         return SHREWD_BASIC_ERR_ARG_INVALID;

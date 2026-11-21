@@ -11,8 +11,7 @@ struct shrewd_basic_queue_node {
     struct shrewd_basic_queue_node *next;
 };
 
-int shrewd_basic_queue_create(shrewd_basic_queue_t **out)
-{
+int shrewd_basic_queue_create(shrewd_basic_queue_t **out) {
     if (NULL == out) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "queue", "create: out is NULL\n");
@@ -32,8 +31,7 @@ int shrewd_basic_queue_create(shrewd_basic_queue_t **out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_queue_destroy(shrewd_basic_queue_t *queue)
-{
+int shrewd_basic_queue_destroy(shrewd_basic_queue_t *queue) {
     if (NULL == queue) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "queue", "destroy: queue is NULL\n");
@@ -64,8 +62,7 @@ int shrewd_basic_queue_destroy(shrewd_basic_queue_t *queue)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_queue_enqueue(shrewd_basic_queue_t *queue, void *data)
-{
+int shrewd_basic_queue_enqueue(shrewd_basic_queue_t *queue, void *data) {
     if (NULL == queue) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "queue", "enqueue: queue is NULL\n");
@@ -98,8 +95,7 @@ int shrewd_basic_queue_enqueue(shrewd_basic_queue_t *queue, void *data)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_queue_dequeue(shrewd_basic_queue_t *queue, void **out)
-{
+int shrewd_basic_queue_dequeue(shrewd_basic_queue_t *queue, void **out) {
     if (NULL == queue) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "queue", "dequeue: queue is NULL\n");
@@ -135,8 +131,7 @@ int shrewd_basic_queue_dequeue(shrewd_basic_queue_t *queue, void **out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_queue_front(const shrewd_basic_queue_t *queue, void **out)
-{
+int shrewd_basic_queue_front(const shrewd_basic_queue_t *queue, void **out) {
     if ((NULL == queue) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -153,8 +148,7 @@ int shrewd_basic_queue_front(const shrewd_basic_queue_t *queue, void **out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_queue_size(const shrewd_basic_queue_t *queue, size_t *out)
-{
+int shrewd_basic_queue_size(const shrewd_basic_queue_t *queue, size_t *out) {
     if ((NULL == queue) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -166,15 +160,13 @@ int shrewd_basic_queue_size(const shrewd_basic_queue_t *queue, size_t *out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-bool shrewd_basic_queue_empty(const shrewd_basic_queue_t *queue)
-{
+bool shrewd_basic_queue_empty(const shrewd_basic_queue_t *queue) {
     return (NULL == queue) || (0 == queue->size);
 }
 
 int shrewd_basic_queue_foreach(const shrewd_basic_queue_t *queue,
                                shrewd_basic_queue_visit_fn visit,
-                               void *ctx)
-{
+                               void *ctx) {
     if ((NULL == queue) || (NULL == visit)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,

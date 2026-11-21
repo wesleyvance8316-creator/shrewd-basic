@@ -39,8 +39,8 @@ typedef struct json_map_ctx {
  * value a custom ops->encode may produce): false/0/""/NULL/empty
  * containers.
  */
-static int json_field_empty(const shrewd_basic_reflect_field_t *field, const unsigned char *object)
-{
+static int json_field_empty(const shrewd_basic_reflect_field_t *field,
+                            const unsigned char *object) {
     const unsigned char *at = object + field->sb_refl_offset;
     if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
         return (NULL == reflect_load_ptr(at)) ? 1 : 0;
@@ -81,8 +81,7 @@ static int json_field_empty(const shrewd_basic_reflect_field_t *field, const uns
     }
 }
 
-static int json_map_fail(json_map_ctx_t *ctx, int status, const char *fmt, ...)
-{
+static int json_map_fail(json_map_ctx_t *ctx, int status, const char *fmt, ...) {
     if (NULL != ctx->error) {
         va_list ap;
         va_start(ap, fmt);
@@ -96,19 +95,16 @@ static int json_map_fail(json_map_ctx_t *ctx, int status, const char *fmt, ...)
     return status;
 }
 
-static size_t json_map_mark(const json_map_ctx_t *ctx)
-{
+static size_t json_map_mark(const json_map_ctx_t *ctx) {
     return ctx->path_len;
 }
 
-static void json_map_restore(json_map_ctx_t *ctx, size_t mark)
-{
+static void json_map_restore(json_map_ctx_t *ctx, size_t mark) {
     ctx->path_len = mark;
     ctx->path[mark] = '\0';
 }
 
-static void json_map_append(json_map_ctx_t *ctx, const char *text)
-{
+static void json_map_append(json_map_ctx_t *ctx, const char *text) {
     size_t room = (sizeof(ctx->path) - 1) - ctx->path_len;
     size_t used = strlen(text);
     if (used > room) {
@@ -119,16 +115,14 @@ static void json_map_append(json_map_ctx_t *ctx, const char *text)
     ctx->path[ctx->path_len] = '\0';
 }
 
-static void json_map_member(json_map_ctx_t *ctx, const char *name)
-{
+static void json_map_member(json_map_ctx_t *ctx, const char *name) {
     if (0 != ctx->path_len) {
         json_map_append(ctx, ".");
     }
     json_map_append(ctx, name);
 }
 
-static void json_map_index(json_map_ctx_t *ctx, size_t index)
-{
+static void json_map_index(json_map_ctx_t *ctx, size_t index) {
     char text[24] = {0};
     (void)snprintf(text, sizeof(text), "[%zu]", index);
     json_map_append(ctx, text);
@@ -137,8 +131,7 @@ static void json_map_index(json_map_ctx_t *ctx, size_t index)
 static int json_map_seen(const json_map_ctx_t *ctx,
                          size_t depth,
                          const void *object,
-                         const shrewd_basic_reflect_type_t *type)
-{
+                         const shrewd_basic_reflect_type_t *type) {
     for (size_t i = 0; i < depth; ++i) {
         if ((ctx->stack[i].object == object) && (ctx->stack[i].type == type)) {
             return 1;
@@ -160,8 +153,7 @@ static int json_encode_node(json_map_ctx_t *ctx,
                             size_t nbytes,
                             const shrewd_basic_reflect_ops_t *ops,
                             size_t depth,
-                            shrewd_basic_json_value_t **out)
-{
+                            shrewd_basic_json_value_t **out) {
     *out = NULL;
     if ((NULL != ops) && (NULL != ops->render)) {
         /* Custom rendering (opaque targets and friends). */
@@ -293,8 +285,7 @@ static int json_encode_field(json_map_ctx_t *ctx,
                              const unsigned char *object,
                              size_t depth,
                              const shrewd_basic_json_key_info_t *view,
-                             shrewd_basic_json_value_t **out)
-{
+                             shrewd_basic_json_value_t **out) {
     const unsigned char *at = object + field->sb_refl_offset;
     *out = NULL;
     if ((NULL != view->ops) && (NULL != view->ops->encode)) {
@@ -437,8 +428,7 @@ static int json_encode_fields(json_map_ctx_t *ctx,
                               size_t count,
                               const unsigned char *object,
                               size_t depth,
-                              shrewd_basic_json_value_t *container)
-{
+                              shrewd_basic_json_value_t *container) {
     for (size_t i = 0; i < count; ++i) {
         const shrewd_basic_reflect_field_t *field = &fields[i];
         shrewd_basic_json_key_info_t view = {0};
@@ -583,8 +573,7 @@ int shrewd_basic_json_encode_value(const void *object,
                                    const shrewd_basic_json_info_t *info,
                                    shrewd_basic_json_value_t **out,
                                    const shrewd_basic_json_options_t *options,
-                                   shrewd_basic_json_error_t *error)
-{
+                                   shrewd_basic_json_error_t *error) {
     static const shrewd_basic_json_options_t plain = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     json_map_ctx_t ctx = {0};
     int status = 0;
@@ -631,8 +620,7 @@ int shrewd_basic_json_encode_to(const void *object,
                                 shrewd_basic_json_write_fn write,
                                 void *ctx,
                                 const shrewd_basic_json_options_t *options,
-                                shrewd_basic_json_error_t *error)
-{
+                                shrewd_basic_json_error_t *error) {
     shrewd_basic_json_value_t *tree = NULL;
     int status = shrewd_basic_json_encode_value(object, type, info, &tree, options, error);
     if (SHREWD_BASIC_ERR_OK != status) {
@@ -648,8 +636,7 @@ int shrewd_basic_json_encode(const void *object,
                              const shrewd_basic_json_info_t *info,
                              char **out_text,
                              const shrewd_basic_json_options_t *options,
-                             shrewd_basic_json_error_t *error)
-{
+                             shrewd_basic_json_error_t *error) {
     shrewd_basic_json_value_t *tree = NULL;
     int status = shrewd_basic_json_encode_value(object, type, info, &tree, options, error);
     if (SHREWD_BASIC_ERR_OK != status) {

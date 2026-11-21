@@ -22,8 +22,7 @@ typedef struct equal_pair {
     const void *b;
 } equal_pair_t;
 
-static int equal_pair_seen(const equal_pair_t *path, size_t depth, const void *a, const void *b)
-{
+static int equal_pair_seen(const equal_pair_t *path, size_t depth, const void *a, const void *b) {
     for (size_t i = 0; i < depth; ++i) {
         if ((path[i].a == a) && (path[i].b == b)) {
             return 1;
@@ -44,21 +43,18 @@ typedef struct diff_path {
     size_t len;
 } diff_path_t;
 
-static size_t diff_path_mark(const diff_path_t *diff)
-{
+static size_t diff_path_mark(const diff_path_t *diff) {
     return (NULL != diff) ? diff->len : 0;
 }
 
-static void diff_path_restore(diff_path_t *diff, size_t mark)
-{
+static void diff_path_restore(diff_path_t *diff, size_t mark) {
     if (NULL != diff) {
         diff->len = mark;
         diff->buf[mark] = '\0';
     }
 }
 
-static void diff_path_append(diff_path_t *diff, const char *text)
-{
+static void diff_path_append(diff_path_t *diff, const char *text) {
     size_t room = (diff->cap - 1) - diff->len;
     size_t used = strlen(text);
     if (used > room) {
@@ -69,8 +65,7 @@ static void diff_path_append(diff_path_t *diff, const char *text)
     diff->buf[diff->len] = '\0';
 }
 
-static void diff_path_member(diff_path_t *diff, const char *name)
-{
+static void diff_path_member(diff_path_t *diff, const char *name) {
     if (NULL == diff) {
         return;
     }
@@ -80,8 +75,7 @@ static void diff_path_member(diff_path_t *diff, const char *name)
     diff_path_append(diff, name);
 }
 
-static void diff_path_index(diff_path_t *diff, size_t index)
-{
+static void diff_path_index(diff_path_t *diff, size_t index) {
     char text[24] = {0};
     if (NULL == diff) {
         return;
@@ -107,8 +101,7 @@ static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
                                equal_pair_t *path,
                                size_t depth,
                                diff_path_t *diff,
-                               bool *out_equal)
-{
+                               bool *out_equal) {
     if (EQUAL_MAX_DEPTH <= depth) {
         *out_equal = true;
         return SHREWD_BASIC_ERR_OK;
@@ -172,7 +165,7 @@ static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
                                          depth + 1,
                                          diff,
                                          &same);
-            if ((SHREWD_BASIC_ERR_OK != status) || !same) {
+            if ((SHREWD_BASIC_ERR_OK != status) || (!same)) {
                 *out_equal = false;
                 return status;
             }
@@ -198,8 +191,7 @@ static int reflect_equal_fields(const shrewd_basic_reflect_field_t *fields,
                                 equal_pair_t *path,
                                 size_t depth,
                                 diff_path_t *diff,
-                                bool *out_equal)
-{
+                                bool *out_equal) {
     for (size_t i = 0; i < count; ++i) {
         const shrewd_basic_reflect_field_t *field = &fields[i];
         const shrewd_basic_reflect_ops_t *field_ops = reflect_field_ops(field);
@@ -244,7 +236,7 @@ static int reflect_equal_fields(const shrewd_basic_reflect_field_t *fields,
                                                   depth + 1,
                                                   diff,
                                                   &same);
-                if ((SHREWD_BASIC_ERR_OK != status) || !same) {
+                if ((SHREWD_BASIC_ERR_OK != status) || (!same)) {
                     *out_equal = false;
                     return status;
                 }
@@ -317,7 +309,7 @@ static int reflect_equal_fields(const shrewd_basic_reflect_field_t *fields,
                                                  depth + 1,
                                                  diff,
                                                  &same);
-                if ((SHREWD_BASIC_ERR_OK != status) || !same) {
+                if ((SHREWD_BASIC_ERR_OK != status) || (!same)) {
                     *out_equal = false;
                     return status;
                 }
@@ -332,7 +324,7 @@ static int reflect_equal_fields(const shrewd_basic_reflect_field_t *fields,
                                                  depth + 1,
                                                  diff,
                                                  &same);
-                if ((SHREWD_BASIC_ERR_OK != status) || !same) {
+                if ((SHREWD_BASIC_ERR_OK != status) || (!same)) {
                     *out_equal = false;
                     return status;
                 }
@@ -348,8 +340,7 @@ static int reflect_equal_fields(const shrewd_basic_reflect_field_t *fields,
 int shrewd_basic_reflect_equal(const void *a,
                                const void *b,
                                const shrewd_basic_reflect_type_t *type,
-                               bool *out_equal)
-{
+                               bool *out_equal) {
     if ((NULL == a) || (NULL == b) || (NULL == type) || (NULL == out_equal)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_reflect_log,
@@ -387,8 +378,7 @@ int shrewd_basic_reflect_diff(const void *a,
                               const void *b,
                               const shrewd_basic_reflect_type_t *type,
                               char *path_out,
-                              size_t path_out_size)
-{
+                              size_t path_out_size) {
     if ((NULL == a) || (NULL == b) || (NULL == type)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_reflect_log,
@@ -454,8 +444,7 @@ typedef struct diff_all_ctx {
 
 static int diff_all_report(const diff_all_ctx_t *all,
                            const diff_path_t *diff,
-                           shrewd_basic_reflect_diff_kind_t kind)
-{
+                           shrewd_basic_reflect_diff_kind_t kind) {
     const char *path = (0 != diff->len) ? diff->buf : "(root)";
     return all->fn(all->ctx, path, kind);
 }
@@ -477,8 +466,7 @@ static int diff_all_fields(const shrewd_basic_reflect_field_t *fields,
                            equal_pair_t *pair_path,
                            size_t depth,
                            diff_path_t *diff,
-                           const diff_all_ctx_t *all)
-{
+                           const diff_all_ctx_t *all) {
     for (size_t i = 0; i < count; ++i) {
         const shrewd_basic_reflect_field_t *field = &fields[i];
         const shrewd_basic_reflect_ops_t *field_ops = reflect_field_ops(field);
@@ -632,8 +620,7 @@ static int diff_all_value(const shrewd_basic_reflect_type_t *type,
                           equal_pair_t *pair_path,
                           size_t depth,
                           diff_path_t *diff,
-                          const diff_all_ctx_t *all)
-{
+                          const diff_all_ctx_t *all) {
     int status = 0;
     if (EQUAL_MAX_DEPTH <= depth) {
         return SHREWD_BASIC_ERR_OK;
@@ -719,8 +706,7 @@ int shrewd_basic_reflect_diff_all(const void *a,
                                   const void *b,
                                   const shrewd_basic_reflect_type_t *type,
                                   shrewd_basic_reflect_diff_fn fn,
-                                  void *ctx)
-{
+                                  void *ctx) {
     equal_pair_t pair_path[EQUAL_MAX_DEPTH] = {0};
     char path_buf[256] = {0};
     diff_path_t diff = {0};

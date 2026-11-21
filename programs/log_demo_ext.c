@@ -5,8 +5,7 @@
 /* Import the module defined in log_demo.c: same storage, same registry. */
 SHREWD_BASIC_LOG_MODULE_DECLARE(g_demo);
 
-void shrewd_demo_log_ext_run(void)
-{
+void shrewd_demo_log_ext_run(void) {
     shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_INFO,
                      g_demo,
                      "ext",

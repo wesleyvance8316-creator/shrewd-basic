@@ -6,8 +6,7 @@
 /* Shared ds log module, defined in library/ds/ds.c. */
 SHREWD_BASIC_LOG_MODULE_DECLARE(shrewd_basic_ds_log);
 
-int shrewd_basic_dlist_create(shrewd_basic_dlist_t **out)
-{
+int shrewd_basic_dlist_create(shrewd_basic_dlist_t **out) {
     if (NULL == out) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "dlist", "create: out is NULL\n");
@@ -27,8 +26,7 @@ int shrewd_basic_dlist_create(shrewd_basic_dlist_t **out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_dlist_destroy(shrewd_basic_dlist_t *list)
-{
+int shrewd_basic_dlist_destroy(shrewd_basic_dlist_t *list) {
     if (NULL == list) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "dlist", "destroy: list is NULL\n");
@@ -59,8 +57,7 @@ int shrewd_basic_dlist_destroy(shrewd_basic_dlist_t *list)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_dlist_push_front(shrewd_basic_dlist_t *list, void *data)
-{
+int shrewd_basic_dlist_push_front(shrewd_basic_dlist_t *list, void *data) {
     if (NULL == list) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -96,8 +93,7 @@ int shrewd_basic_dlist_push_front(shrewd_basic_dlist_t *list, void *data)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_dlist_push_back(shrewd_basic_dlist_t *list, void *data)
-{
+int shrewd_basic_dlist_push_back(shrewd_basic_dlist_t *list, void *data) {
     if (NULL == list) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "dlist", "push_back: list is NULL\n");
@@ -131,8 +127,7 @@ int shrewd_basic_dlist_push_back(shrewd_basic_dlist_t *list, void *data)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_dlist_pop_front(shrewd_basic_dlist_t *list, void **out)
-{
+int shrewd_basic_dlist_pop_front(shrewd_basic_dlist_t *list, void **out) {
     if (NULL == list) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "dlist", "pop_front: list is NULL\n");
@@ -170,8 +165,7 @@ int shrewd_basic_dlist_pop_front(shrewd_basic_dlist_t *list, void **out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_dlist_pop_back(shrewd_basic_dlist_t *list, void **out)
-{
+int shrewd_basic_dlist_pop_back(shrewd_basic_dlist_t *list, void **out) {
     if (NULL == list) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "dlist", "pop_back: list is NULL\n");
@@ -209,8 +203,7 @@ int shrewd_basic_dlist_pop_back(shrewd_basic_dlist_t *list, void **out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_dlist_front(const shrewd_basic_dlist_t *list, void **out)
-{
+int shrewd_basic_dlist_front(const shrewd_basic_dlist_t *list, void **out) {
     if ((NULL == list) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -227,8 +220,7 @@ int shrewd_basic_dlist_front(const shrewd_basic_dlist_t *list, void **out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_dlist_back(const shrewd_basic_dlist_t *list, void **out)
-{
+int shrewd_basic_dlist_back(const shrewd_basic_dlist_t *list, void **out) {
     if ((NULL == list) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -247,8 +239,7 @@ int shrewd_basic_dlist_back(const shrewd_basic_dlist_t *list, void **out)
 
 int shrewd_basic_dlist_insert_before(shrewd_basic_dlist_t *list,
                                      shrewd_basic_dlist_node_t *node,
-                                     void *data)
-{
+                                     void *data) {
     if ((NULL == list) || (NULL == node)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -286,8 +277,7 @@ int shrewd_basic_dlist_insert_before(shrewd_basic_dlist_t *list,
 
 int shrewd_basic_dlist_insert_after(shrewd_basic_dlist_t *list,
                                     shrewd_basic_dlist_node_t *node,
-                                    void *data)
-{
+                                    void *data) {
     if ((NULL == list) || (NULL == node)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -325,8 +315,7 @@ int shrewd_basic_dlist_insert_after(shrewd_basic_dlist_t *list,
 
 int shrewd_basic_dlist_remove(shrewd_basic_dlist_t *list,
                               shrewd_basic_dlist_node_t *node,
-                              void **out)
-{
+                              void **out) {
     if ((NULL == list) || (NULL == node)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -364,8 +353,7 @@ int shrewd_basic_dlist_remove(shrewd_basic_dlist_t *list,
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_dlist_size(const shrewd_basic_dlist_t *list, size_t *out)
-{
+int shrewd_basic_dlist_size(const shrewd_basic_dlist_t *list, size_t *out) {
     if ((NULL == list) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -377,15 +365,13 @@ int shrewd_basic_dlist_size(const shrewd_basic_dlist_t *list, size_t *out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-bool shrewd_basic_dlist_empty(const shrewd_basic_dlist_t *list)
-{
+bool shrewd_basic_dlist_empty(const shrewd_basic_dlist_t *list) {
     return (NULL == list) || (0 == list->size);
 }
 
 int shrewd_basic_dlist_foreach(const shrewd_basic_dlist_t *list,
                                shrewd_basic_dlist_visit_fn visit,
-                               void *ctx)
-{
+                               void *ctx) {
     if ((NULL == list) || (NULL == visit)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -409,8 +395,7 @@ int shrewd_basic_dlist_foreach(const shrewd_basic_dlist_t *list,
 
 int shrewd_basic_dlist_foreach_reverse(const shrewd_basic_dlist_t *list,
                                        shrewd_basic_dlist_visit_fn visit,
-                                       void *ctx)
-{
+                                       void *ctx) {
     if ((NULL == list) || (NULL == visit)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,

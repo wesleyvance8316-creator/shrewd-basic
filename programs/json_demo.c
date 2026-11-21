@@ -101,13 +101,11 @@ SHREWD_BASIC_JSON_DEFINE(dfl_json,
                          SHREWD_BASIC_JSON_BORROWED(unit),
                          SHREWD_BASIC_JSON_DEFAULT_JSON(scores, "[7,8,9]"));
 
-static void print_status(const char *what, int status)
-{
+static void print_status(const char *what, int status) {
     printf("  %-36s -> %s (%d)\n", what, shrewd_basic_error_name(status), status);
 }
 
-int main(void)
-{
+int main(void) {
     printf("=== 1. encode: struct -> JSON text ===\n");
     msg_t msg = {0};
     memset(&msg, 0, sizeof(msg));

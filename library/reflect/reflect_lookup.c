@@ -18,8 +18,7 @@ SHREWD_BASIC_LOG_MODULE_DECLARE(shrewd_basic_reflect_log);
 
 int shrewd_basic_reflect_lookup_init(shrewd_basic_reflect_lookup_t *look,
                                      const shrewd_basic_reflect_type_t *type,
-                                     const char *name)
-{
+                                     const char *name) {
     if ((NULL == look) || (NULL == type)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_reflect_log,
@@ -49,8 +48,7 @@ int shrewd_basic_reflect_lookup_init(shrewd_basic_reflect_lookup_t *look,
 }
 
 const shrewd_basic_reflect_field_t *shrewd_basic_reflect_lookup_find(
-    const shrewd_basic_reflect_lookup_t *look, const char *name, size_t name_len)
-{
+    const shrewd_basic_reflect_lookup_t *look, const char *name, size_t name_len) {
     size_t low = 0;
     size_t high = 0;
     if ((NULL == look) || (NULL == name)) {
@@ -80,8 +78,7 @@ const shrewd_basic_reflect_field_t *shrewd_basic_reflect_lookup_find(
 
 int shrewd_basic_reflect_list_register(const shrewd_basic_reflect_list_t *list,
                                        const shrewd_basic_reflect_type_t *type,
-                                       const char *name)
-{
+                                       const char *name) {
     shrewd_basic_reflect_lookup_t *slot = NULL;
     int status = 0;
     if ((NULL == list) || (NULL == list->sb_refl_ops) || (NULL == list->sb_refl_ops->insert)
@@ -116,8 +113,7 @@ int shrewd_basic_reflect_list_register(const shrewd_basic_reflect_list_t *list,
 static int registry_insert(void *ctx,
                            const char *name,
                            const shrewd_basic_reflect_type_t *type,
-                           shrewd_basic_reflect_lookup_t **out_slot)
-{
+                           shrewd_basic_reflect_lookup_t **out_slot) {
     shrewd_basic_reflect_registry_t *reg = (shrewd_basic_reflect_registry_t *)ctx;
     size_t low = 0;
     size_t high = 0;
@@ -152,8 +148,7 @@ static int registry_insert(void *ctx,
 }
 
 static const shrewd_basic_reflect_lookup_t *
-registry_find_type(void *ctx, const shrewd_basic_reflect_type_t *type)
-{
+registry_find_type(void *ctx, const shrewd_basic_reflect_type_t *type) {
     shrewd_basic_reflect_registry_t *reg = (shrewd_basic_reflect_registry_t *)ctx;
     if (NULL == reg) {
         return NULL;
@@ -166,8 +161,7 @@ registry_find_type(void *ctx, const shrewd_basic_reflect_type_t *type)
     return NULL;
 }
 
-static const shrewd_basic_reflect_lookup_t *registry_find_name(void *ctx, const char *name)
-{
+static const shrewd_basic_reflect_lookup_t *registry_find_name(void *ctx, const char *name) {
     shrewd_basic_reflect_registry_t *reg = (shrewd_basic_reflect_registry_t *)ctx;
     size_t low = 0;
     size_t high = 0;
@@ -193,14 +187,12 @@ static const shrewd_basic_reflect_lookup_t *registry_find_name(void *ctx, const 
 static const shrewd_basic_reflect_list_ops_t g_registry_ops
     = {registry_insert, registry_find_type, registry_find_name};
 
-const shrewd_basic_reflect_list_ops_t *shrewd_basic_reflect_registry_ops(void)
-{
+const shrewd_basic_reflect_list_ops_t *shrewd_basic_reflect_registry_ops(void) {
     return &g_registry_ops;
 }
 
 int shrewd_basic_reflect_registry_bind(shrewd_basic_reflect_registry_t *registry,
-                                       shrewd_basic_reflect_list_t *out_list)
-{
+                                       shrewd_basic_reflect_list_t *out_list) {
     if ((NULL == registry) || (NULL == out_list) || (NULL == registry->sb_refl_entries)
         || (0 == registry->sb_refl_capacity)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,

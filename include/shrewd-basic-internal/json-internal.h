@@ -91,14 +91,12 @@ void json_policy_view(const shrewd_basic_json_info_t *info,
                       const shrewd_basic_reflect_field_t *field,
                       shrewd_basic_json_key_info_t *out);
 
-static inline int json_opt_depth(const shrewd_basic_json_options_t *options)
-{
+static inline int json_opt_depth(const shrewd_basic_json_options_t *options) {
     return ((NULL != options) && (0 < options->max_depth)) ? options->max_depth
                                                            : SHREWD_BASIC_JSON_DEPTH_DEFAULT;
 }
 
-static inline int json_opt_indent(const shrewd_basic_json_options_t *options)
-{
+static inline int json_opt_indent(const shrewd_basic_json_options_t *options) {
     return ((NULL != options) && (0 < options->indent)) ? options->indent : 2;
 }
 
@@ -107,8 +105,7 @@ static inline int json_opt_indent(const shrewd_basic_json_options_t *options)
  * consumed, or 0 for an invalid sequence (overlong, surrogate and
  * out-of-range forms are rejected).
  */
-static inline size_t json_utf8_decode(const unsigned char *text, size_t n, unsigned *out)
-{
+static inline size_t json_utf8_decode(const unsigned char *text, size_t n, unsigned *out) {
     unsigned c = text[0];
     size_t need = 0;
     unsigned cp = 0;
@@ -152,8 +149,7 @@ static inline size_t json_utf8_decode(const unsigned char *text, size_t n, unsig
 }
 
 /* Is @p n bytes of @p text well-formed UTF-8? */
-static inline int json_utf8_valid(const char *text, size_t n)
-{
+static inline int json_utf8_valid(const char *text, size_t n) {
     size_t i = 0;
     while (i < n) {
         unsigned cp = 0;
@@ -167,8 +163,7 @@ static inline int json_utf8_valid(const char *text, size_t n)
 }
 
 /* Bounded strlen for counted buffers (strnlen is POSIX, not C11). */
-static inline size_t json_strn_len(const char *text, size_t max)
-{
+static inline size_t json_strn_len(const char *text, size_t max) {
     size_t n = 0;
     while ((n < max) && ('\0' != text[n])) {
         ++n;
@@ -194,8 +189,7 @@ int json_buf_printf(json_buf_t *buf, const char *fmt, ...);
 int json_buf_string(json_buf_t *buf, const char *text);
 
 /* Append one code point to @p buf as UTF-8. */
-static inline int json_utf8_append(json_buf_t *buf, unsigned code)
-{
+static inline int json_utf8_append(json_buf_t *buf, unsigned code) {
     char bytes[4];
     size_t n = 0;
     if (0x80u > code) {

@@ -15,8 +15,7 @@
 #include "generated.h"
 #include "reflect_gen_sample.h"
 
-int main(void)
-{
+int main(void) {
     shape_t s = {0};
     memset(&s, 0, sizeof(s));
     s.name = "shape";
@@ -41,7 +40,7 @@ int main(void)
     t.count = 3;
     bool same = false;
     if ((SHREWD_BASIC_ERR_OK != shrewd_basic_reflect_equal(&s, &t, &shape_t_reflect, &same))
-        || !same) {
+        || (!same)) {
         printf("reflect_gen_smoke: equal FAILED\n");
         return 1;
     }
@@ -69,8 +68,8 @@ int main(void)
     pb->len = 2;
     pb->data[0] = 4;
     pb->data[1] = 5;
-    if (SHREWD_BASIC_ERR_OK != shrewd_basic_reflect_equal(pa, pb, &packet_t_reflect, &same)
-        || !same) {
+    if ((SHREWD_BASIC_ERR_OK != shrewd_basic_reflect_equal(pa, pb, &packet_t_reflect, &same))
+        || (!same)) {
         printf("reflect_gen_smoke: flex equal FAILED\n");
         return 1;
     }

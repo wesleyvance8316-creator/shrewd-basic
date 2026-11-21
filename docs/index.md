@@ -24,6 +24,9 @@ compile-time reflection module.
   features of the reflect core with design sketches: type-system
   extensions, query/diff upgrades, toolchain work and explicit
   non-goals.
+- [style guide](style.md) - C coding and formatting rules: initializer
+  completeness, mandatory braces, per-clause condition parentheses,
+  and the clang-format / clang-tidy gate.
 - [json reference](json.md) - the json module: layered architecture, the
   value model (DOM), the strict RFC 8259 parser/serializer and the wire
   format contract.

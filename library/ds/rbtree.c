@@ -13,8 +13,7 @@ SHREWD_BASIC_LOG_MODULE_DECLARE(shrewd_basic_ds_log);
  * deleting (it tracks the parent of the "hole" left by the removed node).
  */
 
-static void rotate_left(shrewd_basic_rbtree_t *tree, shrewd_basic_rbtree_node_t *x)
-{
+static void rotate_left(shrewd_basic_rbtree_t *tree, shrewd_basic_rbtree_node_t *x) {
     shrewd_basic_rbtree_node_t *y = x->right;
     x->right = y->left;
     if (tree->nil != y->left) {
@@ -32,8 +31,7 @@ static void rotate_left(shrewd_basic_rbtree_t *tree, shrewd_basic_rbtree_node_t 
     x->parent = y;
 }
 
-static void rotate_right(shrewd_basic_rbtree_t *tree, shrewd_basic_rbtree_node_t *x)
-{
+static void rotate_right(shrewd_basic_rbtree_t *tree, shrewd_basic_rbtree_node_t *x) {
     shrewd_basic_rbtree_node_t *y = x->left;
     x->left = y->right;
     if (tree->nil != y->right) {
@@ -52,8 +50,7 @@ static void rotate_right(shrewd_basic_rbtree_t *tree, shrewd_basic_rbtree_node_t
 }
 
 static shrewd_basic_rbtree_node_t *rbtree_min_node(shrewd_basic_rbtree_node_t *node,
-                                                   shrewd_basic_rbtree_node_t *nil)
-{
+                                                   shrewd_basic_rbtree_node_t *nil) {
     while (nil != node->left) {
         node = node->left;
     }
@@ -61,16 +58,14 @@ static shrewd_basic_rbtree_node_t *rbtree_min_node(shrewd_basic_rbtree_node_t *n
 }
 
 static shrewd_basic_rbtree_node_t *rbtree_max_node(shrewd_basic_rbtree_node_t *node,
-                                                   shrewd_basic_rbtree_node_t *nil)
-{
+                                                   shrewd_basic_rbtree_node_t *nil) {
     while (nil != node->right) {
         node = node->right;
     }
     return node;
 }
 
-static int rbtree_free_node(shrewd_basic_rbtree_t *tree, shrewd_basic_rbtree_node_t *node)
-{
+static int rbtree_free_node(shrewd_basic_rbtree_t *tree, shrewd_basic_rbtree_node_t *node) {
     if (tree->nil == node) {
         return SHREWD_BASIC_ERR_OK;
     }
@@ -88,8 +83,7 @@ static int rbtree_free_node(shrewd_basic_rbtree_t *tree, shrewd_basic_rbtree_nod
 static int rbtree_foreach_node(const shrewd_basic_rbtree_t *tree,
                                const shrewd_basic_rbtree_node_t *node,
                                shrewd_basic_rbtree_visit_fn visit,
-                               void *ctx)
-{
+                               void *ctx) {
     if (tree->nil == node) {
         return SHREWD_BASIC_ERR_OK;
     }
@@ -104,8 +98,7 @@ static int rbtree_foreach_node(const shrewd_basic_rbtree_t *tree,
     return rbtree_foreach_node(tree, node->right, visit, ctx);
 }
 
-static void rbtree_insert_fixup(shrewd_basic_rbtree_t *tree, shrewd_basic_rbtree_node_t *z)
-{
+static void rbtree_insert_fixup(shrewd_basic_rbtree_t *tree, shrewd_basic_rbtree_node_t *z) {
     while (SHREWD_BASIC_RBTREE_RED == z->parent->color) {
         if (z->parent == z->parent->parent->left) {
             shrewd_basic_rbtree_node_t *y = z->parent->parent->right;
@@ -146,8 +139,7 @@ static void rbtree_insert_fixup(shrewd_basic_rbtree_t *tree, shrewd_basic_rbtree
 
 static void rbtree_transplant(shrewd_basic_rbtree_t *tree,
                               shrewd_basic_rbtree_node_t *u,
-                              shrewd_basic_rbtree_node_t *v)
-{
+                              shrewd_basic_rbtree_node_t *v) {
     if (tree->nil == u->parent) {
         tree->root = v;
     } else if (u == u->parent->left) {
@@ -158,8 +150,7 @@ static void rbtree_transplant(shrewd_basic_rbtree_t *tree,
     v->parent = u->parent;
 }
 
-static void rbtree_delete_fixup(shrewd_basic_rbtree_t *tree, shrewd_basic_rbtree_node_t *x)
-{
+static void rbtree_delete_fixup(shrewd_basic_rbtree_t *tree, shrewd_basic_rbtree_node_t *x) {
     while ((x != tree->root) && (SHREWD_BASIC_RBTREE_BLACK == x->color)) {
         if (x == x->parent->left) {
             shrewd_basic_rbtree_node_t *w = x->parent->right;
@@ -218,8 +209,7 @@ static void rbtree_delete_fixup(shrewd_basic_rbtree_t *tree, shrewd_basic_rbtree
 
 int shrewd_basic_rbtree_create(shrewd_basic_rbtree_cmp_fn cmp,
                                void *ctx,
-                               shrewd_basic_rbtree_t **out)
-{
+                               shrewd_basic_rbtree_t **out) {
     if ((NULL == cmp) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -260,8 +250,7 @@ int shrewd_basic_rbtree_create(shrewd_basic_rbtree_cmp_fn cmp,
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_rbtree_destroy(shrewd_basic_rbtree_t *tree)
-{
+int shrewd_basic_rbtree_destroy(shrewd_basic_rbtree_t *tree) {
     if (NULL == tree) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "rbtree", "destroy: tree is NULL\n");
@@ -295,8 +284,7 @@ int shrewd_basic_rbtree_destroy(shrewd_basic_rbtree_t *tree)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_rbtree_insert(shrewd_basic_rbtree_t *tree, void *data)
-{
+int shrewd_basic_rbtree_insert(shrewd_basic_rbtree_t *tree, void *data) {
     if ((NULL == tree) || (NULL == tree->cmp)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -351,8 +339,7 @@ int shrewd_basic_rbtree_insert(shrewd_basic_rbtree_t *tree, void *data)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_rbtree_search(const shrewd_basic_rbtree_t *tree, const void *key, void **out)
-{
+int shrewd_basic_rbtree_search(const shrewd_basic_rbtree_t *tree, const void *key, void **out) {
     if ((NULL == tree) || (NULL == tree->cmp) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -374,8 +361,7 @@ int shrewd_basic_rbtree_search(const shrewd_basic_rbtree_t *tree, const void *ke
     return SHREWD_BASIC_ERR_KEY_NOTFOUND;
 }
 
-int shrewd_basic_rbtree_remove(shrewd_basic_rbtree_t *tree, const void *key, void **out)
-{
+int shrewd_basic_rbtree_remove(shrewd_basic_rbtree_t *tree, const void *key, void **out) {
     if ((NULL == tree) || (NULL == tree->cmp)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -445,8 +431,7 @@ int shrewd_basic_rbtree_remove(shrewd_basic_rbtree_t *tree, const void *key, voi
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_rbtree_min(const shrewd_basic_rbtree_t *tree, void **out)
-{
+int shrewd_basic_rbtree_min(const shrewd_basic_rbtree_t *tree, void **out) {
     if ((NULL == tree) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -463,8 +448,7 @@ int shrewd_basic_rbtree_min(const shrewd_basic_rbtree_t *tree, void **out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_rbtree_max(const shrewd_basic_rbtree_t *tree, void **out)
-{
+int shrewd_basic_rbtree_max(const shrewd_basic_rbtree_t *tree, void **out) {
     if ((NULL == tree) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -483,8 +467,7 @@ int shrewd_basic_rbtree_max(const shrewd_basic_rbtree_t *tree, void **out)
 
 int shrewd_basic_rbtree_foreach(const shrewd_basic_rbtree_t *tree,
                                 shrewd_basic_rbtree_visit_fn visit,
-                                void *ctx)
-{
+                                void *ctx) {
     if ((NULL == tree) || (NULL == visit)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -495,8 +478,7 @@ int shrewd_basic_rbtree_foreach(const shrewd_basic_rbtree_t *tree,
     return rbtree_foreach_node(tree, tree->root, visit, ctx);
 }
 
-int shrewd_basic_rbtree_size(const shrewd_basic_rbtree_t *tree, size_t *out)
-{
+int shrewd_basic_rbtree_size(const shrewd_basic_rbtree_t *tree, size_t *out) {
     if ((NULL == tree) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -508,7 +490,6 @@ int shrewd_basic_rbtree_size(const shrewd_basic_rbtree_t *tree, size_t *out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-bool shrewd_basic_rbtree_empty(const shrewd_basic_rbtree_t *tree)
-{
+bool shrewd_basic_rbtree_empty(const shrewd_basic_rbtree_t *tree) {
     return (NULL == tree) || (0 == tree->size);
 }

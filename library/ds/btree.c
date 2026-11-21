@@ -6,24 +6,21 @@
 /* Shared ds log module, defined in library/ds/ds.c. */
 SHREWD_BASIC_LOG_MODULE_DECLARE(shrewd_basic_ds_log);
 
-static shrewd_basic_btree_node_t *btree_min_node(shrewd_basic_btree_node_t *node)
-{
+static shrewd_basic_btree_node_t *btree_min_node(shrewd_basic_btree_node_t *node) {
     while (NULL != node->left) {
         node = node->left;
     }
     return node;
 }
 
-static shrewd_basic_btree_node_t *btree_max_node(shrewd_basic_btree_node_t *node)
-{
+static shrewd_basic_btree_node_t *btree_max_node(shrewd_basic_btree_node_t *node) {
     while (NULL != node->right) {
         node = node->right;
     }
     return node;
 }
 
-static int btree_free_node(shrewd_basic_btree_node_t *node)
-{
+static int btree_free_node(shrewd_basic_btree_node_t *node) {
     if (NULL == node) {
         return SHREWD_BASIC_ERR_OK;
     }
@@ -40,8 +37,7 @@ static int btree_free_node(shrewd_basic_btree_node_t *node)
 
 static int btree_foreach_node(const shrewd_basic_btree_node_t *node,
                               shrewd_basic_btree_visit_fn visit,
-                              void *ctx)
-{
+                              void *ctx) {
     if (NULL == node) {
         return SHREWD_BASIC_ERR_OK;
     }
@@ -66,8 +62,7 @@ static shrewd_basic_btree_node_t *btree_remove_node(shrewd_basic_btree_t *tree,
                                                     shrewd_basic_btree_node_t *node,
                                                     const void *key,
                                                     void **out,
-                                                    int *status)
-{
+                                                    int *status) {
     if (NULL == node) {
         *status = SHREWD_BASIC_ERR_KEY_NOTFOUND;
         return NULL;
@@ -99,8 +94,9 @@ static shrewd_basic_btree_node_t *btree_remove_node(shrewd_basic_btree_t *tree,
     return node;
 }
 
-int shrewd_basic_btree_create(shrewd_basic_btree_cmp_fn cmp, void *ctx, shrewd_basic_btree_t **out)
-{
+int shrewd_basic_btree_create(shrewd_basic_btree_cmp_fn cmp,
+                              void *ctx,
+                              shrewd_basic_btree_t **out) {
     if ((NULL == cmp) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -125,8 +121,7 @@ int shrewd_basic_btree_create(shrewd_basic_btree_cmp_fn cmp, void *ctx, shrewd_b
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_btree_destroy(shrewd_basic_btree_t *tree)
-{
+int shrewd_basic_btree_destroy(shrewd_basic_btree_t *tree) {
     if (NULL == tree) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "btree", "destroy: tree is NULL\n");
@@ -152,8 +147,7 @@ int shrewd_basic_btree_destroy(shrewd_basic_btree_t *tree)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_btree_insert(shrewd_basic_btree_t *tree, void *data)
-{
+int shrewd_basic_btree_insert(shrewd_basic_btree_t *tree, void *data) {
     if ((NULL == tree) || (NULL == tree->cmp)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -203,8 +197,7 @@ int shrewd_basic_btree_insert(shrewd_basic_btree_t *tree, void *data)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_btree_search(const shrewd_basic_btree_t *tree, const void *key, void **out)
-{
+int shrewd_basic_btree_search(const shrewd_basic_btree_t *tree, const void *key, void **out) {
     if ((NULL == tree) || (NULL == tree->cmp) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -226,8 +219,7 @@ int shrewd_basic_btree_search(const shrewd_basic_btree_t *tree, const void *key,
     return SHREWD_BASIC_ERR_KEY_NOTFOUND;
 }
 
-int shrewd_basic_btree_remove(shrewd_basic_btree_t *tree, const void *key, void **out)
-{
+int shrewd_basic_btree_remove(shrewd_basic_btree_t *tree, const void *key, void **out) {
     if ((NULL == tree) || (NULL == tree->cmp)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -256,8 +248,7 @@ int shrewd_basic_btree_remove(shrewd_basic_btree_t *tree, const void *key, void 
     return status;
 }
 
-int shrewd_basic_btree_min(const shrewd_basic_btree_t *tree, void **out)
-{
+int shrewd_basic_btree_min(const shrewd_basic_btree_t *tree, void **out) {
     if ((NULL == tree) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -274,8 +265,7 @@ int shrewd_basic_btree_min(const shrewd_basic_btree_t *tree, void **out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_btree_max(const shrewd_basic_btree_t *tree, void **out)
-{
+int shrewd_basic_btree_max(const shrewd_basic_btree_t *tree, void **out) {
     if ((NULL == tree) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -294,8 +284,7 @@ int shrewd_basic_btree_max(const shrewd_basic_btree_t *tree, void **out)
 
 int shrewd_basic_btree_foreach(const shrewd_basic_btree_t *tree,
                                shrewd_basic_btree_visit_fn visit,
-                               void *ctx)
-{
+                               void *ctx) {
     if ((NULL == tree) || (NULL == visit)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -306,8 +295,7 @@ int shrewd_basic_btree_foreach(const shrewd_basic_btree_t *tree,
     return btree_foreach_node(tree->root, visit, ctx);
 }
 
-int shrewd_basic_btree_size(const shrewd_basic_btree_t *tree, size_t *out)
-{
+int shrewd_basic_btree_size(const shrewd_basic_btree_t *tree, size_t *out) {
     if ((NULL == tree) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -319,7 +307,6 @@ int shrewd_basic_btree_size(const shrewd_basic_btree_t *tree, size_t *out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-bool shrewd_basic_btree_empty(const shrewd_basic_btree_t *tree)
-{
+bool shrewd_basic_btree_empty(const shrewd_basic_btree_t *tree) {
     return (NULL == tree) || (0 == tree->size);
 }

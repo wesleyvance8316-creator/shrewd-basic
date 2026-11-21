@@ -16,24 +16,21 @@
 
 static int g_failures = 0;
 
-static void expect_eq_int(const char *name, int actual, int expected)
-{
+static void expect_eq_int(const char *name, int actual, int expected) {
     if (actual != expected) {
         fprintf(stderr, "FAIL %s: got %d, want %d\n", name, actual, expected);
         ++g_failures;
     }
 }
 
-static void expect_true(const char *name, int condition)
-{
+static void expect_true(const char *name, int condition) {
     if (0 == condition) {
         fprintf(stderr, "FAIL %s\n", name);
         ++g_failures;
     }
 }
 
-static void expect_streq(const char *name, const char *actual, const char *expected)
-{
+static void expect_streq(const char *name, const char *actual, const char *expected) {
     if ((NULL == actual) || (NULL == expected) || (0 != strcmp(actual, expected))) {
         fprintf(stderr,
                 "FAIL %s: got \"%s\", want \"%s\"\n",
@@ -61,15 +58,13 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(cfg_reflect,
                                  SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(cfg_t, score));
 
 /* Custom score hooks: the wire value is score + 1, negatives rejected. */
-static int score_encode(const void *value, shrewd_basic_json_value_t **out)
-{
+static int score_encode(const void *value, shrewd_basic_json_value_t **out) {
     int32_t score = 0;
     memcpy(&score, value, sizeof(score));
     return shrewd_basic_json_new_i64((int64_t)score + 1, out);
 }
 
-static int score_decode(const shrewd_basic_json_value_t *value, void *target)
-{
+static int score_decode(const shrewd_basic_json_value_t *value, void *target) {
     int64_t wire = 0;
     int32_t score = 0;
     if (SHREWD_BASIC_ERR_OK != shrewd_basic_json_to_i64(value, &wire)) {
@@ -80,8 +75,7 @@ static int score_decode(const shrewd_basic_json_value_t *value, void *target)
     return SHREWD_BASIC_ERR_OK;
 }
 
-static int score_check(const void *value)
-{
+static int score_check(const void *value) {
     int32_t score = 0;
     memcpy(&score, value, sizeof(score));
     return (0 <= score) ? SHREWD_BASIC_ERR_OK : SHREWD_BASIC_ERR_ARG_INVALID;
@@ -157,8 +151,7 @@ static void expect_encode(const char *name,
                           const void *object,
                           const shrewd_basic_reflect_type_t *type,
                           const shrewd_basic_json_info_t *info,
-                          const char *expected)
-{
+                          const char *expected) {
     char *text = NULL;
     int status = shrewd_basic_json_encode(object, type, info, &text, NULL, NULL);
     if (SHREWD_BASIC_ERR_OK != status) {
@@ -176,13 +169,11 @@ static int decode_into(const char *text,
                        const shrewd_basic_reflect_type_t *type,
                        const shrewd_basic_json_info_t *info,
                        const shrewd_basic_json_options_t *options,
-                       shrewd_basic_json_error_t *error)
-{
+                       shrewd_basic_json_error_t *error) {
     return shrewd_basic_json_decode(text, strlen(text), target, type, info, options, error);
 }
 
-static void test_key_aliases(void)
-{
+static void test_key_aliases(void) {
     cfg_t cfg = {0};
     memset(&cfg, 0, sizeof(cfg));
     cfg.age = 30;
@@ -286,8 +277,7 @@ static void test_key_aliases(void)
     }
 }
 
-static void test_required_range_check(void)
-{
+static void test_required_range_check(void) {
     /* REQUIRED: the alias set must be present. */
     {
         shrewd_basic_json_error_t error = {0};
@@ -361,8 +351,7 @@ static void test_required_range_check(void)
     }
 }
 
-static void test_union_styles(void)
-{
+static void test_union_styles(void) {
     msg_t msg = {0};
     memset(&msg, 0, sizeof(msg));
 
@@ -443,8 +432,7 @@ typedef struct key_capture {
     double age_max;
 } key_capture_t;
 
-static int key_capture_cb(void *ctx, const shrewd_basic_json_key_info_t *key)
-{
+static int key_capture_cb(void *ctx, const shrewd_basic_json_key_info_t *key) {
     key_capture_t *cap = (key_capture_t *)ctx;
     cap->count += 1;
     if (0 == strcmp(key->field, "name")) {
@@ -465,8 +453,7 @@ static int key_capture_cb(void *ctx, const shrewd_basic_json_key_info_t *key)
     return 0;
 }
 
-static void test_keys_export(void)
-{
+static void test_keys_export(void) {
     key_capture_t cap = {0};
     memset(&cap, 0, sizeof(cap));
     expect_eq_int("policy keys",
@@ -516,15 +503,13 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(
 
 static int g_handle_destroys = 0;
 
-static int handle_encode(const void *value, shrewd_basic_json_value_t **out)
-{
+static int handle_encode(const void *value, shrewd_basic_json_value_t **out) {
     int32_t number = 0;
     memcpy(&number, value, sizeof(number));
     return shrewd_basic_json_new_i64(number, out);
 }
 
-static int handle_decode(const shrewd_basic_json_value_t *value, void *slot)
-{
+static int handle_decode(const shrewd_basic_json_value_t *value, void *slot) {
     int64_t wire = 0;
     void *target = NULL;
     if (SHREWD_BASIC_ERR_OK != shrewd_basic_json_to_i64(value, &wire)) {
@@ -538,8 +523,7 @@ static int handle_decode(const shrewd_basic_json_value_t *value, void *slot)
     return SHREWD_BASIC_ERR_OK;
 }
 
-static void handle_destroy(void *target)
-{
+static void handle_destroy(void *target) {
     ++g_handle_destroys;
     (void)shrewd_basic_platform_free(&target);
 }
@@ -615,8 +599,7 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(badfl_reflect,
 
 SHREWD_BASIC_JSON_DEFINE(badfl_json, badfl_reflect, SHREWD_BASIC_JSON_DEFAULT_JSON(v, "{oops"));
 
-static void test_use_defaults(void)
-{
+static void test_use_defaults(void) {
     shrewd_basic_json_options_t options = {0};
     dfl_t target = {0};
     memset(&options, 0, sizeof(options));
@@ -690,8 +673,7 @@ static void test_use_defaults(void)
                 (NULL != target.unit) && (0 == strcmp(target.unit, "kg")));
 }
 
-static void test_defaults_json(void)
-{
+static void test_defaults_json(void) {
     shrewd_basic_json_options_t options = {0};
     dfl_t target = {0};
     memset(&options, 0, sizeof(options));
@@ -741,8 +723,7 @@ static void test_defaults_json(void)
     }
 }
 
-static void test_loose_keys(void)
-{
+static void test_loose_keys(void) {
     shrewd_basic_json_options_t options = {0};
     cfg_t target = {0};
     memset(&options, 0, sizeof(options));
@@ -775,8 +756,7 @@ static void test_loose_keys(void)
     }
 }
 
-static void test_ops_targets(void)
-{
+static void test_ops_targets(void) {
     ext_t probe = {0};
     void *block = NULL;
     int32_t storage = 41;
@@ -814,8 +794,7 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(node_reflect,
 
 /* --- schema + sizing tests -------------------------------------------- */
 
-static void test_schema_export(void)
-{
+static void test_schema_export(void) {
     char *text = NULL;
     expect_eq_int("schema build",
                   shrewd_basic_json_schema(&cfg_reflect, &cfg_json, &text, NULL, NULL),
@@ -877,8 +856,7 @@ SHREWD_BASIC_JSON_DEFINE(elem_json,
                          SHREWD_BASIC_JSON_OPS_ELEM(values, g_score_ops),
                          SHREWD_BASIC_JSON_OPS_ELEM(handles, g_handle_json_ops));
 
-static void test_elem_ops(void)
-{
+static void test_elem_ops(void) {
     elem_t source = {0};
     int32_t h1 = 10;
     int32_t h2 = 20;
@@ -939,8 +917,7 @@ static void test_elem_ops(void)
 
 /* --- schema sync + decode_pointer ------------------------------------- */
 
-static void test_schema_sync(void)
-{
+static void test_schema_sync(void) {
     char *text = NULL;
     shrewd_basic_json_info_t probe = {0};
 
@@ -981,8 +958,7 @@ static void test_schema_sync(void)
     shrewd_basic_json_text_free(text);
 }
 
-static void test_decode_pointer(void)
-{
+static void test_decode_pointer(void) {
     const char *doc = "{\"header\":{\"id\":5},\"items\":[{\"x\":1,\"y\":2},{\"x\":3,\"y\":4}]}";
     shrewd_basic_json_value_t *root = NULL;
     shrewd_basic_json_error_t error = {0};
@@ -1014,8 +990,7 @@ static void test_decode_pointer(void)
 
 /* --- schema validator -------------------------------------------------- */
 
-static void test_schema_check(void)
-{
+static void test_schema_check(void) {
     char *text = NULL;
     shrewd_basic_json_value_t *schema = NULL;
     shrewd_basic_json_value_t *doc = NULL;
@@ -1112,8 +1087,7 @@ static void test_schema_check(void)
     shrewd_basic_json_value_free(schema);
 }
 
-int main(void)
-{
+int main(void) {
     test_key_aliases();
     test_use_defaults();
     test_defaults_json();

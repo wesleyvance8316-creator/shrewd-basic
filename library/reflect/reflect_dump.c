@@ -44,8 +44,7 @@ typedef struct dump_ctx {
  * to fit: when the buffer is nearly full the tail is rewound to make
  * room for it.
  */
-static void dump_truncate(dump_ctx_t *ctx)
-{
+static void dump_truncate(dump_ctx_t *ctx) {
     static const char marker[] = " ...(dump truncated)";
     size_t at = (ctx->cap > sizeof(marker)) ? (ctx->cap - sizeof(marker)) : 0;
     if (at < ctx->pos) {
@@ -56,8 +55,7 @@ static void dump_truncate(dump_ctx_t *ctx)
     ctx->truncated = 1;
 }
 
-static int dump_init(dump_ctx_t *ctx)
-{
+static int dump_init(dump_ctx_t *ctx) {
     void *block = NULL;
     ctx->buf = NULL;
     ctx->cap = 0;
@@ -76,8 +74,7 @@ static int dump_init(dump_ctx_t *ctx)
     return SHREWD_BASIC_ERR_OK;
 }
 
-static void dump_append(dump_ctx_t *ctx, const char *fmt, ...)
-{
+static void dump_append(dump_ctx_t *ctx, const char *fmt, ...) {
     if (0 != ctx->truncated) {
         return;
     }
@@ -118,14 +115,12 @@ static void dump_append(dump_ctx_t *ctx, const char *fmt, ...)
     ctx->pos += (size_t)needed;
 }
 
-static void dump_emit(dump_ctx_t *ctx)
-{
+static void dump_emit(dump_ctx_t *ctx) {
     dump_append(ctx, "\n");
 }
 
 /* Escape @p len raw bytes into the body (shared by strings and buffers). */
-static void dump_escaped(dump_ctx_t *ctx, const unsigned char *text, size_t len)
-{
+static void dump_escaped(dump_ctx_t *ctx, const unsigned char *text, size_t len) {
     for (size_t i = 0; i < len; ++i) {
         switch (text[i]) {
         case '\\':
@@ -154,8 +149,7 @@ static void dump_escaped(dump_ctx_t *ctx, const unsigned char *text, size_t len)
     }
 }
 
-static void dump_string(dump_ctx_t *ctx, const char *text, size_t str_max)
-{
+static void dump_string(dump_ctx_t *ctx, const char *text, size_t str_max) {
     if (NULL == text) {
         dump_append(ctx, "(null)");
         return;
@@ -173,8 +167,7 @@ static void dump_string(dump_ctx_t *ctx, const char *text, size_t str_max)
  * Render a string buffer (a F_STRINGBUF char[N]): quoted and escaped up
  * to the first NUL, or the whole buffer when unterminated.
  */
-static void dump_string_buf(dump_ctx_t *ctx, const char *buf, size_t size)
-{
+static void dump_string_buf(dump_ctx_t *ctx, const char *buf, size_t size) {
     size_t len = reflect_strn_len(buf, size);
     dump_append(ctx, "\"");
     dump_escaped(ctx, (const unsigned char *)buf, len);
@@ -193,8 +186,7 @@ static void dump_scalar(dump_ctx_t *ctx,
                         const shrewd_basic_reflect_type_t *type,
                         const unsigned char *bytes,
                         size_t nbytes,
-                        size_t str_max)
-{
+                        size_t str_max) {
     switch (type->sb_refl_kind) {
     case SHREWD_BASIC_REFLECT_KIND_BOOL:
         dump_append(ctx, "%s", (0 != reflect_load_u64(bytes, nbytes)) ? "true" : "false");
@@ -274,8 +266,7 @@ static void dump_inline(dump_ctx_t *ctx,
                         const shrewd_basic_reflect_type_t *type,
                         const unsigned char *bytes,
                         size_t nbytes,
-                        size_t str_max)
-{
+                        size_t str_max) {
     if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
         dump_scalar(ctx, type, bytes, nbytes, str_max);
         return;
@@ -309,8 +300,7 @@ static void dump_inline(dump_ctx_t *ctx,
 static int dump_target_seen(const dump_ctx_t *ctx,
                             size_t depth,
                             const void *target,
-                            const shrewd_basic_reflect_type_t *type)
-{
+                            const shrewd_basic_reflect_type_t *type) {
     for (size_t i = 0; i < depth; ++i) {
         if ((ctx->path[i].object == target) && (ctx->path[i].type == type)) {
             return 1;
@@ -327,8 +317,7 @@ static int dump_target_seen(const dump_ctx_t *ctx,
 static int dump_render_target(const shrewd_basic_reflect_field_t *field,
                               const void *pointer,
                               char *buf,
-                              size_t buf_size)
-{
+                              size_t buf_size) {
     const shrewd_basic_reflect_ops_t *ops = reflect_field_ops(field);
     if ((NULL == ops) || (NULL == ops->render)) {
         return 0;
@@ -345,8 +334,7 @@ static void dump_field_list(dump_ctx_t *ctx,
 static void dump_fields(dump_ctx_t *ctx,
                         const shrewd_basic_reflect_type_t *type,
                         const unsigned char *object,
-                        size_t depth)
-{
+                        size_t depth) {
     ctx->path[depth - 1].object = object;
     ctx->path[depth - 1].type = type;
     dump_field_list(ctx, type->sb_refl_fields, type->sb_refl_field_count, object, depth);
@@ -357,8 +345,7 @@ static void dump_field_list(dump_ctx_t *ctx,
                             const shrewd_basic_reflect_field_t *fields,
                             size_t count,
                             const unsigned char *object,
-                            size_t depth)
-{
+                            size_t depth) {
     int pad = (int)(((depth < DUMP_MAX_DEPTH) ? depth : DUMP_MAX_DEPTH) * DUMP_INDENT);
     for (size_t i = 0; i < count; ++i) {
         const shrewd_basic_reflect_field_t *field = &fields[i];
@@ -566,8 +553,7 @@ int shrewd_basic_reflect_dump_write(const shrewd_basic_reflect_type_t *type,
                                     const char *label,
                                     const char *file,
                                     int line,
-                                    const char *func)
-{
+                                    const char *func) {
     if ((NULL == type) || (NULL == object)) {
         shrewd_basic_log_write(SHREWD_BASIC_LOG_LEVEL_WARN,
                                shrewd_basic_reflect_log,
@@ -627,8 +613,7 @@ int shrewd_basic_reflect_dump_write(const shrewd_basic_reflect_type_t *type,
 /* --- type self-print -------------------------------------------------- */
 
 static void
-describe_field(dump_ctx_t *ctx, const char *indent, const shrewd_basic_reflect_field_t *field)
-{
+describe_field(dump_ctx_t *ctx, const char *indent, const shrewd_basic_reflect_field_t *field) {
     char shape[64] = {0};
     const char *base = (NULL != field->sb_refl_type) ? field->sb_refl_type->sb_refl_name : "?";
     const char *ptr = (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) ? "*" : "";
@@ -667,8 +652,7 @@ describe_field(dump_ctx_t *ctx, const char *indent, const shrewd_basic_reflect_f
     dump_emit(ctx);
 }
 
-int shrewd_basic_reflect_describe(const shrewd_basic_reflect_type_t *type)
-{
+int shrewd_basic_reflect_describe(const shrewd_basic_reflect_type_t *type) {
     dump_ctx_t ctx = {0};
     if (NULL == type) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
@@ -740,8 +724,7 @@ int shrewd_basic_reflect_describe(const shrewd_basic_reflect_type_t *type)
 
 int shrewd_basic_reflect_layout(const shrewd_basic_reflect_type_t *type,
                                 shrewd_basic_reflect_layout_fn fn,
-                                void *ctx)
-{
+                                void *ctx) {
     size_t cursor = 0;
     if ((NULL == type) || (NULL == fn)
         || (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind)) {

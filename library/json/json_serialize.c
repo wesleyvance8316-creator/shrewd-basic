@@ -17,19 +17,16 @@ SHREWD_BASIC_LOG_MODULE_DECLARE(shrewd_basic_json_log);
  * with options.escape_unicode - all non-ASCII as \uXXXX).
  */
 
-static int json_out(shrewd_basic_json_write_fn write, void *ctx, const char *text, size_t length)
-{
+static int json_out(shrewd_basic_json_write_fn write, void *ctx, const char *text, size_t length) {
     return write(ctx, text, length);
 }
 
-static int json_out_str(shrewd_basic_json_write_fn write, void *ctx, const char *text)
-{
+static int json_out_str(shrewd_basic_json_write_fn write, void *ctx, const char *text) {
     return write(ctx, text, strlen(text));
 }
 
 /* Emit one code point as \uXXXX (or a surrogate pair past the BMP). */
-static int json_out_u_escape(shrewd_basic_json_write_fn write, void *ctx, unsigned code)
-{
+static int json_out_u_escape(shrewd_basic_json_write_fn write, void *ctx, unsigned code) {
     char text[16] = {0};
     if (0x10000u > code) {
         (void)snprintf(text, sizeof(text), "\\u%04x", code);
@@ -41,9 +38,10 @@ static int json_out_u_escape(shrewd_basic_json_write_fn write, void *ctx, unsign
     return json_out_str(write, ctx, text);
 }
 
-static int
-json_write_string(shrewd_basic_json_write_fn write, void *ctx, const char *text, int escape_unicode)
-{
+static int json_write_string(shrewd_basic_json_write_fn write,
+                             void *ctx,
+                             const char *text,
+                             int escape_unicode) {
     int status = json_out_str(write, ctx, "\"");
     for (const unsigned char *p = (const unsigned char *)text;
          (SHREWD_BASIC_ERR_OK == status) && ('\0' != *p);
@@ -104,8 +102,7 @@ static int json_write_value(shrewd_basic_json_write_fn write,
                             const shrewd_basic_json_value_t *value,
                             const shrewd_basic_json_options_t *options,
                             shrewd_basic_json_error_t *error,
-                            int depth)
-{
+                            int depth) {
     int status = SHREWD_BASIC_ERR_OK;
     if (depth > json_opt_depth(options)) {
         if (NULL != error) {
@@ -174,8 +171,7 @@ int shrewd_basic_json_serialize_to(const shrewd_basic_json_value_t *value,
                                    shrewd_basic_json_write_fn write,
                                    void *ctx,
                                    const shrewd_basic_json_options_t *options,
-                                   shrewd_basic_json_error_t *error)
-{
+                                   shrewd_basic_json_error_t *error) {
     if ((NULL == value) || (NULL == write)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_json_log,
@@ -191,24 +187,21 @@ int shrewd_basic_json_serialize_to(const shrewd_basic_json_value_t *value,
     return json_write_value(write, ctx, value, options, error, 1);
 }
 
-int shrewd_basic_json_write_file(void *ctx, const char *data, size_t length)
-{
+int shrewd_basic_json_write_file(void *ctx, const char *data, size_t length) {
     FILE *file = (FILE *)ctx;
     return (length == fwrite(data, 1, length, file)) ? SHREWD_BASIC_ERR_OK
                                                      : SHREWD_BASIC_ERR_JSON_SYNTAX;
 }
 
 /* Collecting sink for the text-returning wrappers. */
-static int json_write_collect(void *ctx, const char *data, size_t length)
-{
+static int json_write_collect(void *ctx, const char *data, size_t length) {
     return json_buf_append((json_buf_t *)ctx, data, length);
 }
 
 int shrewd_basic_json_serialize(const shrewd_basic_json_value_t *value,
                                 char **out_text,
                                 const shrewd_basic_json_options_t *options,
-                                shrewd_basic_json_error_t *error)
-{
+                                shrewd_basic_json_error_t *error) {
     json_buf_t buf = {0};
     int status = 0;
     if ((NULL == value) || (NULL == out_text)) {
@@ -237,8 +230,7 @@ int shrewd_basic_json_serialize(const shrewd_basic_json_value_t *value,
     return SHREWD_BASIC_ERR_OK;
 }
 
-void shrewd_basic_json_text_free(char *text)
-{
+void shrewd_basic_json_text_free(char *text) {
     if (NULL != text) {
         (void)shrewd_basic_platform_free((void **)&text);
     }

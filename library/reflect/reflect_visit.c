@@ -33,8 +33,7 @@ typedef struct visit_ctx {
 } visit_ctx_t;
 
 /* Append text to the path (truncating, always NUL-terminated). */
-static void visit_path_append(visit_ctx_t *ctx, const char *text)
-{
+static void visit_path_append(visit_ctx_t *ctx, const char *text) {
     size_t room = (VISIT_PATH_MAX - 1) - ctx->path_len;
     size_t used = strlen(text);
     if (used > room) {
@@ -46,8 +45,7 @@ static void visit_path_append(visit_ctx_t *ctx, const char *text)
 }
 
 /* Append one member segment: "name" at the root, ".name" otherwise. */
-static void visit_path_member(visit_ctx_t *ctx, const char *name)
-{
+static void visit_path_member(visit_ctx_t *ctx, const char *name) {
     if (0 != ctx->path_len) {
         visit_path_append(ctx, ".");
     }
@@ -55,8 +53,7 @@ static void visit_path_member(visit_ctx_t *ctx, const char *name)
 }
 
 /* Append one index segment: "[7]". */
-static void visit_path_index(visit_ctx_t *ctx, size_t index)
-{
+static void visit_path_index(visit_ctx_t *ctx, size_t index) {
     char text[24] = {0};
     (void)snprintf(text, sizeof(text), "[%zu]", index);
     visit_path_append(ctx, text);
@@ -70,8 +67,7 @@ static void visit_path_index(visit_ctx_t *ctx, size_t index)
 static int visit_target_seen(const visit_ctx_t *ctx,
                              size_t depth,
                              const void *target,
-                             const shrewd_basic_reflect_type_t *type)
-{
+                             const shrewd_basic_reflect_type_t *type) {
     for (size_t i = 0; i < depth; ++i) {
         if ((ctx->stack[i].object == target) && (ctx->stack[i].type == type)) {
             return 1;
@@ -85,8 +81,7 @@ static shrewd_basic_reflect_visit_action_t visit_emit(visit_ctx_t *ctx,
                                                       const shrewd_basic_reflect_field_t *field,
                                                       const void *value,
                                                       const shrewd_basic_reflect_type_t *type,
-                                                      size_t count)
-{
+                                                      size_t count) {
     shrewd_basic_reflect_visit_node_t node = {0};
     shrewd_basic_reflect_visit_action_t action = {0};
     if (0 != ctx->stopped) {
@@ -121,8 +116,7 @@ static void visit_target(visit_ctx_t *ctx,
                          const shrewd_basic_reflect_type_t *type,
                          const void *target,
                          const shrewd_basic_reflect_field_t *field,
-                         size_t depth)
-{
+                         size_t depth) {
     if (NULL == target) {
         (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_LEAF, field, NULL, type, 0);
         return;
@@ -142,8 +136,7 @@ static void visit_array_value(visit_ctx_t *ctx,
                               const shrewd_basic_reflect_type_t *array_type,
                               const unsigned char *base,
                               const shrewd_basic_reflect_field_t *field,
-                              size_t depth)
-{
+                              size_t depth) {
     if (SHREWD_BASIC_REFLECT_VISIT_PRUNE
         == visit_emit(ctx,
                       SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER,
@@ -188,8 +181,7 @@ static void visit_array_value(visit_ctx_t *ctx,
 static void visit_array(visit_ctx_t *ctx,
                         const shrewd_basic_reflect_field_t *field,
                         const unsigned char *object,
-                        size_t depth)
-{
+                        size_t depth) {
     reflect_array_view_t view = reflect_array_view(object, field);
     if (NULL == view.base) {
         /* Dynamic table not allocated: like dump's "(null)". */
@@ -241,8 +233,7 @@ static void visit_array(visit_ctx_t *ctx,
 static void visit_field(visit_ctx_t *ctx,
                         const shrewd_basic_reflect_field_t *field,
                         const unsigned char *object,
-                        size_t depth)
-{
+                        size_t depth) {
     size_t mark = ctx->path_len;
     visit_path_member(ctx, field->sb_refl_name);
     if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
@@ -309,8 +300,7 @@ static void visit_struct(visit_ctx_t *ctx,
                          const shrewd_basic_reflect_type_t *type,
                          const unsigned char *object,
                          const shrewd_basic_reflect_field_t *field,
-                         size_t depth)
-{
+                         size_t depth) {
     if ((VISIT_MAX_DEPTH <= depth) || (0 != visit_target_seen(ctx, depth, object, type))) {
         (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_CYCLE, field, object, type, 0);
         return;
@@ -333,8 +323,7 @@ static void visit_struct(visit_ctx_t *ctx,
 int shrewd_basic_reflect_visit(const void *object,
                                const shrewd_basic_reflect_type_t *type,
                                shrewd_basic_reflect_visit_fn visit,
-                               void *ctx)
-{
+                               void *ctx) {
     visit_ctx_t walk = {0};
     if ((NULL == object) || (NULL == type) || (NULL == visit)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,

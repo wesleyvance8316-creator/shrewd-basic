@@ -54,8 +54,7 @@ struct shrewd_basic_json_pull {
     char *inline_key;
 };
 
-static int pull_fail(shrewd_basic_json_pull_t *pull, int status, const char *message)
-{
+static int pull_fail(shrewd_basic_json_pull_t *pull, int status, const char *message) {
     if (NULL != pull->error) {
         pull->error->offset = pull->pos + pull->window_pos;
         (void)snprintf(pull->error->message, sizeof(pull->error->message), "%s", message);
@@ -68,8 +67,7 @@ static int pull_fail(shrewd_basic_json_pull_t *pull, int status, const char *mes
  * input, -1 = source failure. End of input is not an error; callers
  * decide what it means for them.
  */
-static int pull_ensure(shrewd_basic_json_pull_t *pull, size_t want)
-{
+static int pull_ensure(shrewd_basic_json_pull_t *pull, size_t want) {
     if (NULL == pull->read) {
         return ((pull->pos + want) <= pull->length) ? 1 : 0;
     }
@@ -96,24 +94,21 @@ static int pull_ensure(shrewd_basic_json_pull_t *pull, size_t want)
     return 1;
 }
 
-static int pull_at_end(shrewd_basic_json_pull_t *pull)
-{
+static int pull_at_end(shrewd_basic_json_pull_t *pull) {
     if (NULL == pull->read) {
         return (pull->pos >= pull->length) ? 1 : 0;
     }
     return ((pull->window_pos >= pull->window_len) && (0 != pull->eof)) ? 1 : 0;
 }
 
-static char pull_peek(shrewd_basic_json_pull_t *pull)
-{
+static char pull_peek(shrewd_basic_json_pull_t *pull) {
     if (NULL == pull->read) {
         return (pull->pos < pull->length) ? pull->data[pull->pos] : '\0';
     }
     return (pull->window_pos < pull->window_len) ? pull->window[pull->window_pos] : '\0';
 }
 
-static char pull_take(shrewd_basic_json_pull_t *pull)
-{
+static char pull_take(shrewd_basic_json_pull_t *pull) {
     char c = pull_peek(pull);
     if (0 == pull_at_end(pull)) {
         if (NULL == pull->read) {
@@ -126,8 +121,7 @@ static char pull_take(shrewd_basic_json_pull_t *pull)
 }
 
 /* Pointer/length of the contiguous run available at the cursor. */
-static const char *pull_run(shrewd_basic_json_pull_t *pull, size_t *out_avail)
-{
+static const char *pull_run(shrewd_basic_json_pull_t *pull, size_t *out_avail) {
     if (NULL == pull->read) {
         *out_avail = pull->length - pull->pos;
         return pull->data + pull->pos;
@@ -137,8 +131,7 @@ static const char *pull_run(shrewd_basic_json_pull_t *pull, size_t *out_avail)
 }
 
 /* Advance the cursor by @p n consumed bytes. */
-static void pull_skip(shrewd_basic_json_pull_t *pull, size_t n)
-{
+static void pull_skip(shrewd_basic_json_pull_t *pull, size_t n) {
     if (NULL == pull->read) {
         pull->pos += n;
     } else {
@@ -146,8 +139,7 @@ static void pull_skip(shrewd_basic_json_pull_t *pull, size_t n)
     }
 }
 
-static int pull_skip_ws(shrewd_basic_json_pull_t *pull)
-{
+static int pull_skip_ws(shrewd_basic_json_pull_t *pull) {
     for (;;) {
         char c = '\0';
         int ready = pull_ensure(pull, 1);
@@ -205,13 +197,11 @@ static int pull_skip_ws(shrewd_basic_json_pull_t *pull)
     }
 }
 
-static int pull_tok_push(shrewd_basic_json_pull_t *pull, char c)
-{
+static int pull_tok_push(shrewd_basic_json_pull_t *pull, char c) {
     return json_buf_append(&pull->tok, &c, 1);
 }
 
-static int pull_hex4(shrewd_basic_json_pull_t *pull, unsigned *out)
-{
+static int pull_hex4(shrewd_basic_json_pull_t *pull, unsigned *out) {
     unsigned value = 0;
     for (int i = 0; i < 4; ++i) {
         char c = pull_take(pull);
@@ -238,8 +228,7 @@ static int pull_hex4(shrewd_basic_json_pull_t *pull, unsigned *out)
  * copy at all); escapes or the streaming reader fall back to the
  * scratch buffer.
  */
-static int pull_parse_string(shrewd_basic_json_pull_t *pull)
-{
+static int pull_parse_string(shrewd_basic_json_pull_t *pull) {
     if (NULL == pull->read) {
         const char *start = pull->data + pull->pos;
         size_t scan = 0;
@@ -367,8 +356,7 @@ static int pull_parse_string(shrewd_basic_json_pull_t *pull)
 }
 
 /* Append the run of digits at the cursor to the token scratch. */
-static void pull_take_digits(shrewd_basic_json_pull_t *pull)
-{
+static void pull_take_digits(shrewd_basic_json_pull_t *pull) {
     for (;;) {
         const char *run = NULL;
         size_t avail = 0;
@@ -386,8 +374,7 @@ static void pull_take_digits(shrewd_basic_json_pull_t *pull)
 }
 
 /* Parse a number token (first char peeked) into the scratch. */
-static int pull_parse_number(shrewd_basic_json_pull_t *pull)
-{
+static int pull_parse_number(shrewd_basic_json_pull_t *pull) {
     const char *direct = (NULL == pull->read) ? (pull->data + pull->pos) : NULL;
     pull->tok_text = NULL;
     pull->tok.len = 0;
@@ -439,8 +426,8 @@ static int pull_parse_number(shrewd_basic_json_pull_t *pull)
     return SHREWD_BASIC_ERR_OK;
 }
 
-static int pull_parse_value_token(shrewd_basic_json_pull_t *pull, shrewd_basic_json_token_t *token)
-{
+static int pull_parse_value_token(shrewd_basic_json_pull_t *pull,
+                                  shrewd_basic_json_token_t *token) {
     char c = pull_peek(pull);
     token->length = 0;
     token->text = NULL;
@@ -511,16 +498,14 @@ static int pull_parse_value_token(shrewd_basic_json_pull_t *pull, shrewd_basic_j
     }
 }
 
-static void pull_root_check(shrewd_basic_json_pull_t *pull)
-{
+static void pull_root_check(shrewd_basic_json_pull_t *pull) {
     if ((0 == pull->depth) && (0 != pull->started)) {
         pull->root_done = 1;
     }
 }
 
 int shrewd_basic_json_pull_next(shrewd_basic_json_pull_t *pull,
-                                shrewd_basic_json_token_t *out_token)
-{
+                                shrewd_basic_json_token_t *out_token) {
     int status = 0;
     if ((NULL == pull) || (NULL == out_token)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
@@ -643,8 +628,7 @@ int shrewd_basic_json_pull_next(shrewd_basic_json_pull_t *pull,
 /* Build a DOM value from an already-fetched token. */
 static int json_capture_token(shrewd_basic_json_pull_t *pull,
                               const shrewd_basic_json_token_t *token,
-                              shrewd_basic_json_value_t **out)
-{
+                              shrewd_basic_json_value_t **out) {
     int status = SHREWD_BASIC_ERR_OK;
     *out = NULL;
     switch (token->kind) {
@@ -736,8 +720,8 @@ static int json_capture_token(shrewd_basic_json_pull_t *pull,
     }
 }
 
-int shrewd_basic_json_pull_capture(shrewd_basic_json_pull_t *pull, shrewd_basic_json_value_t **out)
-{
+int shrewd_basic_json_pull_capture(shrewd_basic_json_pull_t *pull,
+                                   shrewd_basic_json_value_t **out) {
     shrewd_basic_json_token_t token = {0};
     int status = 0;
     if ((NULL == pull) || (NULL == out)) {
@@ -755,8 +739,7 @@ int shrewd_basic_json_pull_open(shrewd_basic_json_pull_t **out,
                                 const char *text,
                                 size_t length,
                                 const shrewd_basic_json_options_t *options,
-                                shrewd_basic_json_error_t *error)
-{
+                                shrewd_basic_json_error_t *error) {
     shrewd_basic_json_pull_t *pull = NULL;
     void *block = NULL;
     if ((NULL == out) || (NULL == text)) {
@@ -794,8 +777,7 @@ int shrewd_basic_json_pull_open_reader(shrewd_basic_json_pull_t **out,
                                        shrewd_basic_json_read_fn read,
                                        void *ctx,
                                        const shrewd_basic_json_options_t *options,
-                                       shrewd_basic_json_error_t *error)
-{
+                                       shrewd_basic_json_error_t *error) {
     shrewd_basic_json_pull_t *pull = NULL;
     int status = 0;
     void *block = NULL;
@@ -820,8 +802,7 @@ int shrewd_basic_json_pull_open_reader(shrewd_basic_json_pull_t **out,
     return SHREWD_BASIC_ERR_OK;
 }
 
-void shrewd_basic_json_pull_close(shrewd_basic_json_pull_t *pull)
-{
+void shrewd_basic_json_pull_close(shrewd_basic_json_pull_t *pull) {
     if (NULL == pull) {
         return;
     }

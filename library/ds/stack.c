@@ -6,8 +6,7 @@
 /* Shared ds log module, defined in library/ds/ds.c. */
 SHREWD_BASIC_LOG_MODULE_DECLARE(shrewd_basic_ds_log);
 
-int shrewd_basic_stack_create(shrewd_basic_stack_t **out)
-{
+int shrewd_basic_stack_create(shrewd_basic_stack_t **out) {
     if (NULL == out) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "stack", "create: out is NULL\n");
@@ -27,8 +26,7 @@ int shrewd_basic_stack_create(shrewd_basic_stack_t **out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_stack_destroy(shrewd_basic_stack_t *stack)
-{
+int shrewd_basic_stack_destroy(shrewd_basic_stack_t *stack) {
     if (NULL == stack) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "stack", "destroy: stack is NULL\n");
@@ -54,8 +52,7 @@ int shrewd_basic_stack_destroy(shrewd_basic_stack_t *stack)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_stack_push(shrewd_basic_stack_t *stack, void *data)
-{
+int shrewd_basic_stack_push(shrewd_basic_stack_t *stack, void *data) {
     if (NULL == stack) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "stack", "push: stack is NULL\n");
@@ -87,8 +84,7 @@ int shrewd_basic_stack_push(shrewd_basic_stack_t *stack, void *data)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_stack_pop(shrewd_basic_stack_t *stack, void **out)
-{
+int shrewd_basic_stack_pop(shrewd_basic_stack_t *stack, void **out) {
     if (NULL == stack) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "stack", "pop: stack is NULL\n");
@@ -111,8 +107,7 @@ int shrewd_basic_stack_pop(shrewd_basic_stack_t *stack, void **out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_stack_top(const shrewd_basic_stack_t *stack, void **out)
-{
+int shrewd_basic_stack_top(const shrewd_basic_stack_t *stack, void **out) {
     if ((NULL == stack) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -129,8 +124,7 @@ int shrewd_basic_stack_top(const shrewd_basic_stack_t *stack, void **out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_stack_size(const shrewd_basic_stack_t *stack, size_t *out)
-{
+int shrewd_basic_stack_size(const shrewd_basic_stack_t *stack, size_t *out) {
     if ((NULL == stack) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -142,15 +136,13 @@ int shrewd_basic_stack_size(const shrewd_basic_stack_t *stack, size_t *out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-bool shrewd_basic_stack_empty(const shrewd_basic_stack_t *stack)
-{
+bool shrewd_basic_stack_empty(const shrewd_basic_stack_t *stack) {
     return (NULL == stack) || (0 == stack->size);
 }
 
 int shrewd_basic_stack_foreach(const shrewd_basic_stack_t *stack,
                                shrewd_basic_stack_visit_fn visit,
-                               void *ctx)
-{
+                               void *ctx) {
     if ((NULL == stack) || (NULL == visit)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,

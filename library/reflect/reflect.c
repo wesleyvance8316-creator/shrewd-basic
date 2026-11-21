@@ -133,8 +133,7 @@ const shrewd_basic_reflect_type_t shrewd_basic_reflect_void
        .sb_refl_field_count = 0,
        .sb_refl_fields = NULL};
 
-const char *shrewd_basic_reflect_kind_name(shrewd_basic_reflect_kind_t kind)
-{
+const char *shrewd_basic_reflect_kind_name(shrewd_basic_reflect_kind_t kind) {
     switch (kind) {
     case SHREWD_BASIC_REFLECT_KIND_BOOL:
         return "bool";
@@ -175,22 +174,19 @@ const char *shrewd_basic_reflect_kind_name(shrewd_basic_reflect_kind_t kind)
     }
 }
 
-size_t shrewd_basic_reflect_type_field_count(const shrewd_basic_reflect_type_t *type)
-{
+size_t shrewd_basic_reflect_type_field_count(const shrewd_basic_reflect_type_t *type) {
     return (NULL != type) ? type->sb_refl_field_count : 0;
 }
 
 const shrewd_basic_reflect_field_t *
-shrewd_basic_reflect_type_field_at(const shrewd_basic_reflect_type_t *type, size_t index)
-{
+shrewd_basic_reflect_type_field_at(const shrewd_basic_reflect_type_t *type, size_t index) {
     if ((NULL == type) || (index >= type->sb_refl_field_count)) {
         return NULL;
     }
     return &type->sb_refl_fields[index];
 }
 
-size_t shrewd_basic_reflect_enum_count(const shrewd_basic_reflect_type_t *type)
-{
+size_t shrewd_basic_reflect_enum_count(const shrewd_basic_reflect_type_t *type) {
     if ((NULL == type) || (SHREWD_BASIC_REFLECT_KIND_ENUM != type->sb_refl_kind)) {
         return 0;
     }
@@ -198,8 +194,7 @@ size_t shrewd_basic_reflect_enum_count(const shrewd_basic_reflect_type_t *type)
 }
 
 const shrewd_basic_reflect_enum_entry_t *
-shrewd_basic_reflect_enum_at(const shrewd_basic_reflect_type_t *type, size_t index)
-{
+shrewd_basic_reflect_enum_at(const shrewd_basic_reflect_type_t *type, size_t index) {
     if ((NULL == type) || (SHREWD_BASIC_REFLECT_KIND_ENUM != type->sb_refl_kind)
         || (index >= type->sb_refl_enum_count)) {
         return NULL;
@@ -209,8 +204,7 @@ shrewd_basic_reflect_enum_at(const shrewd_basic_reflect_type_t *type, size_t ind
 
 int shrewd_basic_reflect_enum_find_name(const shrewd_basic_reflect_type_t *type,
                                         int64_t value,
-                                        const char **out_name)
-{
+                                        const char **out_name) {
     if ((NULL == type) || (NULL == out_name)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_reflect_log,
@@ -242,8 +236,7 @@ int shrewd_basic_reflect_enum_find_name(const shrewd_basic_reflect_type_t *type,
 
 int shrewd_basic_reflect_enum_find_value(const shrewd_basic_reflect_type_t *type,
                                          const char *name,
-                                         int64_t *out_value)
-{
+                                         int64_t *out_value) {
     if ((NULL == type) || (NULL == name) || (NULL == out_value)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_reflect_log,
@@ -307,8 +300,7 @@ static _Thread_local reflect_lookup_t g_lookup[REFLECT_LOOKUP_SLOTS];
 static _Thread_local size_t g_lookup_next = 0;
 
 /* Order two names when the left one is not NUL-terminated. */
-static int reflect_name_cmp(const char *name, size_t name_len, const char *field_name)
-{
+static int reflect_name_cmp(const char *name, size_t name_len, const char *field_name) {
     size_t field_len = strlen(field_name);
     size_t shared = (name_len < field_len) ? name_len : field_len;
     int result = memcmp(name, field_name, shared);
@@ -319,8 +311,7 @@ static int reflect_name_cmp(const char *name, size_t name_len, const char *field
 }
 
 /* Build the sorted index of @p type (no-op when unsuitable or present). */
-static void reflect_lookup_build(const shrewd_basic_reflect_type_t *type)
-{
+static void reflect_lookup_build(const shrewd_basic_reflect_type_t *type) {
     reflect_lookup_t *slot = NULL;
     if ((SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind)
         || (type->sb_refl_field_count > REFLECT_LOOKUP_FIELDS)) {
@@ -359,8 +350,7 @@ static void reflect_lookup_build(const shrewd_basic_reflect_type_t *type)
 static int reflect_lookup_query(const shrewd_basic_reflect_type_t *type,
                                 const char *name,
                                 size_t name_len,
-                                const shrewd_basic_reflect_field_t **out_field)
-{
+                                const shrewd_basic_reflect_field_t **out_field) {
     for (size_t i = 0; i < REFLECT_LOOKUP_SLOTS; ++i) {
         const reflect_lookup_t *slot = &g_lookup[i];
         if (type != slot->type) {
@@ -389,16 +379,14 @@ static int reflect_lookup_query(const shrewd_basic_reflect_type_t *type,
 
 #else /* cache disabled: every lookup is a plain linear scan */
 
-static void reflect_lookup_build(const shrewd_basic_reflect_type_t *type)
-{
+static void reflect_lookup_build(const shrewd_basic_reflect_type_t *type) {
     (void)type;
 }
 
 static int reflect_lookup_query(const shrewd_basic_reflect_type_t *type,
                                 const char *name,
                                 size_t name_len,
-                                const shrewd_basic_reflect_field_t **out_field)
-{
+                                const shrewd_basic_reflect_field_t **out_field) {
     (void)type;
     (void)name;
     (void)name_len;
@@ -413,8 +401,7 @@ static int reflect_lookup_query(const shrewd_basic_reflect_type_t *type,
  * have no type-level index).
  */
 static const shrewd_basic_reflect_field_t *reflect_fields_find(
-    const shrewd_basic_reflect_field_t *fields, size_t count, const char *name, size_t name_len)
-{
+    const shrewd_basic_reflect_field_t *fields, size_t count, const char *name, size_t name_len) {
     for (size_t i = 0; i < count; ++i) {
         const char *candidate = fields[i].sb_refl_name;
         if ((strlen(candidate) == name_len) && (0 == memcmp(candidate, name, name_len))) {
@@ -434,8 +421,7 @@ static const shrewd_basic_reflect_field_t *
 reflect_field_find(const shrewd_basic_reflect_list_t *list,
                    const shrewd_basic_reflect_type_t *type,
                    const char *name,
-                   size_t name_len)
-{
+                   size_t name_len) {
     const shrewd_basic_reflect_field_t *field = NULL;
     if (NULL != list) {
         const shrewd_basic_reflect_lookup_t *look = NULL;
@@ -464,8 +450,7 @@ reflect_field_find(const shrewd_basic_reflect_list_t *list,
 
 int shrewd_basic_reflect_type_find_field(const shrewd_basic_reflect_type_t *type,
                                          const char *name,
-                                         const shrewd_basic_reflect_field_t **out)
-{
+                                         const shrewd_basic_reflect_field_t **out) {
     if ((NULL == type) || (NULL == name) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_reflect_log,
@@ -486,8 +471,7 @@ int shrewd_basic_reflect_type_find_field(const shrewd_basic_reflect_type_t *type
     return SHREWD_BASIC_ERR_KEY_NOTFOUND;
 }
 
-size_t shrewd_basic_reflect_field_align(const shrewd_basic_reflect_field_t *field)
-{
+size_t shrewd_basic_reflect_field_align(const shrewd_basic_reflect_field_t *field) {
     if (NULL == field) {
         return 0;
     }
@@ -499,8 +483,7 @@ size_t shrewd_basic_reflect_field_align(const shrewd_basic_reflect_field_t *fiel
     return (NULL != field->sb_refl_type) ? field->sb_refl_type->sb_refl_align : 0;
 }
 
-int shrewd_basic_reflect_check_type(const shrewd_basic_reflect_type_t *type)
-{
+int shrewd_basic_reflect_check_type(const shrewd_basic_reflect_type_t *type) {
     if (NULL == type) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -592,8 +575,7 @@ broken:
 int shrewd_basic_reflect_field_get(const void *object,
                                    const shrewd_basic_reflect_field_t *field,
                                    void *out_value,
-                                   size_t value_size)
-{
+                                   size_t value_size) {
     if ((NULL == object) || (NULL == field) || (NULL == out_value)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_reflect_log,
@@ -635,8 +617,7 @@ int shrewd_basic_reflect_field_get(const void *object,
 int shrewd_basic_reflect_field_set(void *object,
                                    const shrewd_basic_reflect_field_t *field,
                                    const void *value,
-                                   size_t value_size)
-{
+                                   size_t value_size) {
     if ((NULL == object) || (NULL == field) || (NULL == value)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_reflect_log,
@@ -696,8 +677,7 @@ static int reflect_path_walk(const shrewd_basic_reflect_list_t *list,
                              const unsigned char **out_at,
                              size_t *out_offset,
                              const shrewd_basic_reflect_field_t **out_field,
-                             size_t *out_size)
-{
+                             size_t *out_size) {
     const unsigned char *base = object;
     size_t offset = 0;
     const shrewd_basic_reflect_type_t *cur = type;
@@ -874,8 +854,7 @@ static int reflect_path_walk(const shrewd_basic_reflect_list_t *list,
     }
 }
 
-static void reflect_path_log(int status, const char *op, const char *path, size_t size)
-{
+static void reflect_path_log(int status, const char *op, const char *path, size_t size) {
     if (SHREWD_BASIC_ERR_OK == status) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE,
                          shrewd_basic_reflect_log,
@@ -905,8 +884,7 @@ int shrewd_basic_reflect_type_resolve(const shrewd_basic_reflect_type_t *type,
                                       const char *path,
                                       const shrewd_basic_reflect_field_t **out_field,
                                       size_t *out_offset,
-                                      size_t *out_size)
-{
+                                      size_t *out_size) {
     if ((NULL == type) || (NULL == path) || (NULL == out_field) || (NULL == out_offset)
         || (NULL == out_size)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
@@ -929,8 +907,7 @@ int shrewd_basic_reflect_path_get(const void *object,
                                   const shrewd_basic_reflect_type_t *type,
                                   const char *path,
                                   void *out_value,
-                                  size_t value_size)
-{
+                                  size_t value_size) {
     if ((NULL == object) || (NULL == type) || (NULL == path) || (NULL == out_value)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_reflect_log,
@@ -971,8 +948,7 @@ int shrewd_basic_reflect_path_set(void *object,
                                   const shrewd_basic_reflect_type_t *type,
                                   const char *path,
                                   const void *value,
-                                  size_t value_size)
-{
+                                  size_t value_size) {
     if ((NULL == object) || (NULL == type) || (NULL == path) || (NULL == value)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_reflect_log,
@@ -1022,8 +998,7 @@ int shrewd_basic_reflect_path_set(void *object,
 
 int shrewd_basic_reflect_type_find_list(const shrewd_basic_reflect_list_t *list,
                                         const char *name,
-                                        const shrewd_basic_reflect_type_t **out)
-{
+                                        const shrewd_basic_reflect_type_t **out) {
     const shrewd_basic_reflect_lookup_t *look = NULL;
     if ((NULL == list) || (NULL == list->sb_refl_ops) || (NULL == list->sb_refl_ops->find_by_name)
         || (NULL == name) || (NULL == out)) {
@@ -1049,8 +1024,7 @@ int shrewd_basic_reflect_type_find_list(const shrewd_basic_reflect_list_t *list,
 int shrewd_basic_reflect_type_find_field_list(const shrewd_basic_reflect_list_t *list,
                                               const shrewd_basic_reflect_type_t *type,
                                               const char *name,
-                                              const shrewd_basic_reflect_field_t **out)
-{
+                                              const shrewd_basic_reflect_field_t **out) {
     const shrewd_basic_reflect_field_t *field = NULL;
     if ((NULL == list) || (NULL == list->sb_refl_ops) || (NULL == type) || (NULL == name)
         || (NULL == out)) {
@@ -1078,8 +1052,7 @@ int shrewd_basic_reflect_type_resolve_list(const shrewd_basic_reflect_list_t *li
                                            const char *path,
                                            const shrewd_basic_reflect_field_t **out_field,
                                            size_t *out_offset,
-                                           size_t *out_size)
-{
+                                           size_t *out_size) {
     if ((NULL == list) || (NULL == list->sb_refl_ops) || (NULL == type) || (NULL == path)
         || (NULL == out_field) || (NULL == out_offset) || (NULL == out_size)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
@@ -1103,8 +1076,7 @@ int shrewd_basic_reflect_path_get_list(const shrewd_basic_reflect_list_t *list,
                                        const shrewd_basic_reflect_type_t *type,
                                        const char *path,
                                        void *out_value,
-                                       size_t value_size)
-{
+                                       size_t value_size) {
     if ((NULL == list) || (NULL == list->sb_refl_ops) || (NULL == object) || (NULL == type)
         || (NULL == path) || (NULL == out_value)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
@@ -1147,8 +1119,7 @@ int shrewd_basic_reflect_path_set_list(const shrewd_basic_reflect_list_t *list,
                                        const shrewd_basic_reflect_type_t *type,
                                        const char *path,
                                        const void *value,
-                                       size_t value_size)
-{
+                                       size_t value_size) {
     if ((NULL == list) || (NULL == list->sb_refl_ops) || (NULL == object) || (NULL == type)
         || (NULL == path) || (NULL == value)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
@@ -1195,8 +1166,7 @@ int shrewd_basic_reflect_path_set_list(const shrewd_basic_reflect_list_t *list,
 /* Target address of a single-value field (deref one pointer level). */
 static int reflect_field_target(const void *object,
                                 const shrewd_basic_reflect_field_t *field,
-                                const unsigned char **out_at)
-{
+                                const unsigned char **out_at) {
     const unsigned char *at = (const unsigned char *)object + field->sb_refl_offset;
     if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
         void *pointer = NULL;
@@ -1218,8 +1188,7 @@ static int reflect_field_target(const void *object,
 int shrewd_basic_reflect_value_get(const void *object,
                                    const shrewd_basic_reflect_field_t *field,
                                    void *out_value,
-                                   size_t value_size)
-{
+                                   size_t value_size) {
     if ((NULL == object) || (NULL == field) || (NULL == out_value)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_reflect_log,
@@ -1273,8 +1242,7 @@ int shrewd_basic_reflect_value_get(const void *object,
 int shrewd_basic_reflect_value_set(void *object,
                                    const shrewd_basic_reflect_field_t *field,
                                    const void *value,
-                                   size_t value_size)
-{
+                                   size_t value_size) {
     if ((NULL == object) || (NULL == field) || (NULL == value)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_reflect_log,
@@ -1340,16 +1308,14 @@ typedef struct reflect_pair {
     const shrewd_basic_reflect_ops_t *ops; /* set for ops->copy clones */
 } reflect_pair_t;
 
-static int reflect_cmp_addr(const void *a, const void *b, void *ctx)
-{
+static int reflect_cmp_addr(const void *a, const void *b, void *ctx) {
     uintptr_t x = (uintptr_t)a;
     uintptr_t y = (uintptr_t)b;
     (void)ctx;
     return (x < y) ? -1 : ((x > y) ? 1 : 0);
 }
 
-static int reflect_cmp_pair(const void *a, const void *b, void *ctx)
-{
+static int reflect_cmp_pair(const void *a, const void *b, void *ctx) {
     uintptr_t x = (uintptr_t)((const reflect_pair_t *)a)->src;
     uintptr_t y = (uintptr_t)((const reflect_pair_t *)b)->src;
     (void)ctx;
@@ -1357,8 +1323,8 @@ static int reflect_cmp_pair(const void *a, const void *b, void *ctx)
 }
 
 /* 1 in *out_seen when @p pointer was visited before; records it otherwise. */
-static int reflect_visited_check(shrewd_basic_rbtree_t *visited, const void *pointer, int *out_seen)
-{
+static int
+reflect_visited_check(shrewd_basic_rbtree_t *visited, const void *pointer, int *out_seen) {
     void *found = NULL;
     if (SHREWD_BASIC_ERR_OK == shrewd_basic_rbtree_search(visited, pointer, &found)) {
         *out_seen = 1;
@@ -1370,8 +1336,7 @@ static int reflect_visited_check(shrewd_basic_rbtree_t *visited, const void *poi
 
 /* 1 in *out_found with *out_dst when @p src already has a clone. */
 static int
-reflect_map_lookup(shrewd_basic_rbtree_t *map, const void *src, void **out_dst, int *out_found)
-{
+reflect_map_lookup(shrewd_basic_rbtree_t *map, const void *src, void **out_dst, int *out_found) {
     reflect_pair_t probe = {0};
     void *found = NULL;
     probe.src = src;
@@ -1389,36 +1354,31 @@ reflect_map_lookup(shrewd_basic_rbtree_t *map, const void *src, void **out_dst, 
  * alloc must return zeroed memory (calloc semantics); NULL selects the
  * platform allocator. Bookkeeping nodes of the copy map go through the
  * same allocator, so copy_with/destroy_with pair up perfectly. */
-static int reflect_alloc_default(void *ctx, void **out, size_t size)
-{
+static int reflect_alloc_default(void *ctx, void **out, size_t size) {
     (void)ctx;
     return shrewd_basic_platform_calloc(out, 1, size);
 }
 
-static void reflect_alloc_default_free(void *ctx, void *ptr)
-{
+static void reflect_alloc_default_free(void *ctx, void *ptr) {
     void *block = ptr;
     (void)ctx;
     (void)shrewd_basic_platform_free(&block);
 }
 
 static const shrewd_basic_reflect_allocator_t *
-reflect_alloc_or_default(const shrewd_basic_reflect_allocator_t *alloc)
-{
+reflect_alloc_or_default(const shrewd_basic_reflect_allocator_t *alloc) {
     static const shrewd_basic_reflect_allocator_t fallback
         = {reflect_alloc_default, reflect_alloc_default_free, NULL};
     return (NULL != alloc) ? alloc : &fallback;
 }
 
 static int
-reflect_alloc_block(const shrewd_basic_reflect_allocator_t *alloc, void **out, size_t size)
-{
+reflect_alloc_block(const shrewd_basic_reflect_allocator_t *alloc, void **out, size_t size) {
     *out = NULL;
     return alloc->alloc(alloc->ctx, out, size);
 }
 
-static void reflect_alloc_free(const shrewd_basic_reflect_allocator_t *alloc, void *ptr)
-{
+static void reflect_alloc_free(const shrewd_basic_reflect_allocator_t *alloc, void *ptr) {
     if (NULL != ptr) {
         alloc->free(alloc->ctx, ptr);
     }
@@ -1428,8 +1388,7 @@ static int reflect_map_insert(shrewd_basic_rbtree_t *map,
                               const shrewd_basic_reflect_allocator_t *alloc,
                               const void *src,
                               void *dst,
-                              const shrewd_basic_reflect_ops_t *ops)
-{
+                              const shrewd_basic_reflect_ops_t *ops) {
     reflect_pair_t *pair = NULL;
     void *block = NULL;
     int status = reflect_alloc_block(alloc, &block, sizeof(*pair));
@@ -1454,8 +1413,7 @@ static int reflect_map_insert(shrewd_basic_rbtree_t *map,
  */
 static void reflect_map_release(shrewd_basic_rbtree_t *map,
                                 const shrewd_basic_reflect_allocator_t *alloc,
-                                int free_dst)
-{
+                                int free_dst) {
     if (NULL == map) {
         return;
     }
@@ -1493,8 +1451,7 @@ static int reflect_check_fields(const shrewd_basic_reflect_field_t *fields,
                                 size_t count,
                                 const unsigned char *base,
                                 shrewd_basic_rbtree_t *visited,
-                                size_t depth)
-{
+                                size_t depth) {
     for (size_t i = 0; i < count; ++i) {
         const shrewd_basic_reflect_field_t *field = &fields[i];
         const shrewd_basic_reflect_ops_t *field_ops = reflect_field_ops(field);
@@ -1548,8 +1505,7 @@ static int reflect_check_node(const shrewd_basic_reflect_type_t *type,
                               const void *value,
                               const shrewd_basic_reflect_ops_t *ops,
                               shrewd_basic_rbtree_t *visited,
-                              size_t depth)
-{
+                              size_t depth) {
     if (REFLECT_MAX_DEPTH <= depth) {
         return SHREWD_BASIC_ERR_OK;
     }
@@ -1580,8 +1536,7 @@ static int reflect_check_node(const shrewd_basic_reflect_type_t *type,
                                 depth + 1);
 }
 
-int shrewd_basic_reflect_check(const void *object, const shrewd_basic_reflect_type_t *type)
-{
+int shrewd_basic_reflect_check(const void *object, const shrewd_basic_reflect_type_t *type) {
     if ((NULL == object) || (NULL == type)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_reflect_log,
@@ -1646,8 +1601,7 @@ static int reflect_clone_target(const shrewd_basic_reflect_type_t *type,
                                 void **out,
                                 shrewd_basic_rbtree_t *map,
                                 const shrewd_basic_reflect_allocator_t *alloc,
-                                size_t depth)
-{
+                                size_t depth) {
     int found = 0;
     void *existing = NULL;
     int status = reflect_map_lookup(map, src, &existing, &found);
@@ -1725,8 +1679,7 @@ static int reflect_copy_fields(const shrewd_basic_reflect_field_t *fields,
                                unsigned char *dst,
                                shrewd_basic_rbtree_t *map,
                                const shrewd_basic_reflect_allocator_t *alloc,
-                               size_t depth)
-{
+                               size_t depth) {
     for (size_t i = 0; i < count; ++i) {
         const shrewd_basic_reflect_field_t *field = &fields[i];
         unsigned char *dst_at = dst + field->sb_refl_offset;
@@ -1875,8 +1828,7 @@ static int reflect_copy_value(const shrewd_basic_reflect_type_t *type,
                               unsigned char *dst,
                               shrewd_basic_rbtree_t *map,
                               const shrewd_basic_reflect_allocator_t *alloc,
-                              size_t depth)
-{
+                              size_t depth) {
     if (SHREWD_BASIC_REFLECT_KIND_ARRAY == type->sb_refl_kind) {
         /* A fixed array value (a row): element-wise like a field array. */
         for (size_t i = 0; i < type->sb_refl_elem_count; ++i) {
@@ -1906,8 +1858,7 @@ static int reflect_copy_value(const shrewd_basic_reflect_type_t *type,
 int shrewd_basic_reflect_copy_with(const shrewd_basic_reflect_allocator_t *alloc,
                                    void **out,
                                    const void *object,
-                                   const shrewd_basic_reflect_type_t *type)
-{
+                                   const shrewd_basic_reflect_type_t *type) {
     if ((NULL == out) || (NULL == object) || (NULL == type)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_reflect_log,
@@ -1995,8 +1946,7 @@ static int reflect_destroy_target(const shrewd_basic_reflect_type_t *type,
                                   const shrewd_basic_reflect_ops_t *ops,
                                   shrewd_basic_rbtree_t *visited,
                                   const shrewd_basic_reflect_allocator_t *alloc,
-                                  size_t depth)
-{
+                                  size_t depth) {
     if (REFLECT_MAX_DEPTH <= depth) {
         return SHREWD_BASIC_ERR_OK;
     }
@@ -2036,8 +1986,7 @@ static int reflect_destroy_fields(const shrewd_basic_reflect_field_t *fields,
                                   void *value,
                                   shrewd_basic_rbtree_t *visited,
                                   const shrewd_basic_reflect_allocator_t *alloc,
-                                  size_t depth)
-{
+                                  size_t depth) {
     unsigned char *base = (unsigned char *)value;
     for (size_t i = 0; i < count; ++i) {
         const shrewd_basic_reflect_field_t *field = &fields[i];
@@ -2125,8 +2074,7 @@ static int reflect_destroy_value(const shrewd_basic_reflect_type_t *type,
                                  void *value,
                                  shrewd_basic_rbtree_t *visited,
                                  const shrewd_basic_reflect_allocator_t *alloc,
-                                 size_t depth)
-{
+                                 size_t depth) {
     if (SHREWD_BASIC_REFLECT_KIND_ARRAY == type->sb_refl_kind) {
         for (size_t i = 0; i < type->sb_refl_elem_count; ++i) {
             if ((SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_elem->sb_refl_kind)
@@ -2154,15 +2102,13 @@ static int reflect_destroy_value(const shrewd_basic_reflect_type_t *type,
 
 int shrewd_basic_reflect_copy(void **out,
                               const void *object,
-                              const shrewd_basic_reflect_type_t *type)
-{
+                              const shrewd_basic_reflect_type_t *type) {
     return shrewd_basic_reflect_copy_with(NULL, out, object, type);
 }
 
 int shrewd_basic_reflect_destroy_with(const shrewd_basic_reflect_allocator_t *alloc,
                                       void *object,
-                                      const shrewd_basic_reflect_type_t *type)
-{
+                                      const shrewd_basic_reflect_type_t *type) {
     if ((NULL == object) || (NULL == type)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_reflect_log,
@@ -2222,7 +2168,6 @@ int shrewd_basic_reflect_destroy_with(const shrewd_basic_reflect_allocator_t *al
     return status;
 }
 
-int shrewd_basic_reflect_destroy(void *object, const shrewd_basic_reflect_type_t *type)
-{
+int shrewd_basic_reflect_destroy(void *object, const shrewd_basic_reflect_type_t *type) {
     return shrewd_basic_reflect_destroy_with(NULL, object, type);
 }

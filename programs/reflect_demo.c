@@ -34,14 +34,12 @@
 
 #include "reflect_demo_ext.h"
 
-static void banner(const char *title)
-{
+static void banner(const char *title) {
     printf("\n=== %s ===\n", title);
     fflush(stdout);
 }
 
-static void print_status(const char *what, int status)
-{
+static void print_status(const char *what, int status) {
     printf("  %-46s -> %s (%d)\n", what, shrewd_basic_error_name(status), status);
     fflush(stdout);
 }
@@ -73,14 +71,12 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(node_type,
 
 /* An opaque handle: the application knows the layout (an int32), reflect
  * only sees "opaque + ops". Invariant: value >= 0; set clamps to 100. */
-static int handle_get(const void *pointee, void *out_value, size_t value_size)
-{
+static int handle_get(const void *pointee, void *out_value, size_t value_size) {
     memcpy(out_value, pointee, value_size);
     return SHREWD_BASIC_ERR_OK;
 }
 
-static int handle_set(void *pointee, const void *value, size_t value_size)
-{
+static int handle_set(void *pointee, const void *value, size_t value_size) {
     int32_t rounded = 0;
     memcpy(&rounded, value, sizeof(rounded));
     if (100 < rounded) {
@@ -91,15 +87,13 @@ static int handle_set(void *pointee, const void *value, size_t value_size)
     return SHREWD_BASIC_ERR_OK;
 }
 
-static int handle_check(const void *pointee)
-{
+static int handle_check(const void *pointee) {
     int32_t value = 0;
     memcpy(&value, pointee, sizeof(value));
     return (0 <= value) ? SHREWD_BASIC_ERR_OK : SHREWD_BASIC_ERR_ARG_INVALID;
 }
 
-static int handle_copy(void **out, const void *pointee)
-{
+static int handle_copy(void **out, const void *pointee) {
     void *block = NULL;
     int status = shrewd_basic_platform_alloc(&block, sizeof(int32_t));
     if (SHREWD_BASIC_ERR_OK != status) {
@@ -110,14 +104,12 @@ static int handle_copy(void **out, const void *pointee)
     return SHREWD_BASIC_ERR_OK;
 }
 
-static void handle_destroy(void *pointee)
-{
+static void handle_destroy(void *pointee) {
     (void)shrewd_basic_platform_free(&pointee);
 }
 
 /* Custom dump text for a followed handle instead of a raw address. */
-static int handle_render(const void *pointee, char *buf, size_t buf_size)
-{
+static int handle_render(const void *pointee, char *buf, size_t buf_size) {
     int32_t value = 0;
     memcpy(&value, pointee, sizeof(value));
     (void)snprintf(buf, buf_size, "handle#%d", value);
@@ -136,8 +128,7 @@ SHREWD_BASIC_REFLECT_OPAQUE_DEFINE(handle_type, "handle", g_handle_ops);
 
 /* Field-level override: only get differs (x10), the rest reuses the
  * handle behavior - a field ops table replaces the type's per field. */
-static int scale_get(const void *pointee, void *out_value, size_t value_size)
-{
+static int scale_get(const void *pointee, void *out_value, size_t value_size) {
     int32_t value = 0;
     memcpy(&value, pointee, sizeof(value));
     value *= 10;
@@ -316,8 +307,7 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(
     SHREWD_BASIC_REFLECT_FIELD_PTR(person_t, handle, handle_type),
     SHREWD_BASIC_REFLECT_FIELD_PTR_OPS(person_t, scaled, handle_type, g_scale_ops));
 
-static void describe_field(const char *name)
-{
+static void describe_field(const char *name) {
     const shrewd_basic_reflect_field_t *field = NULL;
     int status = shrewd_basic_reflect_type_find_field(&person_type, name, &field);
     if (SHREWD_BASIC_ERR_OK != status) {
@@ -336,8 +326,7 @@ static void describe_field(const char *name)
 
 /* Visit callback: one printed line per traversal event. */
 static shrewd_basic_reflect_visit_action_t
-demo_visit_print(void *ctx, const shrewd_basic_reflect_visit_node_t *node)
-{
+demo_visit_print(void *ctx, const shrewd_basic_reflect_visit_node_t *node) {
     static const char *const event_name[]
         = {"ENTER", "ARRAY_ENTER", "LEAF", "CYCLE", "ARRAY_EXIT", "EXIT"};
     (void)ctx;
@@ -362,8 +351,7 @@ typedef struct {
 static int demo_reg_insert(void *ctx,
                            const char *name,
                            const shrewd_basic_reflect_type_t *type,
-                           shrewd_basic_reflect_lookup_t **out_slot)
-{
+                           shrewd_basic_reflect_lookup_t **out_slot) {
     demo_reg_t *reg = (demo_reg_t *)ctx;
     (void)type;
     for (size_t i = 0; i < reg->count; ++i) {
@@ -377,8 +365,7 @@ static int demo_reg_insert(void *ctx,
 }
 
 static const shrewd_basic_reflect_lookup_t *
-demo_reg_find_type(void *ctx, const shrewd_basic_reflect_type_t *type)
-{
+demo_reg_find_type(void *ctx, const shrewd_basic_reflect_type_t *type) {
     demo_reg_t *reg = (demo_reg_t *)ctx;
     for (size_t i = 0; i < reg->count; ++i) {
         if (reg->entries[i].sb_refl_type == type) {
@@ -388,8 +375,7 @@ demo_reg_find_type(void *ctx, const shrewd_basic_reflect_type_t *type)
     return NULL;
 }
 
-static const shrewd_basic_reflect_lookup_t *demo_reg_find_name(void *ctx, const char *name)
-{
+static const shrewd_basic_reflect_lookup_t *demo_reg_find_name(void *ctx, const char *name) {
     demo_reg_t *reg = (demo_reg_t *)ctx;
     for (size_t i = 0; i < reg->count; ++i) {
         if (0 == strcmp(reg->entries[i].sb_refl_name, name)) {
@@ -399,8 +385,7 @@ static const shrewd_basic_reflect_lookup_t *demo_reg_find_name(void *ctx, const 
     return NULL;
 }
 
-int main(void)
-{
+int main(void) {
     /* Line-buffer stdout so printf output interleaves cleanly with the
        log module's stderr output. */
     (void)setvbuf(stdout, NULL, _IOLBF, 0);

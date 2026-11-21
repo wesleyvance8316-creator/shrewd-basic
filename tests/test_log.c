@@ -8,16 +8,14 @@
 
 static int g_failures = 0;
 
-static void expect_eq_int(const char *name, int actual, int expected)
-{
+static void expect_eq_int(const char *name, int actual, int expected) {
     if (actual != expected) {
         fprintf(stderr, "FAIL %s: got %d, want %d\n", name, actual, expected);
         ++g_failures;
     }
 }
 
-static void expect_true(const char *name, int condition)
-{
+static void expect_true(const char *name, int condition) {
     if (0 == condition) {
         fprintf(stderr, "FAIL %s\n", name);
         ++g_failures;
@@ -28,16 +26,14 @@ static void expect_true(const char *name, int condition)
 SHREWD_BASIC_LOG_MODULE_DEFINE(g_cmod, "cmod", SHREWD_BASIC_LOG_LEVEL_ALL);
 
 /* Read a stream's whole content into buf (NUL-terminated). */
-static void slurp(FILE *stream, char *buf, size_t size)
-{
+static void slurp(FILE *stream, char *buf, size_t size) {
     size_t n = 0;
     rewind(stream);
     n = fread(buf, 1, size - 1, stream);
     buf[n] = '\0';
 }
 
-static void test_format(void)
-{
+static void test_format(void) {
     FILE *stream = tmpfile();
     expect_true("log format tmpfile", NULL != stream);
     if (NULL == stream) {
@@ -67,8 +63,7 @@ static void test_format(void)
     fclose(stream);
 }
 
-static void test_level_mask(void)
-{
+static void test_level_mask(void) {
     FILE *stream = tmpfile();
     expect_true("log mask tmpfile", NULL != stream);
     if (NULL == stream) {
@@ -107,8 +102,7 @@ static void test_level_mask(void)
     fclose(stream);
 }
 
-static void test_hex(void)
-{
+static void test_hex(void) {
     unsigned char data[20] = {0};
     for (size_t i = 0; i < sizeof(data); ++i) {
         data[i] = (unsigned char)(i + 1);
@@ -142,8 +136,7 @@ static void test_hex(void)
     fclose(stream);
 }
 
-static void test_runtime_module(void)
-{
+static void test_runtime_module(void) {
     shrewd_basic_log_module_t *mod = NULL;
     expect_eq_int("log module create",
                   shrewd_basic_log_module_create("rmod", SHREWD_BASIC_LOG_LEVEL_ALL, &mod),
@@ -192,8 +185,7 @@ static void test_runtime_module(void)
     remove(path);
 }
 
-static void test_registry(void)
-{
+static void test_registry(void) {
     expect_eq_int("log register", shrewd_basic_log_module_register(g_cmod), SHREWD_BASIC_ERR_OK);
     shrewd_basic_log_module_t *found = NULL;
     expect_eq_int(
@@ -207,8 +199,7 @@ static void test_registry(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
-static void test_shared_module(void)
-{
+static void test_shared_module(void) {
     /* The foreign translation unit must see the very same module. */
     expect_true("log shared module pointer", shrewd_test_log_ext_module() == g_cmod);
 
@@ -232,8 +223,7 @@ static void test_shared_module(void)
     fclose(stream);
 }
 
-static void test_global_output(void)
-{
+static void test_global_output(void) {
     const char *path = "shrewd-basic-log-global-test.txt";
 
     expect_eq_int(
@@ -300,20 +290,17 @@ static int g_unlock_calls = 0;
 static void *g_lock_ctx_seen = NULL;
 static void *g_unlock_ctx_seen = NULL;
 
-static void test_lock_cb(void *ctx)
-{
+static void test_lock_cb(void *ctx) {
     ++g_lock_calls;
     g_lock_ctx_seen = ctx;
 }
 
-static void test_unlock_cb(void *ctx)
-{
+static void test_unlock_cb(void *ctx) {
     ++g_unlock_calls;
     g_unlock_ctx_seen = ctx;
 }
 
-static void test_lock_hooks(void)
-{
+static void test_lock_hooks(void) {
     static int marker = 0;
     shrewd_basic_log_module_t *mod = NULL;
     shrewd_basic_log_module_t *found = NULL;
@@ -386,8 +373,7 @@ static void test_lock_hooks(void)
     fclose(stream);
 }
 
-int main(void)
-{
+int main(void) {
     test_format();
     test_level_mask();
     test_hex();

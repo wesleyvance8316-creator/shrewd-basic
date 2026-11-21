@@ -36,8 +36,7 @@ SHREWD_BASIC_LOG_MODULE_DECLARE(shrewd_basic_reflect_log);
 #define HASH_CAPMARK UINT64_C(0x4841534843415000) /* "HASHCAP\0" */
 #define HASH_EDGE0 UINT64_C(0x4841534845444730)   /* "HASHEDG0" */
 
-static uint64_t hash_bytes(uint64_t h, const void *data, size_t nbytes)
-{
+static uint64_t hash_bytes(uint64_t h, const void *data, size_t nbytes) {
     const unsigned char *bytes = (const unsigned char *)data;
     for (size_t i = 0; i < nbytes; ++i) {
         h ^= (uint64_t)bytes[i];
@@ -47,8 +46,7 @@ static uint64_t hash_bytes(uint64_t h, const void *data, size_t nbytes)
 }
 
 /* Fold a 64-bit word in little-endian byte order (stable everywhere). */
-static uint64_t hash_u64(uint64_t h, uint64_t word)
-{
+static uint64_t hash_u64(uint64_t h, uint64_t word) {
     unsigned char bytes[8] = {0};
     for (size_t i = 0; i < 8; ++i) {
         bytes[i] = (unsigned char)((word >> (8 * i)) & UINT64_C(0xff));
@@ -78,8 +76,7 @@ typedef struct hash_ctx {
 } hash_ctx_t;
 
 static hash_node_t *
-hash_graph_find(hash_graph_t *graph, const void *addr, const shrewd_basic_reflect_type_t *type)
-{
+hash_graph_find(hash_graph_t *graph, const void *addr, const shrewd_basic_reflect_type_t *type) {
     for (size_t i = 0; i < graph->count; ++i) {
         if ((graph->nodes[i].addr == addr) && (graph->nodes[i].type == type)) {
             return &graph->nodes[i];
@@ -92,8 +89,7 @@ static hash_node_t *hash_graph_add(hash_graph_t *graph,
                                    const void *addr,
                                    const shrewd_basic_reflect_type_t *type,
                                    const shrewd_basic_reflect_ops_t *ops,
-                                   size_t depth)
-{
+                                   size_t depth) {
     hash_node_t *node = hash_graph_find(graph, addr, type);
     if (NULL != node) {
         return node;
@@ -149,8 +145,7 @@ static int hash_edge(hash_ctx_t *ctx,
                      const shrewd_basic_reflect_type_t *type,
                      const shrewd_basic_reflect_ops_t *ops,
                      size_t depth,
-                     uint64_t *h)
-{
+                     uint64_t *h) {
     int node_kind = (SHREWD_BASIC_REFLECT_KIND_STRUCT == type->sb_refl_kind)
                     || (SHREWD_BASIC_REFLECT_KIND_ARRAY == type->sb_refl_kind);
     if (0 == node_kind) {
@@ -190,8 +185,7 @@ static int hash_content_value(hash_ctx_t *ctx,
                               size_t nbytes,
                               const shrewd_basic_reflect_ops_t *ops,
                               size_t depth,
-                              uint64_t *h)
-{
+                              uint64_t *h) {
     if (HASH_MAX_DEPTH <= depth) {
         /* Same cutoff as reflect_equal(): past the cap nothing is read. */
         *h = hash_u64(*h, HASH_CAPMARK);
@@ -288,8 +282,7 @@ static int hash_content_fields(hash_ctx_t *ctx,
                                size_t count,
                                const unsigned char *value,
                                size_t depth,
-                               uint64_t *h)
-{
+                               uint64_t *h) {
     for (size_t i = 0; i < count; ++i) {
         const shrewd_basic_reflect_field_t *field = &fields[i];
         const shrewd_basic_reflect_ops_t *field_ops = reflect_field_ops(field);
@@ -360,8 +353,7 @@ static int hash_content_fields(hash_ctx_t *ctx,
 
 int shrewd_basic_reflect_hash(const void *object,
                               const shrewd_basic_reflect_type_t *type,
-                              size_t *out_hash)
-{
+                              size_t *out_hash) {
     hash_graph_t graph = {0};
     hash_ctx_t ctx = {0};
     uint64_t h = HASH_OFFSET;

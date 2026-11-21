@@ -11,21 +11,8 @@ UseTab: Never
 ColumnLimit: 100
 ContinuationIndentWidth: 4
 
-# --- braces: functions break, everything else attaches ---
-BreakBeforeBraces: Custom
-BraceWrapping:
-  AfterControlStatement: Never
-  AfterEnum: false
-  AfterFunction: true
-  AfterStruct: false
-  AfterUnion: false
-  AfterExternBlock: false
-  BeforeCatch: false
-  BeforeElse: false
-  BeforeWhile: false
-  IndentBraces: false
-  SplitEmptyFunction: false
-  SplitEmptyRecord: false
+# --- braces: everything attaches (opening brace on the same line) ---
+BreakBeforeBraces: Attach
 InsertBraces: true
 RemoveSemicolon: true
 AllowShortIfStatementsOnASingleLine: Never

@@ -9,24 +9,21 @@
 
 static int g_failures = 0;
 
-static void expect_eq_int(const char *name, int actual, int expected)
-{
+static void expect_eq_int(const char *name, int actual, int expected) {
     if (actual != expected) {
         fprintf(stderr, "FAIL %s: got %d, want %d\n", name, actual, expected);
         ++g_failures;
     }
 }
 
-static void expect_true(const char *name, int condition)
-{
+static void expect_true(const char *name, int condition) {
     if (0 == condition) {
         fprintf(stderr, "FAIL %s\n", name);
         ++g_failures;
     }
 }
 
-int main(void)
-{
+int main(void) {
     expect_eq_int("clamp above range", shrewd_basic_clamp(15, 0, 10), 10);
     expect_eq_int("clamp below range", shrewd_basic_clamp(-5, 0, 10), 0);
     expect_eq_int("clamp inside range", shrewd_basic_clamp(5, 0, 10), 5);

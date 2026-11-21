@@ -19,24 +19,21 @@
 
 static int g_failures = 0;
 
-static void expect_eq_int(const char *name, int actual, int expected)
-{
+static void expect_eq_int(const char *name, int actual, int expected) {
     if (actual != expected) {
         fprintf(stderr, "FAIL %s: got %d, want %d\n", name, actual, expected);
         ++g_failures;
     }
 }
 
-static void expect_true(const char *name, int condition)
-{
+static void expect_true(const char *name, int condition) {
     if (0 == condition) {
         fprintf(stderr, "FAIL %s\n", name);
         ++g_failures;
     }
 }
 
-static void expect_streq(const char *name, const char *actual, const char *expected)
-{
+static void expect_streq(const char *name, const char *actual, const char *expected) {
     if ((NULL == actual) || (NULL == expected) || (0 != strcmp(actual, expected))) {
         fprintf(stderr,
                 "FAIL %s: got \"%s\", want \"%s\"\n",
@@ -48,8 +45,7 @@ static void expect_streq(const char *name, const char *actual, const char *expec
 }
 
 /* Parse a string literal; the result is returned (NULL on failure). */
-static shrewd_basic_json_value_t *parse_ok(const char *name, const char *text)
-{
+static shrewd_basic_json_value_t *parse_ok(const char *name, const char *text) {
     shrewd_basic_json_value_t *value = NULL;
     int status = shrewd_basic_json_parse(text, strlen(text), &value, NULL, NULL);
     if (SHREWD_BASIC_ERR_OK != status) {
@@ -61,8 +57,7 @@ static shrewd_basic_json_value_t *parse_ok(const char *name, const char *text)
 }
 
 /* Assert that @p text fails to parse with @p status. */
-static void parse_fails(const char *name, const char *text, int status)
-{
+static void parse_fails(const char *name, const char *text, int status) {
     shrewd_basic_json_value_t *value = NULL;
     shrewd_basic_json_error_t error = {0};
     int actual = shrewd_basic_json_parse(text, strlen(text), &value, NULL, &error);
@@ -73,8 +68,7 @@ static void parse_fails(const char *name, const char *text, int status)
     shrewd_basic_json_value_free(value);
 }
 
-static void test_parse_scalars(void)
-{
+static void test_parse_scalars(void) {
     shrewd_basic_json_value_t *v = parse_ok("scalar null", "null");
     expect_true("scalar null kind", SHREWD_BASIC_JSON_NULL == shrewd_basic_json_kind(v));
     shrewd_basic_json_value_free(v);
@@ -137,8 +131,7 @@ static void test_parse_scalars(void)
     shrewd_basic_json_value_free(v);
 }
 
-static void test_parse_strings(void)
-{
+static void test_parse_strings(void) {
     shrewd_basic_json_value_t *v = parse_ok("string escapes", "\"a\\\"b\\\\c\\n\\t\\u0041\"");
     expect_streq("string escapes content", shrewd_basic_json_to_string(v), "a\"b\\c\n\tA");
     shrewd_basic_json_value_free(v);
@@ -161,8 +154,7 @@ static void test_parse_strings(void)
     parse_fails("string unterminated", "\"abc", SHREWD_BASIC_ERR_JSON_SYNTAX);
 }
 
-static void test_parse_containers(void)
-{
+static void test_parse_containers(void) {
     const char *text = "{\"b\": [1, 2], \"a\": {\"x\": true}, \"b\": null}";
     shrewd_basic_json_value_t *v = parse_ok("container", text);
     expect_true("container kind", SHREWD_BASIC_JSON_OBJECT == shrewd_basic_json_kind(v));
@@ -195,8 +187,7 @@ static void test_parse_containers(void)
     shrewd_basic_json_value_free(v);
 }
 
-static void test_parse_strict(void)
-{
+static void test_parse_strict(void) {
     parse_fails("strict trailing comma array", "[1,]", SHREWD_BASIC_ERR_JSON_SYNTAX);
     parse_fails("strict trailing comma object", "{\"a\":1,}", SHREWD_BASIC_ERR_JSON_SYNTAX);
     parse_fails("strict comment", "/* x */ 1", SHREWD_BASIC_ERR_JSON_SYNTAX);
@@ -214,8 +205,7 @@ static void test_parse_strict(void)
     parse_fails("strict nan", "NaN", SHREWD_BASIC_ERR_JSON_SYNTAX);
 }
 
-static void test_parse_options(void)
-{
+static void test_parse_options(void) {
     shrewd_basic_json_options_t options = {0};
     shrewd_basic_json_value_t *v = NULL;
     memset(&options, 0, sizeof(options));
@@ -278,8 +268,7 @@ static void test_parse_options(void)
     }
 }
 
-static void test_value_model(void)
-{
+static void test_value_model(void) {
     shrewd_basic_json_value_t *object = NULL;
     shrewd_basic_json_value_t *array = NULL;
     shrewd_basic_json_value_t *item = NULL;
@@ -325,8 +314,7 @@ static void test_value_model(void)
     shrewd_basic_json_value_free(object); /* frees the nested array too */
 }
 
-static void test_serialize(void)
-{
+static void test_serialize(void) {
     shrewd_basic_json_value_t *v = NULL;
     char *text = NULL;
 
@@ -401,8 +389,7 @@ static void test_serialize(void)
     shrewd_basic_json_value_free(v);
 }
 
-static void test_roundtrip(void)
-{
+static void test_roundtrip(void) {
     const char *source = "{\"id\":18446744073709551615,\"name\":\"caf\xc3\xa9\",\"pi\":3.14,"
                          "\"flags\":[true,false,null],\"nested\":{\"x\":-0.0,\"y\":1e3}}";
     shrewd_basic_json_value_t *v = parse_ok("roundtrip first", source);
@@ -436,8 +423,7 @@ typedef struct collect_sink {
     int calls;
 } collect_sink_t;
 
-static int collect_write(void *ctx, const char *data, size_t length)
-{
+static int collect_write(void *ctx, const char *data, size_t length) {
     collect_sink_t *sink = (collect_sink_t *)ctx;
     for (size_t i = 0; i < length; ++i) {
         if (sink->len + 1 < sizeof(sink->buf)) {
@@ -449,8 +435,7 @@ static int collect_write(void *ctx, const char *data, size_t length)
     return SHREWD_BASIC_ERR_OK;
 }
 
-static void test_sinks_and_text(void)
-{
+static void test_sinks_and_text(void) {
     shrewd_basic_json_value_t *v = NULL;
     collect_sink_t sink = {0};
     char *text = NULL;
@@ -521,8 +506,7 @@ static void test_sinks_and_text(void)
 
 /* --- JSON Pointer tests ------------------------------------------------ */
 
-static void test_pointer(void)
-{
+static void test_pointer(void) {
     shrewd_basic_json_value_t *root = NULL;
     const shrewd_basic_json_value_t *found = NULL;
     root = parse_ok("pointer src", "{\"a\":{\"b\":[10,20]},\"til~de/slash\":7}");
@@ -559,8 +543,7 @@ static void test_pointer(void)
 
 /* --- inline container storage ----------------------------------------- */
 
-static void test_inline_containers(void)
-{
+static void test_inline_containers(void) {
     shrewd_basic_json_value_t *v = NULL;
     char *text = NULL;
 
@@ -611,8 +594,7 @@ static void test_inline_containers(void)
 
 /* --- pointer set / decode_pointer ------------------------------------- */
 
-static void test_pointer_set(void)
-{
+static void test_pointer_set(void) {
     shrewd_basic_json_value_t *root = NULL;
     shrewd_basic_json_value_t *item = NULL;
     char *text = NULL;
@@ -659,8 +641,7 @@ typedef struct chunk_reader {
     size_t chunk;
 } chunk_reader_t;
 
-static int chunk_read(void *ctx, char *buf, size_t capacity, size_t *out_read)
-{
+static int chunk_read(void *ctx, char *buf, size_t capacity, size_t *out_read) {
     chunk_reader_t *src = (chunk_reader_t *)ctx;
     size_t left = src->length - src->pos;
     size_t take = (left < capacity) ? left : capacity;
@@ -673,8 +654,7 @@ static int chunk_read(void *ctx, char *buf, size_t capacity, size_t *out_read)
     return SHREWD_BASIC_ERR_OK;
 }
 
-static void test_pull(void)
-{
+static void test_pull(void) {
     shrewd_basic_json_pull_t *pull = NULL;
     shrewd_basic_json_token_t token = {0};
     shrewd_basic_json_value_t *item = NULL;
@@ -771,8 +751,7 @@ static void test_pull(void)
     }
 }
 
-int main(void)
-{
+int main(void) {
     test_parse_scalars();
     test_parse_strings();
     test_parse_containers();

@@ -6,8 +6,7 @@
 /* Shared ds log module, defined in library/ds/ds.c. */
 SHREWD_BASIC_LOG_MODULE_DECLARE(shrewd_basic_ds_log);
 
-int shrewd_basic_slist_create(shrewd_basic_slist_t **out)
-{
+int shrewd_basic_slist_create(shrewd_basic_slist_t **out) {
     if (NULL == out) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "slist", "create: out is NULL\n");
@@ -27,8 +26,7 @@ int shrewd_basic_slist_create(shrewd_basic_slist_t **out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_slist_destroy(shrewd_basic_slist_t *list)
-{
+int shrewd_basic_slist_destroy(shrewd_basic_slist_t *list) {
     if (NULL == list) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "slist", "destroy: list is NULL\n");
@@ -59,8 +57,7 @@ int shrewd_basic_slist_destroy(shrewd_basic_slist_t *list)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_slist_push_front(shrewd_basic_slist_t *list, void *data)
-{
+int shrewd_basic_slist_push_front(shrewd_basic_slist_t *list, void *data) {
     if (NULL == list) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -93,8 +90,7 @@ int shrewd_basic_slist_push_front(shrewd_basic_slist_t *list, void *data)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_slist_push_back(shrewd_basic_slist_t *list, void *data)
-{
+int shrewd_basic_slist_push_back(shrewd_basic_slist_t *list, void *data) {
     if (NULL == list) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "slist", "push_back: list is NULL\n");
@@ -127,8 +123,7 @@ int shrewd_basic_slist_push_back(shrewd_basic_slist_t *list, void *data)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_slist_pop_front(shrewd_basic_slist_t *list, void **out)
-{
+int shrewd_basic_slist_pop_front(shrewd_basic_slist_t *list, void **out) {
     if (NULL == list) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "slist", "pop_front: list is NULL\n");
@@ -164,8 +159,7 @@ int shrewd_basic_slist_pop_front(shrewd_basic_slist_t *list, void **out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_slist_front(const shrewd_basic_slist_t *list, void **out)
-{
+int shrewd_basic_slist_front(const shrewd_basic_slist_t *list, void **out) {
     if ((NULL == list) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -182,8 +176,7 @@ int shrewd_basic_slist_front(const shrewd_basic_slist_t *list, void **out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_slist_size(const shrewd_basic_slist_t *list, size_t *out)
-{
+int shrewd_basic_slist_size(const shrewd_basic_slist_t *list, size_t *out) {
     if ((NULL == list) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -195,15 +188,13 @@ int shrewd_basic_slist_size(const shrewd_basic_slist_t *list, size_t *out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-bool shrewd_basic_slist_empty(const shrewd_basic_slist_t *list)
-{
+bool shrewd_basic_slist_empty(const shrewd_basic_slist_t *list) {
     return (NULL == list) || (0 == list->size);
 }
 
 int shrewd_basic_slist_foreach(const shrewd_basic_slist_t *list,
                                shrewd_basic_slist_visit_fn visit,
-                               void *ctx)
-{
+                               void *ctx) {
     if ((NULL == list) || (NULL == visit)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -225,8 +216,7 @@ int shrewd_basic_slist_foreach(const shrewd_basic_slist_t *list,
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_slist_reverse(shrewd_basic_slist_t *list)
-{
+int shrewd_basic_slist_reverse(shrewd_basic_slist_t *list) {
     if (NULL == list) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "slist", "reverse: list is NULL\n");

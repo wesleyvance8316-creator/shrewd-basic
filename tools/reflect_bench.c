@@ -106,23 +106,20 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(
     SHREWD_BASIC_REFLECT_FIELD_DARRAY(hub_t, values, value_count, shrewd_basic_reflect_int32),
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(hub_t, value_count));
 
-static double now_ns(void)
-{
+static double now_ns(void) {
     struct timespec ts = {0};
     timespec_get(&ts, TIME_UTC);
     return ((double)ts.tv_sec * 1e9) + (double)ts.tv_nsec;
 }
 
-static void report(const char *what, long iters, double ns)
-{
+static void report(const char *what, long iters, double ns) {
     printf("  %-28s %8ld iters  %10.1f ns/op\n",
            what,
            iters,
            (0 < iters) ? (ns / (double)iters) : 0.0);
 }
 
-static void *xalloc(size_t size)
-{
+static void *xalloc(size_t size) {
     void *block = NULL;
     if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_alloc(&block, size)) {
         return NULL;
@@ -130,8 +127,7 @@ static void *xalloc(size_t size)
     return block;
 }
 
-static hub_t *hub_build(size_t points, size_t values)
-{
+static hub_t *hub_build(size_t points, size_t values) {
     hub_t *hub = xalloc(sizeof(hub_t));
     if (NULL == hub) {
         return NULL;
@@ -152,8 +148,7 @@ static hub_t *hub_build(size_t points, size_t values)
     return hub;
 }
 
-int main(void)
-{
+int main(void) {
     printf("reflect_bench: wide_t (32 fields), hub_t (%d point targets, "
            "%d scalars)\n",
            1000,

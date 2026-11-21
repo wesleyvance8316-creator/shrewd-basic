@@ -18,8 +18,7 @@ SHREWD_BASIC_LOG_MODULE_DEFINE(shrewd_basic_json_log, "json", SHREWD_BASIC_LOG_L
 
 /* --- growable output buffer ------------------------------------------- */
 
-int json_buf_init(json_buf_t *buf)
-{
+int json_buf_init(json_buf_t *buf) {
     void *block = NULL;
     buf->data = NULL;
     buf->len = 0;
@@ -34,8 +33,7 @@ int json_buf_init(json_buf_t *buf)
     return SHREWD_BASIC_ERR_OK;
 }
 
-void json_buf_release(json_buf_t *buf)
-{
+void json_buf_release(json_buf_t *buf) {
     if (NULL != buf->data) {
         (void)shrewd_basic_platform_free((void **)&buf->data);
     }
@@ -44,8 +42,7 @@ void json_buf_release(json_buf_t *buf)
     buf->cap = 0;
 }
 
-int json_buf_append(json_buf_t *buf, const char *text, size_t n)
-{
+int json_buf_append(json_buf_t *buf, const char *text, size_t n) {
     if (0 != buf->nomem) {
         return SHREWD_BASIC_ERR_MEM_NOMEM;
     }
@@ -68,8 +65,7 @@ int json_buf_append(json_buf_t *buf, const char *text, size_t n)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int json_buf_printf(json_buf_t *buf, const char *fmt, ...)
-{
+int json_buf_printf(json_buf_t *buf, const char *fmt, ...) {
     va_list ap;
     va_list copy;
     int needed = 0;
@@ -101,15 +97,13 @@ int json_buf_printf(json_buf_t *buf, const char *fmt, ...)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int json_buf_string(json_buf_t *buf, const char *text)
-{
+int json_buf_string(json_buf_t *buf, const char *text) {
     return json_buf_append(buf, text, strlen(text));
 }
 
 /* --- constructors ----------------------------------------------------- */
 
-static int json_value_alloc(shrewd_basic_json_kind_t kind, shrewd_basic_json_value_t **out)
-{
+static int json_value_alloc(shrewd_basic_json_kind_t kind, shrewd_basic_json_value_t **out) {
     shrewd_basic_json_value_t *node = NULL;
     void *block = NULL;
     if (NULL == out) {
@@ -151,8 +145,7 @@ static int json_value_alloc(shrewd_basic_json_kind_t kind, shrewd_basic_json_val
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_json_new(shrewd_basic_json_kind_t kind, shrewd_basic_json_value_t **out)
-{
+int shrewd_basic_json_new(shrewd_basic_json_kind_t kind, shrewd_basic_json_value_t **out) {
     if ((SHREWD_BASIC_JSON_NULL != kind) && (SHREWD_BASIC_JSON_ARRAY != kind)
         && (SHREWD_BASIC_JSON_OBJECT != kind)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
@@ -165,8 +158,7 @@ int shrewd_basic_json_new(shrewd_basic_json_kind_t kind, shrewd_basic_json_value
     return json_value_alloc(kind, out);
 }
 
-int shrewd_basic_json_new_bool(bool value, shrewd_basic_json_value_t **out)
-{
+int shrewd_basic_json_new_bool(bool value, shrewd_basic_json_value_t **out) {
     int status = json_value_alloc(SHREWD_BASIC_JSON_BOOL, out);
     if (SHREWD_BASIC_ERR_OK == status) {
         (*out)->u.boolean = value;
@@ -175,8 +167,7 @@ int shrewd_basic_json_new_bool(bool value, shrewd_basic_json_value_t **out)
 }
 
 /* Store a number as its exact token text. */
-int json_value_new_number(const char *raw, size_t n, shrewd_basic_json_value_t **out)
-{
+int json_value_new_number(const char *raw, size_t n, shrewd_basic_json_value_t **out) {
     int status = json_value_alloc(SHREWD_BASIC_JSON_NUMBER, out);
     if (SHREWD_BASIC_ERR_OK != status) {
         return status;
@@ -202,22 +193,19 @@ int json_value_new_number(const char *raw, size_t n, shrewd_basic_json_value_t *
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_json_new_i64(int64_t value, shrewd_basic_json_value_t **out)
-{
+int shrewd_basic_json_new_i64(int64_t value, shrewd_basic_json_value_t **out) {
     char raw[32] = {0};
     int length = snprintf(raw, sizeof(raw), "%lld", (long long)value);
     return json_value_new_number(raw, (size_t)((0 < length) ? length : 0), out);
 }
 
-int shrewd_basic_json_new_u64(uint64_t value, shrewd_basic_json_value_t **out)
-{
+int shrewd_basic_json_new_u64(uint64_t value, shrewd_basic_json_value_t **out) {
     char raw[32] = {0};
     int length = snprintf(raw, sizeof(raw), "%llu", (unsigned long long)value);
     return json_value_new_number(raw, (size_t)((0 < length) ? length : 0), out);
 }
 
-int shrewd_basic_json_new_f64(double value, shrewd_basic_json_value_t **out)
-{
+int shrewd_basic_json_new_f64(double value, shrewd_basic_json_value_t **out) {
     char raw[40] = {0};
     static const char *const forms[] = {"%g", "%.15g", "%.16g", "%.17g"};
     if ((value != value) || (value > DBL_MAX) || (value < -DBL_MAX)) {
@@ -241,8 +229,7 @@ int shrewd_basic_json_new_f64(double value, shrewd_basic_json_value_t **out)
     return json_value_new_number(raw, strlen(raw), out);
 }
 
-int shrewd_basic_json_new_string_n(const char *text, size_t n, shrewd_basic_json_value_t **out)
-{
+int shrewd_basic_json_new_string_n(const char *text, size_t n, shrewd_basic_json_value_t **out) {
     int status = json_value_alloc(SHREWD_BASIC_JSON_STRING, out);
     if (SHREWD_BASIC_ERR_OK != status) {
         return status;
@@ -272,13 +259,11 @@ int shrewd_basic_json_new_string_n(const char *text, size_t n, shrewd_basic_json
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_json_new_string(const char *text, shrewd_basic_json_value_t **out)
-{
+int shrewd_basic_json_new_string(const char *text, shrewd_basic_json_value_t **out) {
     return shrewd_basic_json_new_string_n(text, (NULL != text) ? strlen(text) : 0, out);
 }
 
-void shrewd_basic_json_value_free(shrewd_basic_json_value_t *value)
-{
+void shrewd_basic_json_value_free(shrewd_basic_json_value_t *value) {
     if (NULL == value) {
         return;
     }
@@ -318,13 +303,11 @@ void shrewd_basic_json_value_free(shrewd_basic_json_value_t *value)
 
 /* --- inspection ------------------------------------------------------- */
 
-shrewd_basic_json_kind_t shrewd_basic_json_kind(const shrewd_basic_json_value_t *value)
-{
+shrewd_basic_json_kind_t shrewd_basic_json_kind(const shrewd_basic_json_value_t *value) {
     return (NULL != value) ? value->kind : SHREWD_BASIC_JSON_NULL;
 }
 
-size_t shrewd_basic_json_count(const shrewd_basic_json_value_t *value)
-{
+size_t shrewd_basic_json_count(const shrewd_basic_json_value_t *value) {
     if (NULL == value) {
         return 0;
     }
@@ -338,8 +321,7 @@ size_t shrewd_basic_json_count(const shrewd_basic_json_value_t *value)
 }
 
 shrewd_basic_json_value_t *shrewd_basic_json_at(const shrewd_basic_json_value_t *value,
-                                                size_t index)
-{
+                                                size_t index) {
     if (NULL == value) {
         return NULL;
     }
@@ -352,8 +334,7 @@ shrewd_basic_json_value_t *shrewd_basic_json_at(const shrewd_basic_json_value_t 
     return NULL;
 }
 
-const char *shrewd_basic_json_key_at(const shrewd_basic_json_value_t *value, size_t index)
-{
+const char *shrewd_basic_json_key_at(const shrewd_basic_json_value_t *value, size_t index) {
     if ((NULL == value) || (SHREWD_BASIC_JSON_OBJECT != value->kind)
         || (index >= value->u.object.count)) {
         return NULL;
@@ -362,8 +343,7 @@ const char *shrewd_basic_json_key_at(const shrewd_basic_json_value_t *value, siz
 }
 
 shrewd_basic_json_value_t *shrewd_basic_json_get(const shrewd_basic_json_value_t *value,
-                                                 const char *key)
-{
+                                                 const char *key) {
     if ((NULL == value) || (SHREWD_BASIC_JSON_OBJECT != value->kind) || (NULL == key)) {
         return NULL;
     }
@@ -375,8 +355,7 @@ shrewd_basic_json_value_t *shrewd_basic_json_get(const shrewd_basic_json_value_t
     return NULL;
 }
 
-int shrewd_basic_json_to_bool(const shrewd_basic_json_value_t *value, bool *out)
-{
+int shrewd_basic_json_to_bool(const shrewd_basic_json_value_t *value, bool *out) {
     if ((NULL == value) || (NULL == out)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -388,13 +367,11 @@ int shrewd_basic_json_to_bool(const shrewd_basic_json_value_t *value, bool *out)
 }
 
 /* Number token shape: 0 = integer form, 1 = has fraction or exponent. */
-static int json_number_is_double(const char *raw)
-{
+static int json_number_is_double(const char *raw) {
     return (NULL != strpbrk(raw, ".eE")) ? 1 : 0;
 }
 
-int shrewd_basic_json_to_i64(const shrewd_basic_json_value_t *value, int64_t *out)
-{
+int shrewd_basic_json_to_i64(const shrewd_basic_json_value_t *value, int64_t *out) {
     if ((NULL == value) || (NULL == out)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -425,8 +402,7 @@ int shrewd_basic_json_to_i64(const shrewd_basic_json_value_t *value, int64_t *ou
     }
 }
 
-int shrewd_basic_json_to_u64(const shrewd_basic_json_value_t *value, uint64_t *out)
-{
+int shrewd_basic_json_to_u64(const shrewd_basic_json_value_t *value, uint64_t *out) {
     if ((NULL == value) || (NULL == out)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -469,8 +445,7 @@ int shrewd_basic_json_to_u64(const shrewd_basic_json_value_t *value, uint64_t *o
     }
 }
 
-int shrewd_basic_json_to_f64(const shrewd_basic_json_value_t *value, double *out)
-{
+int shrewd_basic_json_to_f64(const shrewd_basic_json_value_t *value, double *out) {
     if ((NULL == value) || (NULL == out)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -481,16 +456,14 @@ int shrewd_basic_json_to_f64(const shrewd_basic_json_value_t *value, double *out
     return SHREWD_BASIC_ERR_OK;
 }
 
-const char *shrewd_basic_json_to_string(const shrewd_basic_json_value_t *value)
-{
+const char *shrewd_basic_json_to_string(const shrewd_basic_json_value_t *value) {
     if ((NULL == value) || (SHREWD_BASIC_JSON_STRING != value->kind)) {
         return NULL;
     }
     return value->u.string;
 }
 
-const char *shrewd_basic_json_number_text(const shrewd_basic_json_value_t *value)
-{
+const char *shrewd_basic_json_number_text(const shrewd_basic_json_value_t *value) {
     if ((NULL == value) || (SHREWD_BASIC_JSON_NUMBER != value->kind)) {
         return NULL;
     }
@@ -499,8 +472,7 @@ const char *shrewd_basic_json_number_text(const shrewd_basic_json_value_t *value
 
 /* --- mutation --------------------------------------------------------- */
 
-static int json_object_grow(shrewd_basic_json_value_t *object)
-{
+static int json_object_grow(shrewd_basic_json_value_t *object) {
     if (object->u.object.count < object->u.object.cap) {
         return SHREWD_BASIC_ERR_OK;
     }
@@ -526,8 +498,7 @@ static int json_object_grow(shrewd_basic_json_value_t *object)
 
 int shrewd_basic_json_set(shrewd_basic_json_value_t *object,
                           const char *key,
-                          shrewd_basic_json_value_t *item)
-{
+                          shrewd_basic_json_value_t *item) {
     if ((NULL == object) || (SHREWD_BASIC_JSON_OBJECT != object->kind) || (NULL == key)
         || (NULL == item)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
@@ -544,8 +515,7 @@ int shrewd_basic_json_set(shrewd_basic_json_value_t *object,
 
 int json_object_add_steal(shrewd_basic_json_value_t *object,
                           char *key,
-                          shrewd_basic_json_value_t *item)
-{
+                          shrewd_basic_json_value_t *item) {
     int status = 0;
     if ((NULL == object) || (SHREWD_BASIC_JSON_OBJECT != object->kind) || (NULL == key)
         || (NULL == item)) {
@@ -576,8 +546,7 @@ int json_object_add_steal(shrewd_basic_json_value_t *object,
 
 int json_object_add(shrewd_basic_json_value_t *object,
                     const char *key,
-                    shrewd_basic_json_value_t *item)
-{
+                    shrewd_basic_json_value_t *item) {
     void *block = NULL;
     size_t length = 0;
     int status = 0;
@@ -617,8 +586,7 @@ int json_object_add(shrewd_basic_json_value_t *object,
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_json_append(shrewd_basic_json_value_t *array, shrewd_basic_json_value_t *item)
-{
+int shrewd_basic_json_append(shrewd_basic_json_value_t *array, shrewd_basic_json_value_t *item) {
     if ((NULL == array) || (SHREWD_BASIC_JSON_ARRAY != array->kind) || (NULL == item)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -655,8 +623,7 @@ int shrewd_basic_json_append(shrewd_basic_json_value_t *array, shrewd_basic_json
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_json_remove_at(shrewd_basic_json_value_t *value, size_t index)
-{
+int shrewd_basic_json_remove_at(shrewd_basic_json_value_t *value, size_t index) {
     if (NULL == value) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -688,8 +655,7 @@ int shrewd_basic_json_remove_at(shrewd_basic_json_value_t *value, size_t index)
 
 int shrewd_basic_json_replace_at(shrewd_basic_json_value_t *value,
                                  size_t index,
-                                 shrewd_basic_json_value_t *item)
-{
+                                 shrewd_basic_json_value_t *item) {
     if ((NULL == value) || (NULL == item)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -712,8 +678,7 @@ int shrewd_basic_json_replace_at(shrewd_basic_json_value_t *value,
     return SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH;
 }
 
-int shrewd_basic_json_remove(shrewd_basic_json_value_t *value, const char *key)
-{
+int shrewd_basic_json_remove(shrewd_basic_json_value_t *value, const char *key) {
     if ((NULL == value) || (SHREWD_BASIC_JSON_OBJECT != value->kind) || (NULL == key)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }

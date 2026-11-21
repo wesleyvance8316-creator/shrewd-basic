@@ -14,16 +14,14 @@
 
 static int g_failures = 0;
 
-static void expect_eq_int(const char *name, int actual, int expected)
-{
+static void expect_eq_int(const char *name, int actual, int expected) {
     if (actual != expected) {
         fprintf(stderr, "FAIL %s: got %d, want %d\n", name, actual, expected);
         ++g_failures;
     }
 }
 
-static void expect_true(const char *name, int condition)
-{
+static void expect_true(const char *name, int condition) {
     if (0 == condition) {
         fprintf(stderr, "FAIL %s\n", name);
         ++g_failures;
@@ -31,18 +29,15 @@ static void expect_true(const char *name, int condition)
 }
 
 /* Integer payloads smuggled through void*. */
-static void *iv(int value)
-{
+static void *iv(int value) {
     return (void *)(intptr_t)value;
 }
 
-static int pv(const void *payload)
-{
+static int pv(const void *payload) {
     return (int)(intptr_t)payload;
 }
 
-static int cmp_int(const void *a, const void *b, void *ctx)
-{
+static int cmp_int(const void *a, const void *b, void *ctx) {
     (void)ctx;
     int x = pv(a);
     int y = pv(b);
@@ -55,8 +50,7 @@ struct collect_ctx {
     size_t n;
 };
 
-static int collect(void *data, void *ctx)
-{
+static int collect(void *data, void *ctx) {
     struct collect_ctx *c = ctx;
     if (c->n < sizeof(c->items) / sizeof(c->items[0])) {
         c->items[c->n] = data;
@@ -66,8 +60,7 @@ static int collect(void *data, void *ctx)
 }
 
 /* Stops the walk with a non-OK code once payload 2 is reached. */
-static int collect_stop_at_2(void *data, void *ctx)
-{
+static int collect_stop_at_2(void *data, void *ctx) {
     int status = collect(data, ctx);
     if (SHREWD_BASIC_ERR_OK != status) {
         return status;
@@ -75,8 +68,7 @@ static int collect_stop_at_2(void *data, void *ctx)
     return (2 == pv(data)) ? SHREWD_BASIC_ERR_KEY_EXISTS : SHREWD_BASIC_ERR_OK;
 }
 
-static int collected_sorted(const struct collect_ctx *c)
-{
+static int collected_sorted(const struct collect_ctx *c) {
     for (size_t i = 1; i < c->n; ++i) {
         if (pv(c->items[i - 1]) >= pv(c->items[i])) {
             return 0;
@@ -85,8 +77,7 @@ static int collected_sorted(const struct collect_ctx *c)
     return 1;
 }
 
-static void test_slist(void)
-{
+static void test_slist(void) {
     shrewd_basic_slist_t *list = NULL;
     expect_eq_int("slist create", shrewd_basic_slist_create(&list), SHREWD_BASIC_ERR_OK);
     expect_true("slist create out", NULL != list);
@@ -159,8 +150,7 @@ static void test_slist(void)
         "slist destroy NULL", shrewd_basic_slist_destroy(NULL), SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
-static void test_dlist(void)
-{
+static void test_dlist(void) {
     shrewd_basic_dlist_t *list = NULL;
     expect_eq_int("dlist create", shrewd_basic_dlist_create(&list), SHREWD_BASIC_ERR_OK);
     expect_true("dlist create out", NULL != list);
@@ -232,8 +222,7 @@ static void test_dlist(void)
         "dlist destroy NULL", shrewd_basic_dlist_destroy(NULL), SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
-static void test_queue(void)
-{
+static void test_queue(void) {
     shrewd_basic_queue_t *queue = NULL;
     expect_eq_int("queue create", shrewd_basic_queue_create(&queue), SHREWD_BASIC_ERR_OK);
     expect_true("queue create out", NULL != queue);
@@ -271,8 +260,7 @@ static void test_queue(void)
         "queue destroy NULL", shrewd_basic_queue_destroy(NULL), SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
-static void test_stack(void)
-{
+static void test_stack(void) {
     shrewd_basic_stack_t *stack = NULL;
     expect_eq_int("stack create", shrewd_basic_stack_create(&stack), SHREWD_BASIC_ERR_OK);
     expect_true("stack create out", NULL != stack);
@@ -313,8 +301,7 @@ static void test_stack(void)
         "stack destroy NULL", shrewd_basic_stack_destroy(NULL), SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
-static void test_btree(void)
-{
+static void test_btree(void) {
     shrewd_basic_btree_t *tree = NULL;
     expect_eq_int("btree rejects NULL cmp",
                   shrewd_basic_btree_create(NULL, NULL, &tree),
@@ -397,8 +384,7 @@ static void test_btree(void)
 
 /* Returns -1 on an invariant violation, else the black height of the subtree. */
 static int rb_black_height(const shrewd_basic_rbtree_t *tree,
-                           const shrewd_basic_rbtree_node_t *node)
-{
+                           const shrewd_basic_rbtree_node_t *node) {
     if (node == tree->nil) {
         return 0;
     }
@@ -421,8 +407,7 @@ static int rb_black_height(const shrewd_basic_rbtree_t *tree,
     return left_height + ((SHREWD_BASIC_RBTREE_BLACK == node->color) ? 1 : 0);
 }
 
-static int rb_invariants_ok(const shrewd_basic_rbtree_t *tree)
-{
+static int rb_invariants_ok(const shrewd_basic_rbtree_t *tree) {
     if (tree->root == tree->nil) {
         return 1;
     }
@@ -430,8 +415,7 @@ static int rb_invariants_ok(const shrewd_basic_rbtree_t *tree)
             && (0 <= rb_black_height(tree, tree->root)));
 }
 
-static void test_rbtree(void)
-{
+static void test_rbtree(void) {
     shrewd_basic_rbtree_t *tree = NULL;
     expect_eq_int(
         "rbtree create", shrewd_basic_rbtree_create(cmp_int, NULL, &tree), SHREWD_BASIC_ERR_OK);
@@ -526,8 +510,7 @@ struct key_ctx {
     int stop_after;
 };
 
-static int collect_key(const char *key, void *value, void *ctx)
-{
+static int collect_key(const char *key, void *value, void *ctx) {
     (void)value;
     struct key_ctx *c = ctx;
     if (c->n < sizeof(c->keys) / sizeof(c->keys[0])) {
@@ -540,8 +523,7 @@ static int collect_key(const char *key, void *value, void *ctx)
     return SHREWD_BASIC_ERR_OK;
 }
 
-static int keys_match(const struct key_ctx *c, const char *const *want, size_t n)
-{
+static int keys_match(const struct key_ctx *c, const char *const *want, size_t n) {
     if (c->n != n) {
         return 0;
     }
@@ -553,8 +535,7 @@ static int keys_match(const struct key_ctx *c, const char *const *want, size_t n
     return 1;
 }
 
-static void test_trie(void)
-{
+static void test_trie(void) {
     shrewd_basic_trie_t *trie = NULL;
     expect_eq_int("trie create", shrewd_basic_trie_create(&trie), SHREWD_BASIC_ERR_OK);
     expect_true("trie create out", NULL != trie);
@@ -649,8 +630,7 @@ static void test_trie(void)
         "trie destroy NULL", shrewd_basic_trie_destroy(NULL), SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
-static void test_radix(void)
-{
+static void test_radix(void) {
     shrewd_basic_radix_t *tree = NULL;
     expect_eq_int("radix create", shrewd_basic_radix_create(&tree), SHREWD_BASIC_ERR_OK);
     expect_true("radix create out", NULL != tree);
@@ -812,8 +792,7 @@ static void test_radix(void)
         "radix destroy NULL", shrewd_basic_radix_destroy(NULL), SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
-int main(void)
-{
+int main(void) {
     test_slist();
     test_dlist();
     test_queue();

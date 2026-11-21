@@ -30,20 +30,17 @@ SHREWD_BASIC_LOG_MODULE_DEFINE(g_demo, "demo", SHREWD_BASIC_LOG_LEVEL_ALL);
 #define DEMO_FILE "shrewd-basic-log-demo.txt"
 #define DEMO_GLOBAL_FILE "shrewd-basic-log-demo-global.txt"
 
-static void banner(const char *title)
-{
+static void banner(const char *title) {
     printf("\n=== %s ===\n", title);
     fflush(stdout);
 }
 
-static void print_status(const char *what, int status)
-{
+static void print_status(const char *what, int status) {
     printf("  %-42s -> %s (%d)\n", what, shrewd_basic_error_name(status), status);
     fflush(stdout);
 }
 
-int main(void)
-{
+int main(void) {
     int status = SHREWD_BASIC_ERR_OK;
 
     banner("1. compile-time module: one line per level (colored on a tty)");

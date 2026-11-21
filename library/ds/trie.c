@@ -8,8 +8,7 @@
 /* Shared ds log module, defined in library/ds/ds.c. */
 SHREWD_BASIC_LOG_MODULE_DECLARE(shrewd_basic_ds_log);
 
-static shrewd_basic_trie_node_t *trie_node_new(void)
-{
+static shrewd_basic_trie_node_t *trie_node_new(void) {
     void *block = NULL;
     if (SHREWD_BASIC_ERR_OK
         != shrewd_basic_platform_calloc(&block, 1, sizeof(shrewd_basic_trie_node_t))) {
@@ -18,8 +17,7 @@ static shrewd_basic_trie_node_t *trie_node_new(void)
     return block;
 }
 
-static shrewd_basic_trie_link_t *trie_link_new(unsigned char ch, shrewd_basic_trie_node_t *child)
-{
+static shrewd_basic_trie_link_t *trie_link_new(unsigned char ch, shrewd_basic_trie_node_t *child) {
     void *block = NULL;
     if (SHREWD_BASIC_ERR_OK
         != shrewd_basic_platform_calloc(&block, 1, sizeof(shrewd_basic_trie_link_t))) {
@@ -32,8 +30,7 @@ static shrewd_basic_trie_link_t *trie_link_new(unsigned char ch, shrewd_basic_tr
 }
 
 /* Slot where a link labeled @p ch belongs; children are sorted by byte. */
-static shrewd_basic_trie_link_t **trie_link_slot(shrewd_basic_trie_node_t *node, unsigned char ch)
-{
+static shrewd_basic_trie_link_t **trie_link_slot(shrewd_basic_trie_node_t *node, unsigned char ch) {
     shrewd_basic_trie_link_t **slot = &node->children;
     while ((NULL != *slot) && ((*slot)->ch < ch)) {
         slot = &(*slot)->next;
@@ -41,8 +38,7 @@ static shrewd_basic_trie_link_t **trie_link_slot(shrewd_basic_trie_node_t *node,
     return slot;
 }
 
-static int trie_free_node(shrewd_basic_trie_node_t *node)
-{
+static int trie_free_node(shrewd_basic_trie_node_t *node) {
     shrewd_basic_trie_link_t *link = node->children;
     while (NULL != link) {
         shrewd_basic_trie_link_t *next = link->next;
@@ -63,8 +59,7 @@ static int trie_free_node(shrewd_basic_trie_node_t *node)
  * Recursive removal: drops the value at the end of @p key and prunes the
  * dead leaf chain left behind on the way out.
  */
-static int trie_remove_node(shrewd_basic_trie_node_t *node, const unsigned char *key, void **out)
-{
+static int trie_remove_node(shrewd_basic_trie_node_t *node, const unsigned char *key, void **out) {
     if ('\0' == *key) {
         if (!node->has_value) {
             return SHREWD_BASIC_ERR_KEY_NOTFOUND;
@@ -85,7 +80,7 @@ static int trie_remove_node(shrewd_basic_trie_node_t *node, const unsigned char 
     if (SHREWD_BASIC_ERR_OK != status) {
         return status;
     }
-    if (!link->child->has_value && (NULL == link->child->children)) {
+    if ((!link->child->has_value) && (NULL == link->child->children)) {
         int free_status = shrewd_basic_platform_free((void **)&link->child);
         if (SHREWD_BASIC_ERR_OK != free_status) {
             return free_status;
@@ -101,8 +96,7 @@ static int trie_walk(const shrewd_basic_trie_node_t *node,
                      char *buf,
                      size_t len,
                      shrewd_basic_trie_visit_fn visit,
-                     void *ctx)
-{
+                     void *ctx) {
     if (node->has_value) {
         buf[len] = '\0';
         int status = visit(buf, node->value, ctx);
@@ -120,8 +114,7 @@ static int trie_walk(const shrewd_basic_trie_node_t *node,
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_trie_create(shrewd_basic_trie_t **out)
-{
+int shrewd_basic_trie_create(shrewd_basic_trie_t **out) {
     if (NULL == out) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "trie", "create: out is NULL\n");
@@ -152,8 +145,7 @@ int shrewd_basic_trie_create(shrewd_basic_trie_t **out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_trie_destroy(shrewd_basic_trie_t *trie)
-{
+int shrewd_basic_trie_destroy(shrewd_basic_trie_t *trie) {
     if (NULL == trie) {
         shrewd_basic_log(
             SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "trie", "destroy: trie is NULL\n");
@@ -179,8 +171,7 @@ int shrewd_basic_trie_destroy(shrewd_basic_trie_t *trie)
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_trie_insert(shrewd_basic_trie_t *trie, const char *key, void *value)
-{
+int shrewd_basic_trie_insert(shrewd_basic_trie_t *trie, const char *key, void *value) {
     if ((NULL == trie) || (NULL == key)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -236,8 +227,7 @@ int shrewd_basic_trie_insert(shrewd_basic_trie_t *trie, const char *key, void *v
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_trie_search(const shrewd_basic_trie_t *trie, const char *key, void **out)
-{
+int shrewd_basic_trie_search(const shrewd_basic_trie_t *trie, const char *key, void **out) {
     if ((NULL == trie) || (NULL == key) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -269,8 +259,7 @@ int shrewd_basic_trie_search(const shrewd_basic_trie_t *trie, const char *key, v
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_trie_remove(shrewd_basic_trie_t *trie, const char *key, void **out)
-{
+int shrewd_basic_trie_remove(shrewd_basic_trie_t *trie, const char *key, void **out) {
     if ((NULL == trie) || (NULL == key)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -300,8 +289,7 @@ int shrewd_basic_trie_remove(shrewd_basic_trie_t *trie, const char *key, void **
 
 int shrewd_basic_trie_foreach(const shrewd_basic_trie_t *trie,
                               shrewd_basic_trie_visit_fn visit,
-                              void *ctx)
-{
+                              void *ctx) {
     if ((NULL == trie) || (NULL == visit)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -342,8 +330,7 @@ int shrewd_basic_trie_foreach(const shrewd_basic_trie_t *trie,
 int shrewd_basic_trie_foreach_prefix(const shrewd_basic_trie_t *trie,
                                      const char *prefix,
                                      shrewd_basic_trie_visit_fn visit,
-                                     void *ctx)
-{
+                                     void *ctx) {
     if ((NULL == trie) || (NULL == prefix) || (NULL == visit)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -394,8 +381,7 @@ int shrewd_basic_trie_foreach_prefix(const shrewd_basic_trie_t *trie,
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_trie_size(const shrewd_basic_trie_t *trie, size_t *out)
-{
+int shrewd_basic_trie_size(const shrewd_basic_trie_t *trie, size_t *out) {
     if ((NULL == trie) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_ds_log,
@@ -407,7 +393,6 @@ int shrewd_basic_trie_size(const shrewd_basic_trie_t *trie, size_t *out)
     return SHREWD_BASIC_ERR_OK;
 }
 
-bool shrewd_basic_trie_empty(const shrewd_basic_trie_t *trie)
-{
+bool shrewd_basic_trie_empty(const shrewd_basic_trie_t *trie) {
     return (NULL == trie) || (0 == trie->size);
 }

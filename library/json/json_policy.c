@@ -15,8 +15,7 @@ SHREWD_BASIC_LOG_MODULE_DECLARE(shrewd_basic_json_log);
 
 void json_policy_view(const shrewd_basic_json_info_t *info,
                       const shrewd_basic_reflect_field_t *field,
-                      shrewd_basic_json_key_info_t *out)
-{
+                      shrewd_basic_json_key_info_t *out) {
     out->field = field->sb_refl_name;
     out->keys = &field->sb_refl_name;
     out->key_count = 1;
@@ -74,8 +73,7 @@ void json_policy_view(const shrewd_basic_json_info_t *info,
 int shrewd_basic_json_keys(const shrewd_basic_reflect_type_t *type,
                            const shrewd_basic_json_info_t *info,
                            shrewd_basic_json_keys_fn fn,
-                           void *ctx)
-{
+                           void *ctx) {
     if ((NULL == type) || (NULL == fn)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
                          shrewd_basic_json_log,

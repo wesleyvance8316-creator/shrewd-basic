@@ -34,23 +34,20 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(record_reflect,
                                                                   tags,
                                                                   shrewd_basic_reflect_int32));
 
-static double now_ns(void)
-{
+static double now_ns(void) {
     struct timespec ts = {0};
     timespec_get(&ts, TIME_UTC);
     return ((double)ts.tv_sec * 1e9) + (double)ts.tv_nsec;
 }
 
-static void report(const char *what, long iters, double ns)
-{
+static void report(const char *what, long iters, double ns) {
     printf("  %-28s %8ld iters  %10.1f ns/op\n",
            what,
            iters,
            (0 < iters) ? (ns / (double)iters) : 0.0);
 }
 
-int main(void)
-{
+int main(void) {
     /* Document: N objects, each with two numbers and a short string. */
     enum { N = 2000, DOC_MAX = 262144 };
     static char doc[DOC_MAX] = {0};

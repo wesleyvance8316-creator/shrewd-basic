@@ -5,6 +5,8 @@
 #      templates are excluded: they carry @VAR@ placeholders).
 #   2. clang-tidy  - .clang-tidy rules (initializer completeness,
 #      braces around statements).
+#   3. condition parens - a multi-operand condition wraps each
+#      sub-condition in parentheses (tools/check-condition-parens.py).
 #
 # Usage: tools/check-style.sh
 #   BUILD=<dir>   compile database for clang-tidy (default: build)
@@ -45,6 +47,11 @@ for f in $(find library tests programs tools -name '*.c' | sort); do
         fail=1
     fi
 done
+
+echo "== condition parens"
+if ! python3 "$here/check-condition-parens.py"; then
+    fail=1
+fi
 
 if [ "$fail" -ne 0 ]; then
     echo "style check FAILED"

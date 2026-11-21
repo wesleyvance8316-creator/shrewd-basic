@@ -688,8 +688,7 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
         .sb_refl_tag = (int64_t)(tag_value), .sb_refl_name = #tag_value,                           \
         .sb_refl_field_count = (sizeof((const shrewd_basic_reflect_field_t[]){__VA_ARGS__})        \
                                 / sizeof(shrewd_basic_reflect_field_t)),                           \
-        .sb_refl_fields = (const shrewd_basic_reflect_field_t[])                                   \
-        {                                                                                          \
+        .sb_refl_fields = (const shrewd_basic_reflect_field_t[]) {                                 \
             __VA_ARGS__                                                                            \
         }                                                                                          \
     }

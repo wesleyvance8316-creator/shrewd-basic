@@ -5,8 +5,7 @@
 /* Import the type defined in reflect_demo.c: same descriptor, same fields. */
 SHREWD_BASIC_REFLECT_TYPE_DECLARE(point_type);
 
-int32_t shrewd_demo_reflect_ext_sum(const void *point)
-{
+int32_t shrewd_demo_reflect_ext_sum(const void *point) {
     const shrewd_basic_reflect_field_t *field = NULL;
     int32_t x = 0;
     int32_t y = 0;
@@ -21,7 +20,6 @@ int32_t shrewd_demo_reflect_ext_sum(const void *point)
     return x + y;
 }
 
-void shrewd_demo_reflect_ext_dump(const void *point)
-{
+void shrewd_demo_reflect_ext_dump(const void *point) {
     (void)shrewd_basic_reflect_dump(&point_type, point, "point@ext");
 }
