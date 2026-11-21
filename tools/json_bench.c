@@ -14,7 +14,7 @@
 #include <string.h>
 #include <time.h>
 
-#include "shrewd-basic/json/json.h"
+#include "shrewd-basic/json.h"
 #include "shrewd-basic/log/log.h"
 
 /* A representative record for the mapping paths. */

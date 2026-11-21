@@ -17,7 +17,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "shrewd-basic/json/json.h"
+#include "shrewd-basic/json.h"
 #include "shrewd-basic/log/log.h"
 #include "shrewd-basic/platform/memory.h"
 

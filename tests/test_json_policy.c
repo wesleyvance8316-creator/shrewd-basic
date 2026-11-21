@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "shrewd-basic/json/json.h"
+#include "shrewd-basic/json.h"
 #include "shrewd-basic/platform/memory.h"
 
 static int g_failures = 0;
