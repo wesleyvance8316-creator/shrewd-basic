@@ -18,11 +18,10 @@
 #include "shrewd-basic/reflect/reflect.h"
 
 /* Effective ops of a field: the field-level override wins over type ops. */
-static inline const shrewd_basic_reflect_ops_t *reflect_field_ops(
-        const shrewd_basic_reflect_field_t *field)
+static inline const shrewd_basic_reflect_ops_t *
+reflect_field_ops(const shrewd_basic_reflect_field_t *field)
 {
-    return (NULL != field->sb_refl_ops) ? field->sb_refl_ops
-                                        : field->sb_refl_type->sb_refl_ops;
+    return (NULL != field->sb_refl_ops) ? field->sb_refl_ops : field->sb_refl_type->sb_refl_ops;
 }
 
 static inline int64_t reflect_load_i64(const unsigned char *bytes, size_t nbytes)
@@ -122,8 +121,7 @@ static inline size_t reflect_strn_len(const char *text, size_t max)
 }
 
 /* Width-matched store: the write-side twin of reflect_load_u64(). */
-static inline void reflect_store_u64(unsigned char *bytes, size_t nbytes,
-                                     uint64_t value)
+static inline void reflect_store_u64(unsigned char *bytes, size_t nbytes, uint64_t value)
 {
     switch (nbytes) {
     case 1: {
@@ -154,8 +152,7 @@ static inline void reflect_store_u64(unsigned char *bytes, size_t nbytes,
  * author input) extract as 0 and leave the unit untouched on insert -
  * defined behavior either way.
  */
-static inline uint64_t reflect_bits_extract(uint64_t unit, size_t offset,
-                                            size_t width)
+static inline uint64_t reflect_bits_extract(uint64_t unit, size_t offset, size_t width)
 {
     uint64_t mask = 0;
     if ((0 == width) || (64 < width) || (64 <= offset) || (64 < (offset + width))) {
@@ -165,8 +162,7 @@ static inline uint64_t reflect_bits_extract(uint64_t unit, size_t offset,
     return (unit >> offset) & mask;
 }
 
-static inline void reflect_bits_insert(uint64_t *unit, size_t offset,
-                                       size_t width, uint64_t value)
+static inline void reflect_bits_insert(uint64_t *unit, size_t offset, size_t width, uint64_t value)
 {
     uint64_t mask = 0;
     if ((0 == width) || (64 < width) || (64 <= offset) || (64 < (offset + width))) {
@@ -181,11 +177,10 @@ static inline void reflect_bits_insert(uint64_t *unit, size_t offset,
  * value itself; the tag member lives in the owner at a fixed
  * displacement from it. NULL means the tag names no known variant.
  */
-static inline const shrewd_basic_reflect_variant_t *reflect_union_variant(
-        const shrewd_basic_reflect_field_t *field, const unsigned char *storage)
+static inline const shrewd_basic_reflect_variant_t *
+reflect_union_variant(const shrewd_basic_reflect_field_t *field, const unsigned char *storage)
 {
-    int64_t tag = reflect_load_i64(storage - field->sb_refl_offset
-                                   + field->sb_refl_limit_offset,
+    int64_t tag = reflect_load_i64(storage - field->sb_refl_offset + field->sb_refl_limit_offset,
                                    field->sb_refl_limit_size);
     const shrewd_basic_reflect_type_t *type = field->sb_refl_type;
     for (size_t i = 0; i < type->sb_refl_variant_count; ++i) {
@@ -211,15 +206,15 @@ typedef struct reflect_array_view {
 } reflect_array_view_t;
 
 static inline reflect_array_view_t reflect_array_view(const unsigned char *object,
-        const shrewd_basic_reflect_field_t *field)
+                                                      const shrewd_basic_reflect_field_t *field)
 {
     reflect_array_view_t view;
     view.base = NULL;
     view.count = 0;
     view.stride = field->sb_refl_stride;
     if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_DARRAY)) {
-        const unsigned char *table =
-                (const unsigned char *)reflect_load_ptr(object + field->sb_refl_offset);
+        const unsigned char *table
+            = (const unsigned char *)reflect_load_ptr(object + field->sb_refl_offset);
         if (NULL == table) {
             return view;
         }
@@ -229,16 +224,16 @@ static inline reflect_array_view_t reflect_array_view(const unsigned char *objec
                 ++view.count;
             }
         } else {
-            view.count = (size_t)reflect_load_u64(
-                    object + field->sb_refl_limit_offset, field->sb_refl_limit_size);
+            view.count = (size_t)reflect_load_u64(object + field->sb_refl_limit_offset,
+                                                  field->sb_refl_limit_size);
         }
         return view;
     }
     if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_FLEX)) {
         /* Flexible tail: inline storage, run-time bound. */
         view.base = object + field->sb_refl_offset;
-        view.count = (size_t)reflect_load_u64(
-                object + field->sb_refl_limit_offset, field->sb_refl_limit_size);
+        view.count = (size_t)reflect_load_u64(object + field->sb_refl_limit_offset,
+                                              field->sb_refl_limit_size);
         return view;
     }
     view.base = object + field->sb_refl_offset;
@@ -253,7 +248,7 @@ static inline reflect_array_view_t reflect_array_view(const unsigned char *objec
  * never be embedded in another struct.
  */
 static inline size_t reflect_object_size(const unsigned char *object,
-        const shrewd_basic_reflect_type_t *type)
+                                         const shrewd_basic_reflect_type_t *type)
 {
     size_t size = type->sb_refl_size;
     for (size_t i = 0; i < type->sb_refl_field_count; ++i) {

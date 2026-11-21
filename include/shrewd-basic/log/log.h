@@ -61,24 +61,24 @@ extern "C" {
 
 /** Log levels as bit masks; combine with | to enable several at once. */
 typedef enum shrewd_basic_log_level {
-    SHREWD_BASIC_LOG_LEVEL_NONE  = 0,
+    SHREWD_BASIC_LOG_LEVEL_NONE = 0,
     SHREWD_BASIC_LOG_LEVEL_FATAL = 1 << 0,
     SHREWD_BASIC_LOG_LEVEL_ERROR = 1 << 1,
-    SHREWD_BASIC_LOG_LEVEL_WARN  = 1 << 2,
-    SHREWD_BASIC_LOG_LEVEL_INFO  = 1 << 3,
+    SHREWD_BASIC_LOG_LEVEL_WARN = 1 << 2,
+    SHREWD_BASIC_LOG_LEVEL_INFO = 1 << 3,
     SHREWD_BASIC_LOG_LEVEL_DEBUG = 1 << 4,
     SHREWD_BASIC_LOG_LEVEL_TRACE = 1 << 5,
-    SHREWD_BASIC_LOG_LEVEL_ALL   = (1 << 6) - 1
+    SHREWD_BASIC_LOG_LEVEL_ALL = (1 << 6) - 1
 } shrewd_basic_log_level_t;
 
 /** A logging module: name, enabled levels, output and registry linkage. */
 typedef struct shrewd_basic_log_module {
     const char *name;
     uint32_t level_mask;
-    FILE *out;       /**< NULL falls back to the global default output. */
-    int owns_out;    /**< Close out when it is replaced or the module dies. */
-    int heap;        /**< Created by shrewd_basic_log_module_create(). */
-    int registered;  /**< Already linked into the global registry. */
+    FILE *out;      /**< NULL falls back to the global default output. */
+    int owns_out;   /**< Close out when it is replaced or the module dies. */
+    int heap;       /**< Created by shrewd_basic_log_module_create(). */
+    int registered; /**< Already linked into the global registry. */
     struct shrewd_basic_log_module *next;
 } shrewd_basic_log_module_t;
 
@@ -90,9 +90,9 @@ typedef struct shrewd_basic_log_module {
  * The module joins the global registry automatically on first use
  * (shrewd_basic_log_module_register() is optional).
  */
-#define SHREWD_BASIC_LOG_MODULE_DEFINE(var, module_name, mask)                 \
-    static shrewd_basic_log_module_t var##_impl = {                            \
-        .name = (module_name), .level_mask = (uint32_t)(mask) };               \
+#define SHREWD_BASIC_LOG_MODULE_DEFINE(var, module_name, mask)                                     \
+    static shrewd_basic_log_module_t var##_impl                                                    \
+        = {.name = (module_name), .level_mask = (uint32_t)(mask)};                                 \
     shrewd_basic_log_module_t *const var = &var##_impl
 
 /*
@@ -101,11 +101,11 @@ typedef struct shrewd_basic_log_module {
  * module (one level mask, one output, one registry entry):
  *   SHREWD_BASIC_LOG_MODULE_DECLARE(var);
  */
-#define SHREWD_BASIC_LOG_MODULE_DECLARE(var)                                   \
-    extern shrewd_basic_log_module_t *const var
+#define SHREWD_BASIC_LOG_MODULE_DECLARE(var) extern shrewd_basic_log_module_t *const var
 
 /** Runtime module registration: create and register a module by name. */
-int shrewd_basic_log_module_create(const char *name, uint32_t level_mask,
+int shrewd_basic_log_module_create(const char *name,
+                                   uint32_t level_mask,
                                    shrewd_basic_log_module_t **out);
 
 /**
@@ -124,20 +124,17 @@ int shrewd_basic_log_module_register(shrewd_basic_log_module_t *module);
 int shrewd_basic_log_module_find(const char *name, shrewd_basic_log_module_t **out);
 
 /** Set which levels (bit mask) are enabled for this module. */
-int shrewd_basic_log_module_set_level(shrewd_basic_log_module_t *module,
-                                      uint32_t level_mask);
+int shrewd_basic_log_module_set_level(shrewd_basic_log_module_t *module, uint32_t level_mask);
 
 /** Send this module's output to @p stream (e.g. stdout/stderr). */
-int shrewd_basic_log_module_set_stream(shrewd_basic_log_module_t *module,
-                                       FILE *stream);
+int shrewd_basic_log_module_set_stream(shrewd_basic_log_module_t *module, FILE *stream);
 
 /**
  * Send this module's output to the file at @p path (opened in append mode;
  * the module closes it when the output is replaced or the module dies).
  * Returns SHREWD_BASIC_ERR_LOG_FOPEN when the file cannot be opened.
  */
-int shrewd_basic_log_module_set_file(shrewd_basic_log_module_t *module,
-                                     const char *path);
+int shrewd_basic_log_module_set_file(shrewd_basic_log_module_t *module, const char *path);
 
 /**
  * Send every module without its own output to @p stream (e.g. stdout or
@@ -176,14 +173,17 @@ int shrewd_basic_log_set_global_file(const char *path);
  * set; @p ctx is passed to both. Changing the pair while logging is in
  * flight is unsupported.
  */
-int shrewd_basic_log_set_lock(void (*lock_fn)(void *ctx),
-                              void (*unlock_fn)(void *ctx), void *ctx);
+int shrewd_basic_log_set_lock(void (*lock_fn)(void *ctx), void (*unlock_fn)(void *ctx), void *ctx);
 
 /** Core writer used by shrewd_basic_log(); the format is printf-style. */
 int shrewd_basic_log_write(shrewd_basic_log_level_t level,
-                           shrewd_basic_log_module_t *module, const char *label,
-                           const char *file, int line, const char *func,
-                           const char *fmt, ...)
+                           shrewd_basic_log_module_t *module,
+                           const char *label,
+                           const char *file,
+                           int line,
+                           const char *func,
+                           const char *fmt,
+                           ...)
 #ifdef __GNUC__
     __attribute__((format(printf, 7, 8)))
 #endif
@@ -192,9 +192,13 @@ int shrewd_basic_log_write(shrewd_basic_log_level_t level,
 /** Core writer used by shrewd_basic_log_hex(). */
 int shrewd_basic_log_hex_write(shrewd_basic_log_level_t level,
                                shrewd_basic_log_module_t *module,
-                               const char *label, const char *msg,
-                               const void *data, size_t size,
-                               const char *file, int line, const char *func);
+                               const char *label,
+                               const char *msg,
+                               const void *data,
+                               size_t size,
+                               const char *file,
+                               int line,
+                               const char *func);
 
 /**
  * Log one printf-style message; include "\n" in @c fmt yourself:
@@ -203,16 +207,14 @@ int shrewd_basic_log_hex_write(shrewd_basic_log_level_t level,
  * Statement macro: the level mask is tested inline and nothing is called
  * when the level is disabled. @p module and @p level are evaluated once.
  */
-#define shrewd_basic_log(level, module, label, ...)                            \
-    do {                                                                       \
-        shrewd_basic_log_module_t *const _log_module = (module);               \
-        shrewd_basic_log_level_t const _log_level = (level);                   \
-        if ((NULL != _log_module) && (0u != (_log_module->level_mask           \
-                & (uint32_t)_log_level))) {                                    \
-            (void)shrewd_basic_log_write(_log_level, _log_module,              \
-                                         (label), __FILE__, __LINE__,          \
-                                         __func__, __VA_ARGS__);               \
-        }                                                                      \
+#define shrewd_basic_log(level, module, label, ...)                                                \
+    do {                                                                                           \
+        shrewd_basic_log_module_t *const _log_module = (module);                                   \
+        shrewd_basic_log_level_t const _log_level = (level);                                       \
+        if ((NULL != _log_module) && (0u != (_log_module->level_mask & (uint32_t)_log_level))) {   \
+            (void)shrewd_basic_log_write(                                                          \
+                _log_level, _log_module, (label), __FILE__, __LINE__, __func__, __VA_ARGS__);      \
+        }                                                                                          \
     } while (0)
 
 /**
@@ -227,17 +229,21 @@ int shrewd_basic_log_hex_write(shrewd_basic_log_level_t level,
  * Statement macro: the level mask is tested inline and nothing is called
  * when the level is disabled. @p module and @p level are evaluated once.
  */
-#define shrewd_basic_log_hex(level, module, label, msg, data_ptr, data_size)   \
-    do {                                                                       \
-        shrewd_basic_log_module_t *const _log_module = (module);               \
-        shrewd_basic_log_level_t const _log_level = (level);                   \
-        if ((NULL != _log_module) && (0u != (_log_module->level_mask           \
-                & (uint32_t)_log_level))) {                                    \
-            (void)shrewd_basic_log_hex_write(_log_level, _log_module,          \
-                                             (label), (msg), (data_ptr),       \
-                                             (data_size), __FILE__, __LINE__,  \
-                                             __func__);                        \
-        }                                                                      \
+#define shrewd_basic_log_hex(level, module, label, msg, data_ptr, data_size)                       \
+    do {                                                                                           \
+        shrewd_basic_log_module_t *const _log_module = (module);                                   \
+        shrewd_basic_log_level_t const _log_level = (level);                                       \
+        if ((NULL != _log_module) && (0u != (_log_module->level_mask & (uint32_t)_log_level))) {   \
+            (void)shrewd_basic_log_hex_write(_log_level,                                           \
+                                             _log_module,                                          \
+                                             (label),                                              \
+                                             (msg),                                                \
+                                             (data_ptr),                                           \
+                                             (data_size),                                          \
+                                             __FILE__,                                             \
+                                             __LINE__,                                             \
+                                             __func__);                                            \
+        }                                                                                          \
     } while (0)
 
 #ifdef __cplusplus

@@ -77,8 +77,8 @@ typedef struct hash_ctx {
     int discover; /* 1 = register nodes; 0 = fold with current colors */
 } hash_ctx_t;
 
-static hash_node_t *hash_graph_find(hash_graph_t *graph, const void *addr,
-                                    const shrewd_basic_reflect_type_t *type)
+static hash_node_t *
+hash_graph_find(hash_graph_t *graph, const void *addr, const shrewd_basic_reflect_type_t *type)
 {
     for (size_t i = 0; i < graph->count; ++i) {
         if ((graph->nodes[i].addr == addr) && (graph->nodes[i].type == type)) {
@@ -88,7 +88,8 @@ static hash_node_t *hash_graph_find(hash_graph_t *graph, const void *addr,
     return NULL;
 }
 
-static hash_node_t *hash_graph_add(hash_graph_t *graph, const void *addr,
+static hash_node_t *hash_graph_add(hash_graph_t *graph,
+                                   const void *addr,
                                    const shrewd_basic_reflect_type_t *type,
                                    const shrewd_basic_reflect_ops_t *ops,
                                    size_t depth)
@@ -101,8 +102,7 @@ static hash_node_t *hash_graph_add(hash_graph_t *graph, const void *addr,
         size_t cap = (0 == graph->cap) ? 16 : (graph->cap * 2);
         void *block = NULL;
         if (SHREWD_BASIC_ERR_OK
-                != shrewd_basic_platform_calloc(&block, 1,
-                                                cap * sizeof(hash_node_t))) {
+            != shrewd_basic_platform_calloc(&block, 1, cap * sizeof(hash_node_t))) {
             graph->nomem = 1;
             return NULL;
         }
@@ -129,44 +129,49 @@ static hash_node_t *hash_graph_add(hash_graph_t *graph, const void *addr,
 
 static int hash_content_fields(hash_ctx_t *ctx,
                                const shrewd_basic_reflect_field_t *fields,
-                               size_t count, const unsigned char *value,
-                               size_t depth, uint64_t *h);
+                               size_t count,
+                               const unsigned char *value,
+                               size_t depth,
+                               uint64_t *h);
 
 static int hash_content_value(hash_ctx_t *ctx,
                               const shrewd_basic_reflect_type_t *type,
-                              const unsigned char *value, size_t nbytes,
+                              const unsigned char *value,
+                              size_t nbytes,
                               const shrewd_basic_reflect_ops_t *ops,
-                              size_t depth, uint64_t *h);
+                              size_t depth,
+                              uint64_t *h);
 
 /* Fold one pointer edge: a node edge contributes a color (or registers
    and expands the node during discovery); leaf targets fold as content. */
-static int hash_edge(hash_ctx_t *ctx, const void *target,
+static int hash_edge(hash_ctx_t *ctx,
+                     const void *target,
                      const shrewd_basic_reflect_type_t *type,
                      const shrewd_basic_reflect_ops_t *ops,
-                     size_t depth, uint64_t *h)
+                     size_t depth,
+                     uint64_t *h)
 {
     int node_kind = (SHREWD_BASIC_REFLECT_KIND_STRUCT == type->sb_refl_kind)
-            || (SHREWD_BASIC_REFLECT_KIND_ARRAY == type->sb_refl_kind);
+                    || (SHREWD_BASIC_REFLECT_KIND_ARRAY == type->sb_refl_kind);
     if (0 == node_kind) {
         /* Scalar/string/opaque targets compare by value (or address for
            opaque); they are content, not identity nodes. */
-        return hash_content_value(ctx, type, (const unsigned char *)target,
-                                  type->sb_refl_size, ops, depth, h);
+        return hash_content_value(
+            ctx, type, (const unsigned char *)target, type->sb_refl_size, ops, depth, h);
     }
     if (HASH_MAX_DEPTH <= depth) {
         *h = hash_u64(*h, HASH_CAPMARK);
         return SHREWD_BASIC_ERR_OK;
     }
     if (0 != ctx->discover) {
-        hash_node_t *node = hash_graph_add(ctx->graph, target, type, ops,
-                                           depth);
+        hash_node_t *node = hash_graph_add(ctx->graph, target, type, ops, depth);
         if (NULL == node) {
             return SHREWD_BASIC_ERR_OK; /* nomem flagged; caller reports */
         }
         if (0 == node->walked) {
             node->walked = 1;
-            return hash_content_value(ctx, type, (const unsigned char *)target,
-                                      type->sb_refl_size, ops, depth, h);
+            return hash_content_value(
+                ctx, type, (const unsigned char *)target, type->sb_refl_size, ops, depth, h);
         }
         return SHREWD_BASIC_ERR_OK;
     }
@@ -181,9 +186,11 @@ static int hash_edge(hash_ctx_t *ctx, const void *target,
    pointer edges dispatch through hash_edge). */
 static int hash_content_value(hash_ctx_t *ctx,
                               const shrewd_basic_reflect_type_t *type,
-                              const unsigned char *value, size_t nbytes,
+                              const unsigned char *value,
+                              size_t nbytes,
                               const shrewd_basic_reflect_ops_t *ops,
-                              size_t depth, uint64_t *h)
+                              size_t depth,
+                              uint64_t *h)
 {
     if (HASH_MAX_DEPTH <= depth) {
         /* Same cutoff as reflect_equal(): past the cap nothing is read. */
@@ -254,11 +261,13 @@ static int hash_content_value(hash_ctx_t *ctx,
     }
     if (SHREWD_BASIC_REFLECT_KIND_ARRAY == type->sb_refl_kind) {
         for (size_t i = 0; i < type->sb_refl_elem_count; ++i) {
-            int status = hash_content_value(ctx, type->sb_refl_elem,
+            int status = hash_content_value(ctx,
+                                            type->sb_refl_elem,
                                             value + (i * type->sb_refl_elem_stride),
                                             type->sb_refl_elem_stride,
                                             type->sb_refl_elem->sb_refl_ops,
-                                            depth + 1, h);
+                                            depth + 1,
+                                            h);
             if (SHREWD_BASIC_ERR_OK != status) {
                 return status;
             }
@@ -269,15 +278,17 @@ static int hash_content_value(hash_ctx_t *ctx,
         *h = hash_bytes(*h, value, nbytes);
         return SHREWD_BASIC_ERR_OK;
     }
-    return hash_content_fields(ctx, type->sb_refl_fields,
-                               type->sb_refl_field_count, value, depth, h);
+    return hash_content_fields(
+        ctx, type->sb_refl_fields, type->sb_refl_field_count, value, depth, h);
 }
 
 /* Fold one field list - a struct's fields or an active union variant's. */
 static int hash_content_fields(hash_ctx_t *ctx,
                                const shrewd_basic_reflect_field_t *fields,
-                               size_t count, const unsigned char *value,
-                               size_t depth, uint64_t *h)
+                               size_t count,
+                               const unsigned char *value,
+                               size_t depth,
+                               uint64_t *h)
 {
     for (size_t i = 0; i < count; ++i) {
         const shrewd_basic_reflect_field_t *field = &fields[i];
@@ -285,17 +296,19 @@ static int hash_content_fields(hash_ctx_t *ctx,
         if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_UNION)) {
             /* Tagged union: fold the tag, then the active variant. */
             const unsigned char *storage = value + field->sb_refl_offset;
-            int64_t tag = reflect_load_i64(value + field->sb_refl_limit_offset,
-                                           field->sb_refl_limit_size);
-            const shrewd_basic_reflect_variant_t *variant =
-                    reflect_union_variant(field, storage);
+            int64_t tag
+                = reflect_load_i64(value + field->sb_refl_limit_offset, field->sb_refl_limit_size);
+            const shrewd_basic_reflect_variant_t *variant = reflect_union_variant(field, storage);
             *h = hash_u64(*h, (uint64_t)tag);
             if (NULL == variant) {
                 *h = hash_bytes(*h, storage, field->sb_refl_stride);
             } else {
-                int status = hash_content_fields(ctx, variant->sb_refl_fields,
+                int status = hash_content_fields(ctx,
+                                                 variant->sb_refl_fields,
                                                  variant->sb_refl_field_count,
-                                                 storage, depth + 1, h);
+                                                 storage,
+                                                 depth + 1,
+                                                 h);
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
                 }
@@ -312,11 +325,10 @@ static int hash_content_fields(hash_ctx_t *ctx,
         }
         if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_BITS)) {
             /* Bit groups fold their extracted bits. */
-            uint64_t unit = reflect_load_u64(value + field->sb_refl_offset,
-                                             field->sb_refl_size);
-            *h = hash_u64(*h, reflect_bits_extract(unit,
-                                                   field->sb_refl_bit_offset,
-                                                   field->sb_refl_bit_width));
+            uint64_t unit = reflect_load_u64(value + field->sb_refl_offset, field->sb_refl_size);
+            *h = hash_u64(
+                *h,
+                reflect_bits_extract(unit, field->sb_refl_bit_offset, field->sb_refl_bit_width));
             continue;
         }
         {
@@ -332,12 +344,10 @@ static int hash_content_fields(hash_ctx_t *ctx,
                         continue;
                     }
                     *h = hash_u64(*h, 1);
-                    status = hash_edge(ctx, pointer, field->sb_refl_type,
-                                       field_ops, depth + 1, h);
+                    status = hash_edge(ctx, pointer, field->sb_refl_type, field_ops, depth + 1, h);
                 } else {
-                    status = hash_content_value(ctx, field->sb_refl_type, elem,
-                                                view.stride, field_ops,
-                                                depth + 1, h);
+                    status = hash_content_value(
+                        ctx, field->sb_refl_type, elem, view.stride, field_ops, depth + 1, h);
                 }
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
@@ -358,8 +368,10 @@ int shrewd_basic_reflect_hash(const void *object,
     uint64_t *next = NULL;
     int status = SHREWD_BASIC_ERR_OK;
     if ((NULL == object) || (NULL == type) || (NULL == out_hash)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
-                         "hash", "hash: object, type or out_hash is NULL\n");
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_reflect_log,
+                         "hash",
+                         "hash: object, type or out_hash is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     memset(&graph, 0, sizeof(graph));
@@ -369,24 +381,25 @@ int shrewd_basic_reflect_hash(const void *object,
     /* Phase one: discover every struct/array pointer target (and the
        root) as a graph node, each expanded once. */
     {
-        hash_node_t *root = hash_graph_add(&graph, object, type,
-                                           type->sb_refl_ops, 0);
+        hash_node_t *root = hash_graph_add(&graph, object, type, type->sb_refl_ops, 0);
         if (NULL == root) {
             return SHREWD_BASIC_ERR_MEM_NOMEM;
         }
         root->walked = 1;
-        status = hash_content_value(&ctx, type,
+        status = hash_content_value(&ctx,
+                                    type,
                                     (const unsigned char *)object,
-                                    type->sb_refl_size, type->sb_refl_ops,
-                                    0, &h);
+                                    type->sb_refl_size,
+                                    type->sb_refl_ops,
+                                    0,
+                                    &h);
     }
 
     /* Phase two: refine colors for a fixed number of rounds; each round
        folds every node's content with edges contributing the previous
        round's colors (simultaneous update). */
     if ((SHREWD_BASIC_ERR_OK == status) && (0 == graph.nomem)) {
-        status = shrewd_basic_platform_calloc((void **)&next, graph.count,
-                                              sizeof(uint64_t));
+        status = shrewd_basic_platform_calloc((void **)&next, graph.count, sizeof(uint64_t));
     }
     if (SHREWD_BASIC_ERR_OK == status) {
         ctx.discover = 0;
@@ -394,10 +407,13 @@ int shrewd_basic_reflect_hash(const void *object,
             for (size_t i = 0; i < graph.count; ++i) {
                 hash_node_t *node = &graph.nodes[i];
                 uint64_t color = HASH_OFFSET;
-                status = hash_content_value(&ctx, node->type,
+                status = hash_content_value(&ctx,
+                                            node->type,
                                             (const unsigned char *)node->addr,
-                                            node->type->sb_refl_size, node->ops,
-                                            node->depth, &color);
+                                            node->type->sb_refl_size,
+                                            node->ops,
+                                            node->depth,
+                                            &color);
                 if (SHREWD_BASIC_ERR_OK != status) {
                     break;
                 }
@@ -419,7 +435,7 @@ int shrewd_basic_reflect_hash(const void *object,
 #if SIZE_MAX < UINT64_MAX
             *out_hash = (size_t)(final ^ (final >> 32));
 #else
-            *out_hash = (size_t)final;
+            *out_hash = (size_t) final;
 #endif
         }
     }
@@ -434,8 +450,11 @@ int shrewd_basic_reflect_hash(const void *object,
     if (SHREWD_BASIC_ERR_OK != status) {
         return status;
     }
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
-                     "hash", "hash ok (%s, 0x%zx)\n", type->sb_refl_name,
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE,
+                     shrewd_basic_reflect_log,
+                     "hash",
+                     "hash ok (%s, 0x%zx)\n",
+                     type->sb_refl_name,
                      *out_hash);
     return SHREWD_BASIC_ERR_OK;
 }

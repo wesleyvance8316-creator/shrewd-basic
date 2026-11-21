@@ -11,11 +11,11 @@ int32_t shrewd_demo_reflect_ext_sum(const void *point)
     int32_t x = 0;
     int32_t y = 0;
     if ((SHREWD_BASIC_ERR_OK != shrewd_basic_reflect_type_find_field(&point_type, "x", &field))
-            || (SHREWD_BASIC_ERR_OK != shrewd_basic_reflect_field_get(point, field, &x, sizeof(x)))) {
+        || (SHREWD_BASIC_ERR_OK != shrewd_basic_reflect_field_get(point, field, &x, sizeof(x)))) {
         return 0;
     }
     if ((SHREWD_BASIC_ERR_OK != shrewd_basic_reflect_type_find_field(&point_type, "y", &field))
-            || (SHREWD_BASIC_ERR_OK != shrewd_basic_reflect_field_get(point, field, &y, sizeof(y)))) {
+        || (SHREWD_BASIC_ERR_OK != shrewd_basic_reflect_field_get(point, field, &y, sizeof(y)))) {
         return 0;
     }
     return x + y;

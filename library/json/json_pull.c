@@ -30,12 +30,12 @@ typedef struct pull_frame {
 } pull_frame_t;
 
 struct shrewd_basic_json_pull {
-    const char *data;               /* buffer source */
+    const char *data; /* buffer source */
     size_t length;
     size_t pos;
     shrewd_basic_json_read_fn read; /* reader source */
     void *read_ctx;
-    char *window;                   /* reader slide buffer */
+    char *window; /* reader slide buffer */
     size_t window_len;
     size_t window_pos;
     int eof;
@@ -46,21 +46,19 @@ struct shrewd_basic_json_pull {
     int started;
     int root_done;
     int finished;
-    json_buf_t tok;  /* scratch text of the current token */
-    char *tok_text;  /* direct source pointer when no copy is needed */
+    json_buf_t tok; /* scratch text of the current token */
+    char *tok_text; /* direct source pointer when no copy is needed */
     size_t tok_len;
-    json_buf_t key; /* most recent key */
+    json_buf_t key;   /* most recent key */
     char *inline_tok; /* the in-block scratch (not freed) */
     char *inline_key;
 };
 
-static int pull_fail(shrewd_basic_json_pull_t *pull, int status,
-                     const char *message)
+static int pull_fail(shrewd_basic_json_pull_t *pull, int status, const char *message)
 {
     if (NULL != pull->error) {
         pull->error->offset = pull->pos + pull->window_pos;
-        (void)snprintf(pull->error->message, sizeof(pull->error->message), "%s",
-                       message);
+        (void)snprintf(pull->error->message, sizeof(pull->error->message), "%s", message);
     }
     return status;
 }
@@ -87,8 +85,7 @@ static int pull_ensure(shrewd_basic_json_pull_t *pull, size_t want)
         pull->window_len = tail;
         pull->window_pos = 0;
         if (SHREWD_BASIC_ERR_OK
-                != pull->read(pull->read_ctx, pull->window + tail,
-                              PULL_WINDOW - tail, &got)) {
+            != pull->read(pull->read_ctx, pull->window + tail, PULL_WINDOW - tail, &got)) {
             return -1;
         }
         if (0 == got) {
@@ -112,8 +109,7 @@ static char pull_peek(shrewd_basic_json_pull_t *pull)
     if (NULL == pull->read) {
         return (pull->pos < pull->length) ? pull->data[pull->pos] : '\0';
     }
-    return (pull->window_pos < pull->window_len) ? pull->window[pull->window_pos]
-                                                : '\0';
+    return (pull->window_pos < pull->window_len) ? pull->window[pull->window_pos] : '\0';
 }
 
 static char pull_take(shrewd_basic_json_pull_t *pull)
@@ -171,8 +167,7 @@ static int pull_skip_ws(shrewd_basic_json_pull_t *pull)
             const char *probe = NULL;
             size_t avail = 0;
             if (0 > pull_ensure(pull, 2)) {
-                return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                                 "read error");
+                return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "read error");
             }
             probe = pull_run(pull, &avail);
             next_c = (1 < avail) ? probe[1] : '\0';
@@ -189,12 +184,11 @@ static int pull_skip_ws(shrewd_basic_json_pull_t *pull)
                 (void)pull_take(pull);
                 for (;;) {
                     if (0 > pull_ensure(pull, 2)) {
-                        return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                                         "read error");
+                        return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "read error");
                     }
                     if (0 != pull_at_end(pull)) {
-                        return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                                         "unterminated comment");
+                        return pull_fail(
+                            pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "unterminated comment");
                     }
                     probe = pull_run(pull, &avail);
                     if ((1 < avail) && ('*' == probe[0]) && ('/' == probe[1])) {
@@ -222,8 +216,7 @@ static int pull_hex4(shrewd_basic_json_pull_t *pull, unsigned *out)
     for (int i = 0; i < 4; ++i) {
         char c = pull_take(pull);
         if ('\0' == c) {
-            return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                             "truncated \\u escape");
+            return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "truncated \\u escape");
         }
         if (('0' <= c) && ('9' >= c)) {
             value = (value * 16) + (unsigned)(c - '0');
@@ -232,8 +225,7 @@ static int pull_hex4(shrewd_basic_json_pull_t *pull, unsigned *out)
         } else if (('A' <= c) && ('F' >= c)) {
             value = (value * 16) + (unsigned)((c - 'A') + 10);
         } else {
-            return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                             "bad hex digit in \\u escape");
+            return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "bad hex digit in \\u escape");
         }
     }
     *out = value;
@@ -254,11 +246,9 @@ static int pull_parse_string(shrewd_basic_json_pull_t *pull)
         while ((pull->pos + scan) < pull->length) {
             unsigned char raw = (unsigned char)start[scan];
             if ('"' == raw) {
-                if ((0 != pull->options.validate_utf8)
-                        && (0 == json_utf8_valid(start, scan))) {
+                if ((0 != pull->options.validate_utf8) && (0 == json_utf8_valid(start, scan))) {
                     pull->pos += scan;
-                    return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                                     "invalid UTF-8 in string");
+                    return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "invalid UTF-8 in string");
                 }
                 pull->pos += scan + 1;
                 pull->tok_len = scan;
@@ -284,8 +274,7 @@ static int pull_parse_string(shrewd_basic_json_pull_t *pull)
             return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "read error");
         }
         if (0 != pull_at_end(pull)) {
-            return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                             "unterminated string");
+            return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "unterminated string");
         }
         /* Bulk-copy the raw span before the next escape or quote. */
         run = pull_run(pull, &avail);
@@ -308,8 +297,7 @@ static int pull_parse_string(shrewd_basic_json_pull_t *pull)
         if ('\\' == c) {
             char escape = '\0';
             if (0 != pull_at_end(pull)) {
-                return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                                 "unterminated escape");
+                return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "unterminated escape");
             }
             escape = pull_take(pull);
             switch (escape) {
@@ -342,43 +330,36 @@ static int pull_parse_string(shrewd_basic_json_pull_t *pull)
                 if ((0xd800u <= unit) && (0xdbffu >= unit)) {
                     unsigned low = 0;
                     if ('\\' != pull_peek(pull)) {
-                        return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                                         "unpaired surrogate");
+                        return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "unpaired surrogate");
                     }
                     (void)pull_take(pull);
                     if ('u' != pull_take(pull)) {
-                        return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                                         "unpaired surrogate");
+                        return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "unpaired surrogate");
                     }
                     status = pull_hex4(pull, &low);
                     if (SHREWD_BASIC_ERR_OK != status) {
                         return status;
                     }
                     if ((0xdc00u > low) || (0xdfffu < low)) {
-                        return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                                         "unpaired surrogate");
+                        return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "unpaired surrogate");
                     }
                     unit = 0x10000u + ((unit - 0xd800u) << 10) + (low - 0xdc00u);
                 } else if ((0xdc00u <= unit) && (0xdfffu >= unit)) {
-                    return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                                     "unpaired surrogate");
+                    return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "unpaired surrogate");
                 }
                 (void)json_utf8_append(&pull->tok, unit);
                 break;
             }
             default:
-                return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                                 "bad escape");
+                return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "bad escape");
             }
             continue;
         }
-        return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                         "control character in string");
+        return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "control character in string");
     }
     if ((0 != pull->options.validate_utf8)
-            && (0 == json_utf8_valid(pull->tok.data, pull->tok.len))) {
-        return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                         "invalid UTF-8 in string");
+        && (0 == json_utf8_valid(pull->tok.data, pull->tok.len))) {
+        return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "invalid UTF-8 in string");
     }
     pull->tok_text = pull->tok.data;
     pull->tok_len = pull->tok.len;
@@ -419,10 +400,8 @@ static int pull_parse_number(shrewd_basic_json_pull_t *pull)
     }
     if ('0' == pull_peek(pull)) {
         (void)pull_tok_push(pull, pull_take(pull));
-        if ((0 == pull_at_end(pull)) && ('0' <= pull_peek(pull))
-                && ('9' >= pull_peek(pull))) {
-            return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                             "leading zero in number");
+        if ((0 == pull_at_end(pull)) && ('0' <= pull_peek(pull)) && ('9' >= pull_peek(pull))) {
+            return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "leading zero in number");
         }
     } else if (('1' <= pull_peek(pull)) && ('9' >= pull_peek(pull))) {
         pull_take_digits(pull);
@@ -431,27 +410,21 @@ static int pull_parse_number(shrewd_basic_json_pull_t *pull)
     }
     if ((0 == pull_at_end(pull)) && ('.' == pull_peek(pull))) {
         (void)pull_tok_push(pull, pull_take(pull));
-        if ((0 == pull_at_end(pull)) && ('0' <= pull_peek(pull))
-                && ('9' >= pull_peek(pull))) {
+        if ((0 == pull_at_end(pull)) && ('0' <= pull_peek(pull)) && ('9' >= pull_peek(pull))) {
             pull_take_digits(pull);
         } else {
-            return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                             "digit expected after '.'");
+            return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "digit expected after '.'");
         }
     }
-    if ((0 == pull_at_end(pull))
-            && (('e' == pull_peek(pull)) || ('E' == pull_peek(pull)))) {
+    if ((0 == pull_at_end(pull)) && (('e' == pull_peek(pull)) || ('E' == pull_peek(pull)))) {
         (void)pull_tok_push(pull, pull_take(pull));
-        if ((0 == pull_at_end(pull))
-                && (('+' == pull_peek(pull)) || ('-' == pull_peek(pull)))) {
+        if ((0 == pull_at_end(pull)) && (('+' == pull_peek(pull)) || ('-' == pull_peek(pull)))) {
             (void)pull_tok_push(pull, pull_take(pull));
         }
-        if ((0 == pull_at_end(pull)) && ('0' <= pull_peek(pull))
-                && ('9' >= pull_peek(pull))) {
+        if ((0 == pull_at_end(pull)) && ('0' <= pull_peek(pull)) && ('9' >= pull_peek(pull))) {
             pull_take_digits(pull);
         } else {
-            return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                             "digit expected in exponent");
+            return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "digit expected in exponent");
         }
     }
     if (NULL != direct) {
@@ -466,8 +439,7 @@ static int pull_parse_number(shrewd_basic_json_pull_t *pull)
     return SHREWD_BASIC_ERR_OK;
 }
 
-static int pull_parse_value_token(shrewd_basic_json_pull_t *pull,
-                                  shrewd_basic_json_token_t *token)
+static int pull_parse_value_token(shrewd_basic_json_pull_t *pull, shrewd_basic_json_token_t *token)
 {
     char c = pull_peek(pull);
     token->length = 0;
@@ -514,13 +486,11 @@ static int pull_parse_value_token(shrewd_basic_json_pull_t *pull,
         }
         for (size_t i = 0; i < n; ++i) {
             if (word[i] != pull_take(pull)) {
-                return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                                 "bad literal");
+                return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "bad literal");
             }
         }
         token->kind = SHREWD_BASIC_JSON_TOKEN_VALUE;
-        token->value_kind = ('n' == c) ? SHREWD_BASIC_JSON_NULL
-                                       : SHREWD_BASIC_JSON_BOOL;
+        token->value_kind = ('n' == c) ? SHREWD_BASIC_JSON_NULL : SHREWD_BASIC_JSON_BOOL;
         token->text = word;
         token->length = n;
         return SHREWD_BASIC_ERR_OK;
@@ -571,21 +541,18 @@ int shrewd_basic_json_pull_next(shrewd_basic_json_pull_t *pull,
             pull->finished = 1;
             return SHREWD_BASIC_ERR_OK;
         }
-        return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                         "trailing characters");
+        return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "trailing characters");
     }
     if (0 != pull_at_end(pull)) {
         if (0 < pull->depth) {
-            return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                             "unterminated container");
+            return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "unterminated container");
         }
         return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "value expected");
     }
     if (0 == pull->depth) {
         pull->started = 1;
         status = pull_parse_value_token(pull, out_token);
-        if ((SHREWD_BASIC_ERR_OK == status)
-                && (SHREWD_BASIC_JSON_TOKEN_VALUE == out_token->kind)) {
+        if ((SHREWD_BASIC_ERR_OK == status) && (SHREWD_BASIC_JSON_TOKEN_VALUE == out_token->kind)) {
             pull->root_done = 1;
         }
         return status;
@@ -613,17 +580,15 @@ int shrewd_basic_json_pull_next(shrewd_basic_json_pull_t *pull,
                 out_token->kind = SHREWD_BASIC_JSON_TOKEN_ARRAY_END;
                 return SHREWD_BASIC_ERR_OK;
             }
-            return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                             top->is_object ? "',' or '}' expected"
-                                            : "',' or ']' expected");
+            return pull_fail(pull,
+                             SHREWD_BASIC_ERR_JSON_SYNTAX,
+                             top->is_object ? "',' or '}' expected" : "',' or ']' expected");
         }
         if ((PULL_FIRST == top->phase) || (PULL_COMMA == top->phase)) {
             int after_comma = (PULL_COMMA == top->phase) ? 1 : 0;
             if ((0 != top->is_object) && ('}' == c)) {
-                if ((0 != after_comma)
-                        && (0 == pull->options.allow_trailing_commas)) {
-                    return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                                     "trailing comma");
+                if ((0 != after_comma) && (0 == pull->options.allow_trailing_commas)) {
+                    return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "trailing comma");
                 }
                 (void)pull_take(pull);
                 --pull->depth;
@@ -632,10 +597,8 @@ int shrewd_basic_json_pull_next(shrewd_basic_json_pull_t *pull,
                 return SHREWD_BASIC_ERR_OK;
             }
             if ((0 == top->is_object) && (']' == c)) {
-                if ((0 != after_comma)
-                        && (0 == pull->options.allow_trailing_commas)) {
-                    return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                                     "trailing comma");
+                if ((0 != after_comma) && (0 == pull->options.allow_trailing_commas)) {
+                    return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "trailing comma");
                 }
                 (void)pull_take(pull);
                 --pull->depth;
@@ -645,8 +608,7 @@ int shrewd_basic_json_pull_next(shrewd_basic_json_pull_t *pull,
             }
             if (0 != top->is_object) {
                 if ('"' != c) {
-                    return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                                     "object key expected");
+                    return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "object key expected");
                 }
                 (void)pull_take(pull);
                 status = pull_parse_string(pull);
@@ -658,8 +620,7 @@ int shrewd_basic_json_pull_next(shrewd_basic_json_pull_t *pull,
                     return status;
                 }
                 if (':' != pull_peek(pull)) {
-                    return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                                     "':' expected");
+                    return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "':' expected");
                 }
                 (void)pull_take(pull);
                 top->phase = PULL_VALUE;
@@ -692,13 +653,11 @@ static int json_capture_token(shrewd_basic_json_pull_t *pull,
         case SHREWD_BASIC_JSON_NULL:
             return shrewd_basic_json_new(SHREWD_BASIC_JSON_NULL, out);
         case SHREWD_BASIC_JSON_BOOL:
-            return shrewd_basic_json_new_bool(0 == memcmp(token->text, "true", 4),
-                                             out);
+            return shrewd_basic_json_new_bool(0 == memcmp(token->text, "true", 4), out);
         case SHREWD_BASIC_JSON_NUMBER:
             return json_value_new_number(token->text, token->length, out);
         default:
-            return shrewd_basic_json_new_string_n(token->text, token->length,
-                                                  out);
+            return shrewd_basic_json_new_string_n(token->text, token->length, out);
         }
     case SHREWD_BASIC_JSON_TOKEN_OBJECT_BEGIN: {
         shrewd_basic_json_value_t *object = NULL;
@@ -715,8 +674,7 @@ static int json_capture_token(shrewd_basic_json_pull_t *pull,
                 return SHREWD_BASIC_ERR_OK;
             }
             if (SHREWD_BASIC_JSON_TOKEN_KEY != step.kind) {
-                status = pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX,
-                                   "object key expected");
+                status = pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "object key expected");
                 break;
             }
             {
@@ -725,8 +683,7 @@ static int json_capture_token(shrewd_basic_json_pull_t *pull,
                 char *key = NULL;
                 size_t key_len = pull->key.len;
                 if (SHREWD_BASIC_ERR_OK
-                        != shrewd_basic_platform_alloc((void **)&key,
-                                                       key_len + 1)) {
+                    != shrewd_basic_platform_alloc((void **)&key, key_len + 1)) {
                     shrewd_basic_json_value_free(object);
                     return SHREWD_BASIC_ERR_MEM_NOMEM;
                 }
@@ -779,8 +736,7 @@ static int json_capture_token(shrewd_basic_json_pull_t *pull,
     }
 }
 
-int shrewd_basic_json_pull_capture(shrewd_basic_json_pull_t *pull,
-                                   shrewd_basic_json_value_t **out)
+int shrewd_basic_json_pull_capture(shrewd_basic_json_pull_t *pull, shrewd_basic_json_value_t **out)
 {
     shrewd_basic_json_token_t token = {0};
     int status = 0;
@@ -796,7 +752,8 @@ int shrewd_basic_json_pull_capture(shrewd_basic_json_pull_t *pull,
 }
 
 int shrewd_basic_json_pull_open(shrewd_basic_json_pull_t **out,
-                                const char *text, size_t length,
+                                const char *text,
+                                size_t length,
                                 const shrewd_basic_json_options_t *options,
                                 shrewd_basic_json_error_t *error)
 {
@@ -811,9 +768,7 @@ int shrewd_basic_json_pull_open(shrewd_basic_json_pull_t **out,
      * per-parse scaffolding is a single free-list entry instead of
      * three (allocator-friendly for parse loops).
      */
-    if (SHREWD_BASIC_ERR_OK
-            != shrewd_basic_platform_calloc(&block, 1,
-                                            sizeof(*pull) + 256 + 256)) {
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_calloc(&block, 1, sizeof(*pull) + 256 + 256)) {
         return SHREWD_BASIC_ERR_MEM_NOMEM;
     }
     pull = block;
@@ -856,8 +811,7 @@ int shrewd_basic_json_pull_open_reader(shrewd_basic_json_pull_t **out,
     pull->length = 0;
     pull->read = read;
     pull->read_ctx = ctx;
-    if (SHREWD_BASIC_ERR_OK
-            != shrewd_basic_platform_alloc(&block, PULL_WINDOW)) {
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_alloc(&block, PULL_WINDOW)) {
         shrewd_basic_json_pull_close(pull);
         *out = NULL;
         return SHREWD_BASIC_ERR_MEM_NOMEM;

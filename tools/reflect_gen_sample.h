@@ -9,11 +9,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef enum {
-    COLOR_RED = 0,
-    COLOR_GREEN = 1,
-    COLOR_BLUE = 2
-} color_t;
+typedef enum { COLOR_RED = 0, COLOR_GREEN = 1, COLOR_BLUE = 2 } color_t;
 
 typedef struct {
     int32_t x;

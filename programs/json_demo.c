@@ -23,10 +23,7 @@
 
 /* --- fixture ---------------------------------------------------------- */
 
-typedef enum {
-    MSG_TEXT = 0,
-    MSG_POINT = 1
-} msg_kind_t;
+typedef enum { MSG_TEXT = 0, MSG_POINT = 1 } msg_kind_t;
 
 typedef struct {
     int32_t x;
@@ -46,21 +43,27 @@ typedef struct {
     msg_body_t body;
 } msg_t;
 
-SHREWD_BASIC_REFLECT_ENUM_DEFINE(msg_kind_reflect, msg_kind_t,
-    SHREWD_BASIC_REFLECT_ENUM_VALUE(MSG_TEXT),
-    SHREWD_BASIC_REFLECT_ENUM_VALUE(MSG_POINT));
+SHREWD_BASIC_REFLECT_ENUM_DEFINE(msg_kind_reflect,
+                                 msg_kind_t,
+                                 SHREWD_BASIC_REFLECT_ENUM_VALUE(MSG_TEXT),
+                                 SHREWD_BASIC_REFLECT_ENUM_VALUE(MSG_POINT));
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(point_reflect, point_t,
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, x),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, y));
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(point_reflect,
+                                 point_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, x),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, y));
 
-SHREWD_BASIC_REFLECT_UNION_DEFINE(msg_body_reflect, msg_body_t,
+SHREWD_BASIC_REFLECT_UNION_DEFINE(
+    msg_body_reflect,
+    msg_body_t,
     SHREWD_BASIC_REFLECT_UNION_VARIANT(MSG_TEXT,
-        SHREWD_BASIC_REFLECT_FIELD_STRING_OWNED(msg_body_t, text)),
-    SHREWD_BASIC_REFLECT_UNION_VARIANT(MSG_POINT,
-        SHREWD_BASIC_REFLECT_FIELD_STRUCT(msg_body_t, point, point_reflect)));
+                                       SHREWD_BASIC_REFLECT_FIELD_STRING_OWNED(msg_body_t, text)),
+    SHREWD_BASIC_REFLECT_UNION_VARIANT(
+        MSG_POINT, SHREWD_BASIC_REFLECT_FIELD_STRUCT(msg_body_t, point, point_reflect)));
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(msg_reflect, msg_t,
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(
+    msg_reflect,
+    msg_t,
     SHREWD_BASIC_REFLECT_FIELD_ENUM(msg_t, kind, msg_kind_reflect),
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(msg_t, id),
     SHREWD_BASIC_REFLECT_FIELD_STRING_BUFFER(msg_t, tag),
@@ -68,10 +71,11 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(msg_reflect, msg_t,
     SHREWD_BASIC_REFLECT_FIELD_UNION(msg_t, body, msg_body_reflect, kind));
 
 /* Policy: a key alias for id and a compact unwrapped union body. */
-SHREWD_BASIC_JSON_DEFINE(msg_json, msg_reflect,
-    SHREWD_BASIC_JSON_KEY(id, "msg_id"),
-    SHREWD_BASIC_JSON_OMIT_EMPTY(name),
-    SHREWD_BASIC_JSON_UNION_STYLE(body, SHREWD_BASIC_JSON_UNION_UNWRAP));
+SHREWD_BASIC_JSON_DEFINE(msg_json,
+                         msg_reflect,
+                         SHREWD_BASIC_JSON_KEY(id, "msg_id"),
+                         SHREWD_BASIC_JSON_OMIT_EMPTY(name),
+                         SHREWD_BASIC_JSON_UNION_STYLE(body, SHREWD_BASIC_JSON_UNION_UNWRAP));
 
 /* Defaults / borrowed fixture for section 5. */
 typedef struct {
@@ -81,22 +85,25 @@ typedef struct {
     int32_t scores[3];
 } dfl_t;
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(dfl_reflect, dfl_t,
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, level),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, label),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, unit),
-    SHREWD_BASIC_REFLECT_FIELD_ARRAY(dfl_t, scores, shrewd_basic_reflect_int32));
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(dfl_reflect,
+                                 dfl_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, level),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, label),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, unit),
+                                 SHREWD_BASIC_REFLECT_FIELD_ARRAY(dfl_t,
+                                                                  scores,
+                                                                  shrewd_basic_reflect_int32));
 
-SHREWD_BASIC_JSON_DEFINE(dfl_json, dfl_reflect,
-    SHREWD_BASIC_JSON_DEFAULT(level, 7),
-    SHREWD_BASIC_JSON_DEFAULT_STR(label, "guest"),
-    SHREWD_BASIC_JSON_BORROWED(unit),
-    SHREWD_BASIC_JSON_DEFAULT_JSON(scores, "[7,8,9]"));
+SHREWD_BASIC_JSON_DEFINE(dfl_json,
+                         dfl_reflect,
+                         SHREWD_BASIC_JSON_DEFAULT(level, 7),
+                         SHREWD_BASIC_JSON_DEFAULT_STR(label, "guest"),
+                         SHREWD_BASIC_JSON_BORROWED(unit),
+                         SHREWD_BASIC_JSON_DEFAULT_JSON(scores, "[7,8,9]"));
 
 static void print_status(const char *what, int status)
 {
-    printf("  %-36s -> %s (%d)\n", what, shrewd_basic_error_name(status),
-           status);
+    printf("  %-36s -> %s (%d)\n", what, shrewd_basic_error_name(status), status);
 }
 
 int main(void)
@@ -111,8 +118,8 @@ int main(void)
     msg.body.point.x = 1;
     msg.body.point.y = 2;
     char *text = NULL;
-    print_status("encode(msg)", shrewd_basic_json_encode(&msg, &msg_reflect, NULL,
-                                                         &text, NULL, NULL));
+    print_status("encode(msg)",
+                 shrewd_basic_json_encode(&msg, &msg_reflect, NULL, &text, NULL, NULL));
     printf("  compact: %s\n", text);
     shrewd_basic_json_text_free(text);
     {
@@ -120,26 +127,27 @@ int main(void)
         memset(&options, 0, sizeof(options));
         options.pretty = 1;
         print_status("encode(msg, pretty)",
-                     shrewd_basic_json_encode(&msg, &msg_reflect, NULL, &text,
-                                              &options, NULL));
+                     shrewd_basic_json_encode(&msg, &msg_reflect, NULL, &text, &options, NULL));
         printf("%s\n", text);
         shrewd_basic_json_text_free(text);
     }
 
     printf("\n=== 2. decode: JSON text -> struct ===\n");
     {
-        const char *incoming =
-                "{\"kind\":\"MSG_TEXT\",\"id\":7,\"tag\":\"ok\","
-                "\"name\":\"n\",\"body\":{\"text\":\"hello\"}}";
+        const char *incoming = "{\"kind\":\"MSG_TEXT\",\"id\":7,\"tag\":\"ok\","
+                               "\"name\":\"n\",\"body\":{\"text\":\"hello\"}}";
         shrewd_basic_json_error_t error = {0};
         void *block = NULL;
         (void)shrewd_basic_platform_calloc(&block, 1, sizeof(msg_t));
         print_status("decode(text)",
-                     shrewd_basic_json_decode(incoming, strlen(incoming), block,
-                                              &msg_reflect, NULL, NULL, &error));
+                     shrewd_basic_json_decode(
+                         incoming, strlen(incoming), block, &msg_reflect, NULL, NULL, &error));
         msg_t *decoded = block;
         printf("  kind=%d id=%d tag=\"%s\" name=\"%s\" body.text=\"%s\"\n",
-               (int)decoded->kind, decoded->id, decoded->tag, decoded->name,
+               (int)decoded->kind,
+               decoded->id,
+               decoded->tag,
+               decoded->name,
                decoded->body.text);
         print_status("json_free", shrewd_basic_json_free(decoded, &msg_reflect, NULL));
         (void)shrewd_basic_platform_free(&block);
@@ -152,9 +160,7 @@ int main(void)
         shrewd_basic_json_value_t *root = NULL;
         shrewd_basic_json_value_t *roles = NULL;
         shrewd_basic_json_value_t *user = NULL;
-        print_status("parse(doc)",
-                     shrewd_basic_json_parse(doc, strlen(doc), &root, NULL,
-                                             NULL));
+        print_status("parse(doc)", shrewd_basic_json_parse(doc, strlen(doc), &root, NULL, NULL));
         user = shrewd_basic_json_get(root, "user");
         printf("  user.name = %s\n",
                shrewd_basic_json_to_string(shrewd_basic_json_get(user, "name")));
@@ -170,8 +176,7 @@ int main(void)
             (void)shrewd_basic_json_new_i64(4, &n);
             (void)shrewd_basic_json_set(root, "n", n);
         }
-        print_status("serialize(root)",
-                     shrewd_basic_json_serialize(root, &text, NULL, NULL));
+        print_status("serialize(root)", shrewd_basic_json_serialize(root, &text, NULL, NULL));
         printf("  -> %s\n", text);
         shrewd_basic_json_text_free(text);
         shrewd_basic_json_value_free(root);
@@ -187,25 +192,21 @@ int main(void)
         tagged.name = NULL; /* OMIT_EMPTY */
         memcpy(tagged.tag, "ok", 3);
         tagged.body.text = "hi";
-        print_status("encode(msg, policy)",
-                     shrewd_basic_json_encode(&tagged, &msg_reflect, &msg_json,
-                                              &policed, NULL, NULL));
+        print_status(
+            "encode(msg, policy)",
+            shrewd_basic_json_encode(&tagged, &msg_reflect, &msg_json, &policed, NULL, NULL));
         printf("  -> %s\n", policed);
         shrewd_basic_json_text_free(policed);
         {
-            const char *aliased =
-                    "{\"msg_id\":5,\"kind\":\"MSG_TEXT\",\"body\":\"hello\"}";
+            const char *aliased = "{\"msg_id\":5,\"kind\":\"MSG_TEXT\",\"body\":\"hello\"}";
             void *block = NULL;
             (void)shrewd_basic_platform_calloc(&block, 1, sizeof(msg_t));
             print_status("decode(aliased)",
-                         shrewd_basic_json_decode(aliased, strlen(aliased), block,
-                                                  &msg_reflect, &msg_json, NULL,
-                                                  NULL));
+                         shrewd_basic_json_decode(
+                             aliased, strlen(aliased), block, &msg_reflect, &msg_json, NULL, NULL));
             msg_t *decoded = block;
-            printf("  msg_id -> id=%d body.text=\"%s\"\n", decoded->id,
-                   decoded->body.text);
-            print_status("json_free",
-                         shrewd_basic_json_free(decoded, &msg_reflect, NULL));
+            printf("  msg_id -> id=%d body.text=\"%s\"\n", decoded->id, decoded->body.text);
+            print_status("json_free", shrewd_basic_json_free(decoded, &msg_reflect, NULL));
             (void)shrewd_basic_platform_free(&block);
         }
     }
@@ -217,17 +218,20 @@ int main(void)
         memset(&options, 0, sizeof(options));
         options.use_defaults = 1;
         memset(&cfg, 0, sizeof(cfg));
-        print_status("decode(\"{}\", use_defaults)",
-                     shrewd_basic_json_decode("{}", 2, &cfg, &dfl_reflect,
-                                              &dfl_json, &options, NULL));
+        print_status(
+            "decode(\"{}\", use_defaults)",
+            shrewd_basic_json_decode("{}", 2, &cfg, &dfl_reflect, &dfl_json, &options, NULL));
         printf("  level=%d label=\"%s\" scores=[%d,%d,%d] (materialized)\n",
-               cfg.level, cfg.label, cfg.scores[0], cfg.scores[1],
+               cfg.level,
+               cfg.label,
+               cfg.scores[0],
+               cfg.scores[1],
                cfg.scores[2]);
         cfg.unit = "kg"; /* borrowed: installed after decode */
-        print_status("json_free",
-                     shrewd_basic_json_free(&cfg, &dfl_reflect, &dfl_json));
+        print_status("json_free", shrewd_basic_json_free(&cfg, &dfl_reflect, &dfl_json));
         printf("  after free: label=%s unit=\"%s\" (borrowed survives)\n",
-               (NULL == cfg.label) ? "(null)" : cfg.label, cfg.unit);
+               (NULL == cfg.label) ? "(null)" : cfg.label,
+               cfg.unit);
     }
 
     printf("\nDemo done. See docs/json.md for the full reference.\n");

@@ -67,7 +67,8 @@ static void visit_path_index(visit_ctx_t *ctx, size_t index)
  * type (an embedded first member shares its parent's address without
  * being a cycle - same rule as dump).
  */
-static int visit_target_seen(const visit_ctx_t *ctx, size_t depth,
+static int visit_target_seen(const visit_ctx_t *ctx,
+                             size_t depth,
                              const void *target,
                              const shrewd_basic_reflect_type_t *type)
 {
@@ -79,10 +80,12 @@ static int visit_target_seen(const visit_ctx_t *ctx, size_t depth,
     return 0;
 }
 
-static shrewd_basic_reflect_visit_action_t visit_emit(
-        visit_ctx_t *ctx, shrewd_basic_reflect_visit_event_t event,
-        const shrewd_basic_reflect_field_t *field, const void *value,
-        const shrewd_basic_reflect_type_t *type, size_t count)
+static shrewd_basic_reflect_visit_action_t visit_emit(visit_ctx_t *ctx,
+                                                      shrewd_basic_reflect_visit_event_t event,
+                                                      const shrewd_basic_reflect_field_t *field,
+                                                      const void *value,
+                                                      const shrewd_basic_reflect_type_t *type,
+                                                      size_t count)
 {
     shrewd_basic_reflect_visit_node_t node = {0};
     shrewd_basic_reflect_visit_action_t action = {0};
@@ -102,9 +105,11 @@ static shrewd_basic_reflect_visit_action_t visit_emit(
     return action;
 }
 
-static void visit_struct(visit_ctx_t *ctx, const shrewd_basic_reflect_type_t *type,
+static void visit_struct(visit_ctx_t *ctx,
+                         const shrewd_basic_reflect_type_t *type,
                          const unsigned char *object,
-                         const shrewd_basic_reflect_field_t *field, size_t depth);
+                         const shrewd_basic_reflect_field_t *field,
+                         size_t depth);
 
 /*
  * Report one element / one pointer target. A NULL slot is a LEAF with a
@@ -112,9 +117,11 @@ static void visit_struct(visit_ctx_t *ctx, const shrewd_basic_reflect_type_t *ty
  * else - scalars, strings, opaque targets - is a LEAF whose value points
  * at the target's storage.
  */
-static void visit_target(visit_ctx_t *ctx, const shrewd_basic_reflect_type_t *type,
+static void visit_target(visit_ctx_t *ctx,
+                         const shrewd_basic_reflect_type_t *type,
                          const void *target,
-                         const shrewd_basic_reflect_field_t *field, size_t depth)
+                         const shrewd_basic_reflect_field_t *field,
+                         size_t depth)
 {
     if (NULL == target) {
         (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_LEAF, field, NULL, type, 0);
@@ -138,9 +145,12 @@ static void visit_array_value(visit_ctx_t *ctx,
                               size_t depth)
 {
     if (SHREWD_BASIC_REFLECT_VISIT_PRUNE
-            == visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, field,
-                          base, array_type->sb_refl_elem,
-                          array_type->sb_refl_elem_count)) {
+        == visit_emit(ctx,
+                      SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER,
+                      field,
+                      base,
+                      array_type->sb_refl_elem,
+                      array_type->sb_refl_elem_count)) {
         return;
     }
     for (size_t i = 0; i < array_type->sb_refl_elem_count; ++i) {
@@ -154,12 +164,11 @@ static void visit_array_value(visit_ctx_t *ctx,
         }
         if (SHREWD_BASIC_REFLECT_KIND_ARRAY == array_type->sb_refl_elem->sb_refl_kind) {
             visit_array_value(ctx, array_type->sb_refl_elem, elem, field, depth + 1);
-        } else if (SHREWD_BASIC_REFLECT_KIND_STRUCT
-                   == array_type->sb_refl_elem->sb_refl_kind) {
+        } else if (SHREWD_BASIC_REFLECT_KIND_STRUCT == array_type->sb_refl_elem->sb_refl_kind) {
             visit_struct(ctx, array_type->sb_refl_elem, elem, field, depth + 1);
         } else {
-            (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_LEAF, field, elem,
-                             array_type->sb_refl_elem, 0);
+            (void)visit_emit(
+                ctx, SHREWD_BASIC_REFLECT_VISIT_LEAF, field, elem, array_type->sb_refl_elem, 0);
         }
         ctx->path_len = mark;
         ctx->path[mark] = '\0';
@@ -167,24 +176,33 @@ static void visit_array_value(visit_ctx_t *ctx,
             return;
         }
     }
-    (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_ARRAY_EXIT, field, base,
-                     array_type->sb_refl_elem, array_type->sb_refl_elem_count);
+    (void)visit_emit(ctx,
+                     SHREWD_BASIC_REFLECT_VISIT_ARRAY_EXIT,
+                     field,
+                     base,
+                     array_type->sb_refl_elem,
+                     array_type->sb_refl_elem_count);
 }
 
 /* Emit the events of one array-shaped field (inline, flexible or dynamic). */
-static void visit_array(visit_ctx_t *ctx, const shrewd_basic_reflect_field_t *field,
-                        const unsigned char *object, size_t depth)
+static void visit_array(visit_ctx_t *ctx,
+                        const shrewd_basic_reflect_field_t *field,
+                        const unsigned char *object,
+                        size_t depth)
 {
     reflect_array_view_t view = reflect_array_view(object, field);
     if (NULL == view.base) {
         /* Dynamic table not allocated: like dump's "(null)". */
-        (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_LEAF, field, NULL,
-                         field->sb_refl_type, 0);
+        (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_LEAF, field, NULL, field->sb_refl_type, 0);
         return;
     }
     if (SHREWD_BASIC_REFLECT_VISIT_PRUNE
-            == visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, field,
-                          view.base, field->sb_refl_type, view.count)) {
+        == visit_emit(ctx,
+                      SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER,
+                      field,
+                      view.base,
+                      field->sb_refl_type,
+                      view.count)) {
         return;
     }
     for (size_t i = 0; i < view.count; ++i) {
@@ -197,15 +215,14 @@ static void visit_array(visit_ctx_t *ctx, const shrewd_basic_reflect_field_t *fi
             return;
         }
         if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
-            visit_target(ctx, field->sb_refl_type, reflect_load_ptr(elem),
-                         field, depth + 1);
+            visit_target(ctx, field->sb_refl_type, reflect_load_ptr(elem), field, depth + 1);
         } else if (SHREWD_BASIC_REFLECT_KIND_ARRAY == field->sb_refl_type->sb_refl_kind) {
             visit_array_value(ctx, field->sb_refl_type, elem, field, depth + 1);
         } else if (SHREWD_BASIC_REFLECT_KIND_STRUCT == field->sb_refl_type->sb_refl_kind) {
             visit_struct(ctx, field->sb_refl_type, elem, field, depth + 1);
         } else {
-            (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_LEAF, field, elem,
-                             field->sb_refl_type, 0);
+            (void)visit_emit(
+                ctx, SHREWD_BASIC_REFLECT_VISIT_LEAF, field, elem, field->sb_refl_type, 0);
         }
         ctx->path_len = mark;
         ctx->path[mark] = '\0';
@@ -213,52 +230,71 @@ static void visit_array(visit_ctx_t *ctx, const shrewd_basic_reflect_field_t *fi
             return;
         }
     }
-    (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_ARRAY_EXIT, field, view.base,
-                     field->sb_refl_type, view.count);
+    (void)visit_emit(ctx,
+                     SHREWD_BASIC_REFLECT_VISIT_ARRAY_EXIT,
+                     field,
+                     view.base,
+                     field->sb_refl_type,
+                     view.count);
 }
 
-static void visit_field(visit_ctx_t *ctx, const shrewd_basic_reflect_field_t *field,
-                        const unsigned char *object, size_t depth)
+static void visit_field(visit_ctx_t *ctx,
+                        const shrewd_basic_reflect_field_t *field,
+                        const unsigned char *object,
+                        size_t depth)
 {
     size_t mark = ctx->path_len;
     visit_path_member(ctx, field->sb_refl_name);
     if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
         /* Text buffer: one string leaf, not an element list. */
-        (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_LEAF, field,
-                         object + field->sb_refl_offset, field->sb_refl_type, 0);
+        (void)visit_emit(ctx,
+                         SHREWD_BASIC_REFLECT_VISIT_LEAF,
+                         field,
+                         object + field->sb_refl_offset,
+                         field->sb_refl_type,
+                         0);
     } else if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_UNION)) {
         /* Tagged union: expand the active variant (LEAF when unknown). */
         const unsigned char *storage = object + field->sb_refl_offset;
-        const shrewd_basic_reflect_variant_t *variant =
-                reflect_union_variant(field, storage);
+        const shrewd_basic_reflect_variant_t *variant = reflect_union_variant(field, storage);
         if (NULL == variant) {
-            (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_LEAF, field, storage,
-                             field->sb_refl_type, 0);
+            (void)visit_emit(
+                ctx, SHREWD_BASIC_REFLECT_VISIT_LEAF, field, storage, field->sb_refl_type, 0);
         } else if (SHREWD_BASIC_REFLECT_VISIT_PRUNE
-                   != visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_ENTER, field,
-                                 storage, field->sb_refl_type, 0)) {
+                   != visit_emit(ctx,
+                                 SHREWD_BASIC_REFLECT_VISIT_ENTER,
+                                 field,
+                                 storage,
+                                 field->sb_refl_type,
+                                 0)) {
             for (size_t k = 0; k < variant->sb_refl_field_count; ++k) {
                 if (0 != ctx->stopped) {
                     break;
                 }
                 visit_field(ctx, &variant->sb_refl_fields[k], storage, depth + 1);
             }
-            (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_EXIT, field, storage,
-                             field->sb_refl_type, 0);
+            (void)visit_emit(
+                ctx, SHREWD_BASIC_REFLECT_VISIT_EXIT, field, storage, field->sb_refl_type, 0);
         }
-    } else if (0 != (field->sb_refl_flags
-              & (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY | SHREWD_BASIC_REFLECT_FIELD_F_DARRAY))) {
+    } else if (0
+               != (field->sb_refl_flags
+                   & (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY | SHREWD_BASIC_REFLECT_FIELD_F_DARRAY))) {
         visit_array(ctx, field, object, depth);
     } else if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
-        visit_target(ctx, field->sb_refl_type,
+        visit_target(ctx,
+                     field->sb_refl_type,
                      reflect_load_ptr(object + field->sb_refl_offset),
-                     field, depth + 1);
+                     field,
+                     depth + 1);
     } else if (SHREWD_BASIC_REFLECT_KIND_STRUCT == field->sb_refl_type->sb_refl_kind) {
-        visit_struct(ctx, field->sb_refl_type, object + field->sb_refl_offset,
-                     field, depth + 1);
+        visit_struct(ctx, field->sb_refl_type, object + field->sb_refl_offset, field, depth + 1);
     } else {
-        (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_LEAF, field,
-                         object + field->sb_refl_offset, field->sb_refl_type, 0);
+        (void)visit_emit(ctx,
+                         SHREWD_BASIC_REFLECT_VISIT_LEAF,
+                         field,
+                         object + field->sb_refl_offset,
+                         field->sb_refl_type,
+                         0);
     }
     ctx->path_len = mark;
     ctx->path[mark] = '\0';
@@ -269,19 +305,20 @@ static void visit_field(visit_ctx_t *ctx, const shrewd_basic_reflect_field_t *fi
  * cap report a CYCLE event at the offending path instead. A STOP from
  * below aborts everything, pending EXIT events included.
  */
-static void visit_struct(visit_ctx_t *ctx, const shrewd_basic_reflect_type_t *type,
+static void visit_struct(visit_ctx_t *ctx,
+                         const shrewd_basic_reflect_type_t *type,
                          const unsigned char *object,
-                         const shrewd_basic_reflect_field_t *field, size_t depth)
+                         const shrewd_basic_reflect_field_t *field,
+                         size_t depth)
 {
-    if ((VISIT_MAX_DEPTH <= depth)
-            || (0 != visit_target_seen(ctx, depth, object, type))) {
+    if ((VISIT_MAX_DEPTH <= depth) || (0 != visit_target_seen(ctx, depth, object, type))) {
         (void)visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_CYCLE, field, object, type, 0);
         return;
     }
     ctx->stack[depth].object = object;
     ctx->stack[depth].type = type;
     if (SHREWD_BASIC_REFLECT_VISIT_PRUNE
-            == visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_ENTER, field, object, type, 0)) {
+        == visit_emit(ctx, SHREWD_BASIC_REFLECT_VISIT_ENTER, field, object, type, 0)) {
         return;
     }
     for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
@@ -295,17 +332,22 @@ static void visit_struct(visit_ctx_t *ctx, const shrewd_basic_reflect_type_t *ty
 
 int shrewd_basic_reflect_visit(const void *object,
                                const shrewd_basic_reflect_type_t *type,
-                               shrewd_basic_reflect_visit_fn visit, void *ctx)
+                               shrewd_basic_reflect_visit_fn visit,
+                               void *ctx)
 {
     visit_ctx_t walk = {0};
     if ((NULL == object) || (NULL == type) || (NULL == visit)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
-                         "visit", "visit: object, type or visit is NULL\n");
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_reflect_log,
+                         "visit",
+                         "visit: object, type or visit is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
-                         "visit", "visit: type \"%s\" is not a struct\n",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_reflect_log,
+                         "visit",
+                         "visit: type \"%s\" is not a struct\n",
                          type->sb_refl_name);
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }

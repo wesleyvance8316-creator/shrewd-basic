@@ -12,7 +12,7 @@ static shrewd_basic_radix_node_t *radix_node_new(void)
 {
     void *block = NULL;
     if (SHREWD_BASIC_ERR_OK
-            != shrewd_basic_platform_calloc(&block, 1, sizeof(shrewd_basic_radix_node_t))) {
+        != shrewd_basic_platform_calloc(&block, 1, sizeof(shrewd_basic_radix_node_t))) {
         return NULL;
     }
     return block;
@@ -52,8 +52,7 @@ static char *radix_label_concat(const char *a, size_t alen, const char *b, size_
 static size_t radix_match(const shrewd_basic_radix_edge_t *edge, const unsigned char *key)
 {
     size_t i = 0;
-    while ((i < edge->len) && ('\0' != key[i])
-            && ((unsigned char)edge->label[i] == key[i])) {
+    while ((i < edge->len) && ('\0' != key[i]) && ((unsigned char)edge->label[i] == key[i])) {
         ++i;
     }
     return i;
@@ -99,8 +98,7 @@ static int radix_free_node(shrewd_basic_radix_node_t *node)
  * fails the tree is left functional (only un-compressed) and the failure is
  * reported as SHREWD_BASIC_ERR_OK with a log line.
  */
-static int radix_remove_rec(shrewd_basic_radix_node_t *node, const unsigned char *key,
-                            void **out)
+static int radix_remove_rec(shrewd_basic_radix_node_t *node, const unsigned char *key, void **out)
 {
     if ('\0' == *key) {
         if (!node->has_value) {
@@ -149,11 +147,12 @@ static int radix_remove_rec(shrewd_basic_radix_node_t *node, const unsigned char
         }
         /* Valueless single-child node: merge it into this edge. */
         shrewd_basic_radix_edge_t *grand = child->edges;
-        char *merged = radix_label_concat(edge->label, edge->len,
-                                          grand->label, grand->len);
+        char *merged = radix_label_concat(edge->label, edge->len, grand->label, grand->len);
         if (NULL == merged) {
-            shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log,
-                             "radix", "remove: compression skipped\n");
+            shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                             shrewd_basic_ds_log,
+                             "radix",
+                             "remove: compression skipped\n");
             break;
         }
         (void)shrewd_basic_platform_free((void **)&edge->label);
@@ -168,8 +167,11 @@ static int radix_remove_rec(shrewd_basic_radix_node_t *node, const unsigned char
 }
 
 /* Depth-first walk appending each edge label into buf; keys in byte order. */
-static int radix_walk(const shrewd_basic_radix_node_t *node, char *buf, size_t len,
-                      shrewd_basic_radix_visit_fn visit, void *ctx)
+static int radix_walk(const shrewd_basic_radix_node_t *node,
+                      char *buf,
+                      size_t len,
+                      shrewd_basic_radix_visit_fn visit,
+                      void *ctx)
 {
     if (node->has_value) {
         buf[len] = '\0';
@@ -178,8 +180,7 @@ static int radix_walk(const shrewd_basic_radix_node_t *node, char *buf, size_t l
             return status;
         }
     }
-    for (const shrewd_basic_radix_edge_t *edge = node->edges; NULL != edge;
-         edge = edge->next) {
+    for (const shrewd_basic_radix_edge_t *edge = node->edges; NULL != edge; edge = edge->next) {
         memcpy(buf + len, edge->label, edge->len);
         int status = radix_walk(edge->child, buf, len + edge->len, visit, ctx);
         if (SHREWD_BASIC_ERR_OK != status) {
@@ -195,9 +196,12 @@ static int radix_walk(const shrewd_basic_radix_node_t *node, char *buf, size_t l
  * whole subtree below that edge matches. A prefix that diverges or runs
  * beyond the stored paths simply visits nothing.
  */
-static int radix_walk_prefix(shrewd_basic_radix_node_t *node, const unsigned char *key,
-                             char *buf, size_t len,
-                             shrewd_basic_radix_visit_fn visit, void *ctx)
+static int radix_walk_prefix(shrewd_basic_radix_node_t *node,
+                             const unsigned char *key,
+                             char *buf,
+                             size_t len,
+                             shrewd_basic_radix_visit_fn visit,
+                             void *ctx)
 {
     while ('\0' != *key) {
         shrewd_basic_radix_edge_t *edge = node->edges;
@@ -227,60 +231,68 @@ static int radix_walk_prefix(shrewd_basic_radix_node_t *node, const unsigned cha
 int shrewd_basic_radix_create(shrewd_basic_radix_t **out)
 {
     if (NULL == out) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "radix",
-                         "create: out is NULL\n");
+        shrewd_basic_log(
+            SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "radix", "create: out is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     void *block = NULL;
     int status = shrewd_basic_platform_calloc(&block, 1, sizeof(shrewd_basic_radix_t));
     if (SHREWD_BASIC_ERR_OK != status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "radix",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "radix",
                          "create: allocation failed\n");
         return status;
     }
     shrewd_basic_radix_t *tree = block;
     status = shrewd_basic_platform_calloc(&block, 1, sizeof(shrewd_basic_radix_node_t));
     if (SHREWD_BASIC_ERR_OK != status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "radix",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "radix",
                          "create: root allocation failed\n");
         (void)shrewd_basic_platform_free((void **)&tree);
         return status;
     }
     tree->root = block;
     *out = tree;
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_DEBUG, shrewd_basic_ds_log, "radix",
-                     "create ok\n");
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_DEBUG, shrewd_basic_ds_log, "radix", "create ok\n");
     return SHREWD_BASIC_ERR_OK;
 }
 
 int shrewd_basic_radix_destroy(shrewd_basic_radix_t *tree)
 {
     if (NULL == tree) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "radix",
-                         "destroy: tree is NULL\n");
+        shrewd_basic_log(
+            SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "radix", "destroy: tree is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     int status = radix_free_node(tree->root);
     if (SHREWD_BASIC_ERR_OK != status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "radix",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "radix",
                          "destroy: node free failed\n");
         return status;
     }
     status = shrewd_basic_platform_free((void **)&tree);
     if (SHREWD_BASIC_ERR_OK != status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "radix",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "radix",
                          "destroy: tree free failed\n");
         return status;
     }
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_DEBUG, shrewd_basic_ds_log, "radix",
-                     "destroy ok\n");
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_DEBUG, shrewd_basic_ds_log, "radix", "destroy ok\n");
     return SHREWD_BASIC_ERR_OK;
 }
 
 int shrewd_basic_radix_insert(shrewd_basic_radix_t *tree, const char *key, void *value)
 {
     if ((NULL == tree) || (NULL == key)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "radix",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "radix",
                          "insert: tree or key is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -296,13 +308,14 @@ int shrewd_basic_radix_insert(shrewd_basic_radix_t *tree, const char *key, void 
             shrewd_basic_radix_node_t *child = radix_node_new();
             char *label = radix_label_new((const char *)k, rest);
             void *block = NULL;
-            int status = shrewd_basic_platform_calloc(&block, 1,
-                                                     sizeof(shrewd_basic_radix_edge_t));
+            int status = shrewd_basic_platform_calloc(&block, 1, sizeof(shrewd_basic_radix_edge_t));
             if ((NULL == child) || (NULL == label) || (SHREWD_BASIC_ERR_OK != status)) {
                 (void)shrewd_basic_platform_free((void **)&child);
                 (void)shrewd_basic_platform_free((void **)&label);
-                shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log,
-                                 "radix", "insert: allocation failed\n");
+                shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                                 shrewd_basic_ds_log,
+                                 "radix",
+                                 "insert: allocation failed\n");
                 return SHREWD_BASIC_ERR_MEM_NOMEM;
             }
             shrewd_basic_radix_edge_t *fresh = block;
@@ -331,8 +344,7 @@ int shrewd_basic_radix_insert(shrewd_basic_radix_t *tree, const char *key, void 
         char *suffix = radix_label_new(edge->label + m, suffix_len);
         char *trimmed = radix_label_new(edge->label, m);
         void *sub_block = NULL;
-        int status = shrewd_basic_platform_calloc(&sub_block, 1,
-                                                 sizeof(shrewd_basic_radix_edge_t));
+        int status = shrewd_basic_platform_calloc(&sub_block, 1, sizeof(shrewd_basic_radix_edge_t));
         shrewd_basic_radix_node_t *leaf = NULL;
         char *branch_label = NULL;
         void *branch_block = NULL;
@@ -340,13 +352,13 @@ int shrewd_basic_radix_insert(shrewd_basic_radix_t *tree, const char *key, void 
             leaf = radix_node_new();
             branch_label = radix_label_new((const char *)k, rest);
             if (SHREWD_BASIC_ERR_OK == status) {
-                status = shrewd_basic_platform_calloc(&branch_block, 1,
-                                                     sizeof(shrewd_basic_radix_edge_t));
+                status = shrewd_basic_platform_calloc(
+                    &branch_block, 1, sizeof(shrewd_basic_radix_edge_t));
             }
         }
         if ((SHREWD_BASIC_ERR_OK != status) || (NULL == mid) || (NULL == suffix)
-                || (NULL == trimmed)
-                || ((0 != branches) && ((NULL == leaf) || (NULL == branch_label)))) {
+            || (NULL == trimmed)
+            || ((0 != branches) && ((NULL == leaf) || (NULL == branch_label)))) {
             (void)shrewd_basic_platform_free((void **)&mid);
             (void)shrewd_basic_platform_free((void **)&suffix);
             (void)shrewd_basic_platform_free((void **)&trimmed);
@@ -354,8 +366,10 @@ int shrewd_basic_radix_insert(shrewd_basic_radix_t *tree, const char *key, void 
             (void)shrewd_basic_platform_free((void **)&leaf);
             (void)shrewd_basic_platform_free((void **)&branch_label);
             (void)shrewd_basic_platform_free(&branch_block);
-            shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log,
-                             "radix", "insert: allocation failed\n");
+            shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                             shrewd_basic_ds_log,
+                             "radix",
+                             "insert: allocation failed\n");
             return SHREWD_BASIC_ERR_MEM_NOMEM;
         }
         shrewd_basic_radix_edge_t *sub = sub_block;
@@ -385,8 +399,8 @@ int shrewd_basic_radix_insert(shrewd_basic_radix_t *tree, const char *key, void 
     }
     if (0 == placed) {
         if (node->has_value) {
-            shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log,
-                             "radix", "insert: key exists\n");
+            shrewd_basic_log(
+                SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "radix", "insert: key exists\n");
             return SHREWD_BASIC_ERR_KEY_EXISTS;
         }
         node->value = value;
@@ -397,16 +411,20 @@ int shrewd_basic_radix_insert(shrewd_basic_radix_t *tree, const char *key, void 
     if (klen > tree->max_key_len) {
         tree->max_key_len = klen;
     }
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "radix",
-                     "insert ok, size %zu\n", tree->size);
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE,
+                     shrewd_basic_ds_log,
+                     "radix",
+                     "insert ok, size %zu\n",
+                     tree->size);
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_radix_search(const shrewd_basic_radix_t *tree, const char *key,
-                              void **out)
+int shrewd_basic_radix_search(const shrewd_basic_radix_t *tree, const char *key, void **out)
 {
     if ((NULL == tree) || (NULL == key) || (NULL == out)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "radix",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "radix",
                          "search: tree, key or out is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -418,22 +436,26 @@ int shrewd_basic_radix_search(const shrewd_basic_radix_t *tree, const char *key,
             edge = edge->next;
         }
         if ((NULL == edge) || ((unsigned char)edge->label[0] != *k)) {
-            shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log,
-                             "radix", "search: key not found\n");
+            shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE,
+                             shrewd_basic_ds_log,
+                             "radix",
+                             "search: key not found\n");
             return SHREWD_BASIC_ERR_KEY_NOTFOUND;
         }
         size_t m = radix_match(edge, k);
         if (m != edge->len) {
-            shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log,
-                             "radix", "search: key not found\n");
+            shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE,
+                             shrewd_basic_ds_log,
+                             "radix",
+                             "search: key not found\n");
             return SHREWD_BASIC_ERR_KEY_NOTFOUND;
         }
         k += m;
         node = edge->child;
     }
     if (!node->has_value) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "radix",
-                         "search: key not found\n");
+        shrewd_basic_log(
+            SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "radix", "search: key not found\n");
         return SHREWD_BASIC_ERR_KEY_NOTFOUND;
     }
     *out = node->value;
@@ -443,37 +465,49 @@ int shrewd_basic_radix_search(const shrewd_basic_radix_t *tree, const char *key,
 int shrewd_basic_radix_remove(shrewd_basic_radix_t *tree, const char *key, void **out)
 {
     if ((NULL == tree) || (NULL == key)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "radix",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "radix",
                          "remove: tree or key is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     int status = radix_remove_rec(tree->root, (const unsigned char *)key, out);
     if (SHREWD_BASIC_ERR_OK == status) {
         --tree->size;
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "radix",
-                         "remove ok, size %zu\n", tree->size);
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE,
+                         shrewd_basic_ds_log,
+                         "radix",
+                         "remove ok, size %zu\n",
+                         tree->size);
     } else if (SHREWD_BASIC_ERR_KEY_NOTFOUND == status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "radix",
-                         "remove: key not found\n");
+        shrewd_basic_log(
+            SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "radix", "remove: key not found\n");
     } else {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "radix",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "radix",
                          "remove: node free failed\n");
     }
     return status;
 }
 
 int shrewd_basic_radix_foreach(const shrewd_basic_radix_t *tree,
-                               shrewd_basic_radix_visit_fn visit, void *ctx)
+                               shrewd_basic_radix_visit_fn visit,
+                               void *ctx)
 {
     if ((NULL == tree) || (NULL == visit)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "radix",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "radix",
                          "foreach: tree or visit is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     void *block = NULL;
     int status = shrewd_basic_platform_alloc(&block, tree->max_key_len + 1);
     if (SHREWD_BASIC_ERR_OK != status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "radix",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "radix",
                          "foreach: buffer allocation failed\n");
         return status;
     }
@@ -481,13 +515,17 @@ int shrewd_basic_radix_foreach(const shrewd_basic_radix_t *tree,
     status = radix_walk(tree->root, buf, 0, visit, ctx);
     int free_status = shrewd_basic_platform_free(&block);
     if (SHREWD_BASIC_ERR_OK != status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "radix",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE,
+                         shrewd_basic_ds_log,
+                         "radix",
                          "foreach: visit aborted (%s)\n",
                          shrewd_basic_error_name(status));
         return status;
     }
     if (SHREWD_BASIC_ERR_OK != free_status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "radix",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "radix",
                          "foreach: buffer free failed\n");
         return free_status;
     }
@@ -496,32 +534,40 @@ int shrewd_basic_radix_foreach(const shrewd_basic_radix_t *tree,
 
 int shrewd_basic_radix_foreach_prefix(const shrewd_basic_radix_t *tree,
                                       const char *prefix,
-                                      shrewd_basic_radix_visit_fn visit, void *ctx)
+                                      shrewd_basic_radix_visit_fn visit,
+                                      void *ctx)
 {
     if ((NULL == tree) || (NULL == prefix) || (NULL == visit)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "radix",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "radix",
                          "foreach_prefix: tree, prefix or visit is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     void *block = NULL;
     int status = shrewd_basic_platform_alloc(&block, tree->max_key_len + 1);
     if (SHREWD_BASIC_ERR_OK != status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "radix",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "radix",
                          "foreach_prefix: buffer allocation failed\n");
         return status;
     }
     char *buf = block;
-    status = radix_walk_prefix(tree->root, (const unsigned char *)prefix, buf, 0,
-                               visit, ctx);
+    status = radix_walk_prefix(tree->root, (const unsigned char *)prefix, buf, 0, visit, ctx);
     int free_status = shrewd_basic_platform_free(&block);
     if (SHREWD_BASIC_ERR_OK != status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "radix",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE,
+                         shrewd_basic_ds_log,
+                         "radix",
                          "foreach_prefix: visit aborted (%s)\n",
                          shrewd_basic_error_name(status));
         return status;
     }
     if (SHREWD_BASIC_ERR_OK != free_status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "radix",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "radix",
                          "foreach_prefix: buffer free failed\n");
         return free_status;
     }
@@ -531,7 +577,9 @@ int shrewd_basic_radix_foreach_prefix(const shrewd_basic_radix_t *tree,
 int shrewd_basic_radix_size(const shrewd_basic_radix_t *tree, size_t *out)
 {
     if ((NULL == tree) || (NULL == out)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "radix",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "radix",
                          "size: tree or out is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }

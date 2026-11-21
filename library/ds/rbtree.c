@@ -69,8 +69,7 @@ static shrewd_basic_rbtree_node_t *rbtree_max_node(shrewd_basic_rbtree_node_t *n
     return node;
 }
 
-static int rbtree_free_node(shrewd_basic_rbtree_t *tree,
-                            shrewd_basic_rbtree_node_t *node)
+static int rbtree_free_node(shrewd_basic_rbtree_t *tree, shrewd_basic_rbtree_node_t *node)
 {
     if (tree->nil == node) {
         return SHREWD_BASIC_ERR_OK;
@@ -88,7 +87,8 @@ static int rbtree_free_node(shrewd_basic_rbtree_t *tree,
 
 static int rbtree_foreach_node(const shrewd_basic_rbtree_t *tree,
                                const shrewd_basic_rbtree_node_t *node,
-                               shrewd_basic_rbtree_visit_fn visit, void *ctx)
+                               shrewd_basic_rbtree_visit_fn visit,
+                               void *ctx)
 {
     if (tree->nil == node) {
         return SHREWD_BASIC_ERR_OK;
@@ -104,8 +104,7 @@ static int rbtree_foreach_node(const shrewd_basic_rbtree_t *tree,
     return rbtree_foreach_node(tree, node->right, visit, ctx);
 }
 
-static void rbtree_insert_fixup(shrewd_basic_rbtree_t *tree,
-                                shrewd_basic_rbtree_node_t *z)
+static void rbtree_insert_fixup(shrewd_basic_rbtree_t *tree, shrewd_basic_rbtree_node_t *z)
 {
     while (SHREWD_BASIC_RBTREE_RED == z->parent->color) {
         if (z->parent == z->parent->parent->left) {
@@ -159,8 +158,7 @@ static void rbtree_transplant(shrewd_basic_rbtree_t *tree,
     v->parent = u->parent;
 }
 
-static void rbtree_delete_fixup(shrewd_basic_rbtree_t *tree,
-                                shrewd_basic_rbtree_node_t *x)
+static void rbtree_delete_fixup(shrewd_basic_rbtree_t *tree, shrewd_basic_rbtree_node_t *x)
 {
     while ((x != tree->root) && (SHREWD_BASIC_RBTREE_BLACK == x->color)) {
         if (x == x->parent->left) {
@@ -172,7 +170,7 @@ static void rbtree_delete_fixup(shrewd_basic_rbtree_t *tree,
                 w = x->parent->right;
             }
             if ((SHREWD_BASIC_RBTREE_BLACK == w->left->color)
-                    && (SHREWD_BASIC_RBTREE_BLACK == w->right->color)) {
+                && (SHREWD_BASIC_RBTREE_BLACK == w->right->color)) {
                 w->color = SHREWD_BASIC_RBTREE_RED;
                 x = x->parent;
             } else {
@@ -197,7 +195,7 @@ static void rbtree_delete_fixup(shrewd_basic_rbtree_t *tree,
                 w = x->parent->left;
             }
             if ((SHREWD_BASIC_RBTREE_BLACK == w->right->color)
-                    && (SHREWD_BASIC_RBTREE_BLACK == w->left->color)) {
+                && (SHREWD_BASIC_RBTREE_BLACK == w->left->color)) {
                 w->color = SHREWD_BASIC_RBTREE_RED;
                 x = x->parent;
             } else {
@@ -218,25 +216,32 @@ static void rbtree_delete_fixup(shrewd_basic_rbtree_t *tree,
     x->color = SHREWD_BASIC_RBTREE_BLACK;
 }
 
-int shrewd_basic_rbtree_create(shrewd_basic_rbtree_cmp_fn cmp, void *ctx,
+int shrewd_basic_rbtree_create(shrewd_basic_rbtree_cmp_fn cmp,
+                               void *ctx,
                                shrewd_basic_rbtree_t **out)
 {
     if ((NULL == cmp) || (NULL == out)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "rbtree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "rbtree",
                          "create: cmp or out is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     void *block = NULL;
     int status = shrewd_basic_platform_calloc(&block, 1, sizeof(shrewd_basic_rbtree_t));
     if (SHREWD_BASIC_ERR_OK != status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "rbtree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "rbtree",
                          "create: allocation failed\n");
         return status;
     }
     shrewd_basic_rbtree_t *tree = block;
     status = shrewd_basic_platform_calloc(&block, 1, sizeof(shrewd_basic_rbtree_node_t));
     if (SHREWD_BASIC_ERR_OK != status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "rbtree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "rbtree",
                          "create: sentinel allocation failed\n");
         (void)shrewd_basic_platform_free((void **)&tree);
         return status;
@@ -251,45 +256,51 @@ int shrewd_basic_rbtree_create(shrewd_basic_rbtree_cmp_fn cmp, void *ctx,
     tree->cmp = cmp;
     tree->ctx = ctx;
     *out = tree;
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_DEBUG, shrewd_basic_ds_log, "rbtree",
-                     "create ok\n");
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_DEBUG, shrewd_basic_ds_log, "rbtree", "create ok\n");
     return SHREWD_BASIC_ERR_OK;
 }
 
 int shrewd_basic_rbtree_destroy(shrewd_basic_rbtree_t *tree)
 {
     if (NULL == tree) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "rbtree",
-                         "destroy: tree is NULL\n");
+        shrewd_basic_log(
+            SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "rbtree", "destroy: tree is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     int status = rbtree_free_node(tree, tree->root);
     if (SHREWD_BASIC_ERR_OK != status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "rbtree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "rbtree",
                          "destroy: node free failed\n");
         return status;
     }
     status = shrewd_basic_platform_free((void **)&tree->nil);
     if (SHREWD_BASIC_ERR_OK != status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "rbtree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "rbtree",
                          "destroy: sentinel free failed\n");
         return status;
     }
     status = shrewd_basic_platform_free((void **)&tree);
     if (SHREWD_BASIC_ERR_OK != status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "rbtree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "rbtree",
                          "destroy: tree free failed\n");
         return status;
     }
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_DEBUG, shrewd_basic_ds_log, "rbtree",
-                     "destroy ok\n");
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_DEBUG, shrewd_basic_ds_log, "rbtree", "destroy ok\n");
     return SHREWD_BASIC_ERR_OK;
 }
 
 int shrewd_basic_rbtree_insert(shrewd_basic_rbtree_t *tree, void *data)
 {
     if ((NULL == tree) || (NULL == tree->cmp)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "rbtree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "rbtree",
                          "insert: tree or cmp is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -300,8 +311,10 @@ int shrewd_basic_rbtree_insert(shrewd_basic_rbtree_t *tree, void *data)
         parent = node;
         c = tree->cmp(data, node->data, tree->ctx);
         if (0 == c) {
-            shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log,
-                             "rbtree", "insert: key exists\n");
+            shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE,
+                             shrewd_basic_ds_log,
+                             "rbtree",
+                             "insert: key exists\n");
             return SHREWD_BASIC_ERR_KEY_EXISTS;
         }
         node = (0 > c) ? node->left : node->right;
@@ -309,7 +322,9 @@ int shrewd_basic_rbtree_insert(shrewd_basic_rbtree_t *tree, void *data)
     void *block = NULL;
     int status = shrewd_basic_platform_alloc(&block, sizeof(shrewd_basic_rbtree_node_t));
     if (SHREWD_BASIC_ERR_OK != status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "rbtree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "rbtree",
                          "insert: allocation failed\n");
         return status;
     }
@@ -328,16 +343,20 @@ int shrewd_basic_rbtree_insert(shrewd_basic_rbtree_t *tree, void *data)
     }
     ++tree->size;
     rbtree_insert_fixup(tree, fresh);
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "rbtree",
-                     "insert ok, size %zu\n", tree->size);
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE,
+                     shrewd_basic_ds_log,
+                     "rbtree",
+                     "insert ok, size %zu\n",
+                     tree->size);
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_rbtree_search(const shrewd_basic_rbtree_t *tree, const void *key,
-                               void **out)
+int shrewd_basic_rbtree_search(const shrewd_basic_rbtree_t *tree, const void *key, void **out)
 {
     if ((NULL == tree) || (NULL == tree->cmp) || (NULL == out)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "rbtree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "rbtree",
                          "search: tree, cmp or out is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -350,16 +369,17 @@ int shrewd_basic_rbtree_search(const shrewd_basic_rbtree_t *tree, const void *ke
         }
         node = (0 > c) ? node->left : node->right;
     }
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "rbtree",
-                     "search: key not found\n");
+    shrewd_basic_log(
+        SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "rbtree", "search: key not found\n");
     return SHREWD_BASIC_ERR_KEY_NOTFOUND;
 }
 
-int shrewd_basic_rbtree_remove(shrewd_basic_rbtree_t *tree, const void *key,
-                               void **out)
+int shrewd_basic_rbtree_remove(shrewd_basic_rbtree_t *tree, const void *key, void **out)
 {
     if ((NULL == tree) || (NULL == tree->cmp)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "rbtree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "rbtree",
                          "remove: tree or cmp is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -372,8 +392,8 @@ int shrewd_basic_rbtree_remove(shrewd_basic_rbtree_t *tree, const void *key,
         z = (0 > c) ? z->left : z->right;
     }
     if (tree->nil == z) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "rbtree",
-                         "remove: key not found\n");
+        shrewd_basic_log(
+            SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "rbtree", "remove: key not found\n");
         return SHREWD_BASIC_ERR_KEY_NOTFOUND;
     }
     if (NULL != out) {
@@ -407,7 +427,9 @@ int shrewd_basic_rbtree_remove(shrewd_basic_rbtree_t *tree, const void *key,
     }
     int status = shrewd_basic_platform_free((void **)&z);
     if (SHREWD_BASIC_ERR_OK != status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "rbtree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "rbtree",
                          "remove: node free failed\n");
         return status;
     }
@@ -415,21 +437,26 @@ int shrewd_basic_rbtree_remove(shrewd_basic_rbtree_t *tree, const void *key,
     if (SHREWD_BASIC_RBTREE_BLACK == y_color) {
         rbtree_delete_fixup(tree, x);
     }
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "rbtree",
-                     "remove ok, size %zu\n", tree->size);
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE,
+                     shrewd_basic_ds_log,
+                     "rbtree",
+                     "remove ok, size %zu\n",
+                     tree->size);
     return SHREWD_BASIC_ERR_OK;
 }
 
 int shrewd_basic_rbtree_min(const shrewd_basic_rbtree_t *tree, void **out)
 {
     if ((NULL == tree) || (NULL == out)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "rbtree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "rbtree",
                          "min: tree or out is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     if (tree->nil == tree->root) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "rbtree",
-                         "min: empty\n");
+        shrewd_basic_log(
+            SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "rbtree", "min: empty\n");
         return SHREWD_BASIC_ERR_KEY_NOTFOUND;
     }
     *out = rbtree_min_node(tree->root, tree->nil)->data;
@@ -439,13 +466,15 @@ int shrewd_basic_rbtree_min(const shrewd_basic_rbtree_t *tree, void **out)
 int shrewd_basic_rbtree_max(const shrewd_basic_rbtree_t *tree, void **out)
 {
     if ((NULL == tree) || (NULL == out)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "rbtree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "rbtree",
                          "max: tree or out is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     if (tree->nil == tree->root) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "rbtree",
-                         "max: empty\n");
+        shrewd_basic_log(
+            SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "rbtree", "max: empty\n");
         return SHREWD_BASIC_ERR_KEY_NOTFOUND;
     }
     *out = rbtree_max_node(tree->root, tree->nil)->data;
@@ -453,10 +482,13 @@ int shrewd_basic_rbtree_max(const shrewd_basic_rbtree_t *tree, void **out)
 }
 
 int shrewd_basic_rbtree_foreach(const shrewd_basic_rbtree_t *tree,
-                                shrewd_basic_rbtree_visit_fn visit, void *ctx)
+                                shrewd_basic_rbtree_visit_fn visit,
+                                void *ctx)
 {
     if ((NULL == tree) || (NULL == visit)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "rbtree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "rbtree",
                          "foreach: tree or visit is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -466,7 +498,9 @@ int shrewd_basic_rbtree_foreach(const shrewd_basic_rbtree_t *tree,
 int shrewd_basic_rbtree_size(const shrewd_basic_rbtree_t *tree, size_t *out)
 {
     if ((NULL == tree) || (NULL == out)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "rbtree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "rbtree",
                          "size: tree or out is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }

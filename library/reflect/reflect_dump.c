@@ -11,13 +11,13 @@
 /* Shared reflect log module, defined in library/reflect/reflect.c. */
 SHREWD_BASIC_LOG_MODULE_DECLARE(shrewd_basic_reflect_log);
 
-#define DUMP_INDENT 2     /* spaces per nesting level */
-#define DUMP_MAX_DEPTH 16 /* indentation clamp (defensive) */
-#define DUMP_STR_MAX 256  /* raw string bytes before truncation */
-#define DUMP_ARRAY_MAX 32 /* elements rendered per array line */
-#define DUMP_TEXT_MAX 256  /* ops->render text buffer */
+#define DUMP_INDENT 2            /* spaces per nesting level */
+#define DUMP_MAX_DEPTH 16        /* indentation clamp (defensive) */
+#define DUMP_STR_MAX 256         /* raw string bytes before truncation */
+#define DUMP_ARRAY_MAX 32        /* elements rendered per array line */
+#define DUMP_TEXT_MAX 256        /* ops->render text buffer */
 #define DUMP_BODY_MAX (1u << 20) /* hard cap on one dump body (1 MiB) */
-#define DUMP_BODY_MIN 1024 /* initial body buffer */
+#define DUMP_BODY_MIN 1024       /* initial body buffer */
 
 /*
  * The whole dump is one log record: the body is accumulated in a growable
@@ -123,7 +123,6 @@ static void dump_emit(dump_ctx_t *ctx)
     dump_append(ctx, "\n");
 }
 
-
 /* Escape @p len raw bytes into the body (shared by strings and buffers). */
 static void dump_escaped(dump_ctx_t *ctx, const unsigned char *text, size_t len)
 {
@@ -183,12 +182,18 @@ static void dump_string_buf(dump_ctx_t *ctx, const char *buf, size_t size)
 }
 
 /* Render one value inline (scalars, array values, struct values). */
-static void dump_inline(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type,
-                        const unsigned char *bytes, size_t nbytes, size_t str_max);
+static void dump_inline(dump_ctx_t *ctx,
+                        const shrewd_basic_reflect_type_t *type,
+                        const unsigned char *bytes,
+                        size_t nbytes,
+                        size_t str_max);
 
 /* Render one scalar value; str_max bounds string elements inside arrays. */
-static void dump_scalar(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type,
-                        const unsigned char *bytes, size_t nbytes, size_t str_max)
+static void dump_scalar(dump_ctx_t *ctx,
+                        const shrewd_basic_reflect_type_t *type,
+                        const unsigned char *bytes,
+                        size_t nbytes,
+                        size_t str_max)
 {
     switch (type->sb_refl_kind) {
     case SHREWD_BASIC_REFLECT_KIND_BOOL:
@@ -254,8 +259,7 @@ static void dump_scalar(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
             if (0 != i) {
                 dump_append(ctx, ", ");
             }
-            dump_inline(ctx, type->sb_refl_elem, bytes + (i * stride), stride,
-                        str_max);
+            dump_inline(ctx, type->sb_refl_elem, bytes + (i * stride), stride, str_max);
         }
         dump_append(ctx, " ]");
         break;
@@ -266,8 +270,11 @@ static void dump_scalar(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
     }
 }
 
-static void dump_inline(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type,
-                        const unsigned char *bytes, size_t nbytes, size_t str_max)
+static void dump_inline(dump_ctx_t *ctx,
+                        const shrewd_basic_reflect_type_t *type,
+                        const unsigned char *bytes,
+                        size_t nbytes,
+                        size_t str_max)
 {
     if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
         dump_scalar(ctx, type, bytes, nbytes, str_max);
@@ -281,8 +288,8 @@ static void dump_inline(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
             dump_append(ctx, ", ");
         }
         dump_append(ctx, "%s = ", field->sb_refl_name);
-        dump_inline(ctx, field->sb_refl_type, bytes + field->sb_refl_offset,
-                    field->sb_refl_size, str_max);
+        dump_inline(
+            ctx, field->sb_refl_type, bytes + field->sb_refl_offset, field->sb_refl_size, str_max);
     }
     dump_append(ctx, " }");
 }
@@ -299,7 +306,8 @@ static void dump_inline(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type
  * type: an embedded first member shares its parent's address (offset 0)
  * without being a cycle.
  */
-static int dump_target_seen(const dump_ctx_t *ctx, size_t depth,
+static int dump_target_seen(const dump_ctx_t *ctx,
+                            size_t depth,
                             const void *target,
                             const shrewd_basic_reflect_type_t *type)
 {
@@ -317,7 +325,9 @@ static int dump_target_seen(const dump_ctx_t *ctx, size_t depth,
  * otherwise the caller falls back to the default rendering.
  */
 static int dump_render_target(const shrewd_basic_reflect_field_t *field,
-                              const void *pointer, char *buf, size_t buf_size)
+                              const void *pointer,
+                              char *buf,
+                              size_t buf_size)
 {
     const shrewd_basic_reflect_ops_t *ops = reflect_field_ops(field);
     if ((NULL == ops) || (NULL == ops->render)) {
@@ -326,21 +336,28 @@ static int dump_render_target(const shrewd_basic_reflect_field_t *field,
     return (SHREWD_BASIC_ERR_OK == ops->render(pointer, buf, buf_size)) ? 1 : 0;
 }
 
-static void dump_field_list(dump_ctx_t *ctx, const shrewd_basic_reflect_field_t *fields,
-                            size_t count, const unsigned char *object, size_t depth);
+static void dump_field_list(dump_ctx_t *ctx,
+                            const shrewd_basic_reflect_field_t *fields,
+                            size_t count,
+                            const unsigned char *object,
+                            size_t depth);
 
-static void dump_fields(dump_ctx_t *ctx, const shrewd_basic_reflect_type_t *type,
-                        const unsigned char *object, size_t depth)
+static void dump_fields(dump_ctx_t *ctx,
+                        const shrewd_basic_reflect_type_t *type,
+                        const unsigned char *object,
+                        size_t depth)
 {
     ctx->path[depth - 1].object = object;
     ctx->path[depth - 1].type = type;
-    dump_field_list(ctx, type->sb_refl_fields, type->sb_refl_field_count,
-                    object, depth);
+    dump_field_list(ctx, type->sb_refl_fields, type->sb_refl_field_count, object, depth);
 }
 
 /* Render one field list - a struct's fields or an active union variant's. */
-static void dump_field_list(dump_ctx_t *ctx, const shrewd_basic_reflect_field_t *fields,
-                            size_t count, const unsigned char *object, size_t depth)
+static void dump_field_list(dump_ctx_t *ctx,
+                            const shrewd_basic_reflect_field_t *fields,
+                            size_t count,
+                            const unsigned char *object,
+                            size_t depth)
 {
     int pad = (int)(((depth < DUMP_MAX_DEPTH) ? depth : DUMP_MAX_DEPTH) * DUMP_INDENT);
     for (size_t i = 0; i < count; ++i) {
@@ -351,22 +368,18 @@ static void dump_field_list(dump_ctx_t *ctx, const shrewd_basic_reflect_field_t 
              * Tagged union: the active variant's fields render as a block
              * annotated with the tag constant (raw tag when unknown).
              */
-            const shrewd_basic_reflect_variant_t *variant =
-                    reflect_union_variant(field, at);
+            const shrewd_basic_reflect_variant_t *variant = reflect_union_variant(field, at);
             if (NULL == variant) {
-                long long tag = (long long)reflect_load_i64(
-                        object + field->sb_refl_limit_offset,
-                        field->sb_refl_limit_size);
-                dump_append(ctx, "%*s%s = (tag %lld: unknown)", pad, "",
-                            field->sb_refl_name, tag);
+                long long tag = (long long)reflect_load_i64(object + field->sb_refl_limit_offset,
+                                                            field->sb_refl_limit_size);
+                dump_append(ctx, "%*s%s = (tag %lld: unknown)", pad, "", field->sb_refl_name, tag);
                 dump_emit(ctx);
                 continue;
             }
-            dump_append(ctx, "%*s%s = (%s) {", pad, "", field->sb_refl_name,
-                        variant->sb_refl_name);
+            dump_append(ctx, "%*s%s = (%s) {", pad, "", field->sb_refl_name, variant->sb_refl_name);
             dump_emit(ctx);
-            dump_field_list(ctx, variant->sb_refl_fields,
-                            variant->sb_refl_field_count, at, depth + 1);
+            dump_field_list(
+                ctx, variant->sb_refl_fields, variant->sb_refl_field_count, at, depth + 1);
             dump_append(ctx, "%*s}", pad, "");
             dump_emit(ctx);
             continue;
@@ -378,7 +391,7 @@ static void dump_field_list(dump_ctx_t *ctx, const shrewd_basic_reflect_field_t 
         int is_opaque = (SHREWD_BASIC_REFLECT_KIND_OPAQUE == field->sb_refl_type->sb_refl_kind);
 
         if ((0 != is_array)
-                && (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF))) {
+            && (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF))) {
             /* Text buffer: a quoted C string, not an element list. */
             dump_append(ctx, "%*s%s = ", pad, "", field->sb_refl_name);
             dump_string_buf(ctx, (const char *)at, field->sb_refl_count);
@@ -388,10 +401,13 @@ static void dump_field_list(dump_ctx_t *ctx, const shrewd_basic_reflect_field_t 
         if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_BITS)) {
             /* Bit group: the extracted bits, not the whole unit. */
             uint64_t unit = reflect_load_u64(at, field->sb_refl_size);
-            dump_append(ctx, "%*s%s = %llu", pad, "", field->sb_refl_name,
+            dump_append(ctx,
+                        "%*s%s = %llu",
+                        pad,
+                        "",
+                        field->sb_refl_name,
                         (unsigned long long)reflect_bits_extract(
-                                unit, field->sb_refl_bit_offset,
-                                field->sb_refl_bit_width));
+                            unit, field->sb_refl_bit_offset, field->sb_refl_bit_width));
             dump_emit(ctx);
             continue;
         }
@@ -411,28 +427,29 @@ static void dump_field_list(dump_ctx_t *ctx, const shrewd_basic_reflect_field_t 
                     if (0 != is_ptr) {
                         void *pointer = reflect_load_ptr(elem);
                         if (NULL == pointer) {
-                            dump_append(ctx, "%*s%s[%zu] = (null)", pad, "", field->sb_refl_name, j);
+                            dump_append(
+                                ctx, "%*s%s[%zu] = (null)", pad, "", field->sb_refl_name, j);
                             dump_emit(ctx);
                             continue;
                         }
                         char text[DUMP_TEXT_MAX] = {0};
                         if (0 != dump_render_target(field, pointer, text, sizeof(text))) {
-                            dump_append(ctx, "%*s%s[%zu] = %s", pad, "",
-                                        field->sb_refl_name, j, text);
+                            dump_append(
+                                ctx, "%*s%s[%zu] = %s", pad, "", field->sb_refl_name, j, text);
                             dump_emit(ctx);
                             continue;
                         }
                         target = (const unsigned char *)pointer;
                     }
                     if (0 != dump_target_seen(ctx, depth, target, field->sb_refl_type)) {
-                        dump_append(ctx, "%*s%s[%zu] = ...(cyclic)", pad, "",
-                                    field->sb_refl_name, j);
+                        dump_append(
+                            ctx, "%*s%s[%zu] = ...(cyclic)", pad, "", field->sb_refl_name, j);
                         dump_emit(ctx);
                         continue;
                     }
                     if (depth >= DUMP_MAX_DEPTH) {
-                        dump_append(ctx, "%*s%s[%zu] = ...(max depth)", pad, "",
-                                    field->sb_refl_name, j);
+                        dump_append(
+                            ctx, "%*s%s[%zu] = ...(max depth)", pad, "", field->sb_refl_name, j);
                         dump_emit(ctx);
                         continue;
                     }
@@ -463,18 +480,17 @@ static void dump_field_list(dump_ctx_t *ctx, const shrewd_basic_reflect_field_t 
                             if (0 != dump_render_target(field, pointer, text, sizeof(text))) {
                                 dump_append(ctx, "%s", text);
                             } else if (0 != is_opaque) {
-                                dump_append(ctx, "0x%llx",
-                                            (unsigned long long)(uintptr_t)pointer);
+                                dump_append(ctx, "0x%llx", (unsigned long long)(uintptr_t)pointer);
                             } else {
-                                dump_scalar(ctx, field->sb_refl_type,
+                                dump_scalar(ctx,
+                                            field->sb_refl_type,
                                             (const unsigned char *)pointer,
                                             field->sb_refl_type->sb_refl_size,
                                             DUMP_STR_MAX / 8);
                             }
                         }
                     } else {
-                        dump_scalar(ctx, field->sb_refl_type, elem, view.stride,
-                                    DUMP_STR_MAX / 8);
+                        dump_scalar(ctx, field->sb_refl_type, elem, view.stride, DUMP_STR_MAX / 8);
                     }
                 }
                 dump_append(ctx, " ]");
@@ -490,8 +506,12 @@ static void dump_field_list(dump_ctx_t *ctx, const shrewd_basic_reflect_field_t 
                 if (0 != dump_render_target(field, pointer, text, sizeof(text))) {
                     dump_append(ctx, "%*s%s = %s", pad, "", field->sb_refl_name, text);
                     dump_emit(ctx);
-} else if (0 != is_opaque) {
-                    dump_append(ctx, "%*s%s = 0x%llx", pad, "", field->sb_refl_name,
+                } else if (0 != is_opaque) {
+                    dump_append(ctx,
+                                "%*s%s = 0x%llx",
+                                pad,
+                                "",
+                                field->sb_refl_name,
                                 (unsigned long long)(uintptr_t)pointer);
                     dump_emit(ctx);
                 } else if (0 != is_struct) {
@@ -504,14 +524,18 @@ static void dump_field_list(dump_ctx_t *ctx, const shrewd_basic_reflect_field_t 
                     } else {
                         dump_append(ctx, "%*s%s = {", pad, "", field->sb_refl_name);
                         dump_emit(ctx);
-                        dump_fields(ctx, field->sb_refl_type, (const unsigned char *)pointer, depth + 1);
+                        dump_fields(
+                            ctx, field->sb_refl_type, (const unsigned char *)pointer, depth + 1);
                         dump_append(ctx, "%*s}", pad, "");
                         dump_emit(ctx);
                     }
                 } else {
                     dump_append(ctx, "%*s%s = ", pad, "", field->sb_refl_name);
-                    dump_scalar(ctx, field->sb_refl_type, (const unsigned char *)pointer,
-                                field->sb_refl_type->sb_refl_size, DUMP_STR_MAX);
+                    dump_scalar(ctx,
+                                field->sb_refl_type,
+                                (const unsigned char *)pointer,
+                                field->sb_refl_type->sb_refl_size,
+                                DUMP_STR_MAX);
                     dump_emit(ctx);
                 }
             }
@@ -538,23 +562,42 @@ static void dump_field_list(dump_ctx_t *ctx, const shrewd_basic_reflect_field_t 
 }
 
 int shrewd_basic_reflect_dump_write(const shrewd_basic_reflect_type_t *type,
-                              const void *object, const char *label,
-                              const char *file, int line, const char *func)
+                                    const void *object,
+                                    const char *label,
+                                    const char *file,
+                                    int line,
+                                    const char *func)
 {
     if ((NULL == type) || (NULL == object)) {
-        shrewd_basic_log_write(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
-                         "dump", file, line, func, "dump: type or object is NULL\n");
+        shrewd_basic_log_write(SHREWD_BASIC_LOG_LEVEL_WARN,
+                               shrewd_basic_reflect_log,
+                               "dump",
+                               file,
+                               line,
+                               func,
+                               "dump: type or object is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
-        shrewd_basic_log_write(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
-                         "dump", file, line, func, "dump: type \"%s\" is not a struct\n", type->sb_refl_name);
+        shrewd_basic_log_write(SHREWD_BASIC_LOG_LEVEL_WARN,
+                               shrewd_basic_reflect_log,
+                               "dump",
+                               file,
+                               line,
+                               func,
+                               "dump: type \"%s\" is not a struct\n",
+                               type->sb_refl_name);
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     dump_ctx_t ctx = {0};
     if (SHREWD_BASIC_ERR_OK != dump_init(&ctx)) {
-        shrewd_basic_log_write(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_reflect_log,
-                         "dump", file, line, func, "dump: allocation failed\n");
+        shrewd_basic_log_write(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                               shrewd_basic_reflect_log,
+                               "dump",
+                               file,
+                               line,
+                               func,
+                               "dump: allocation failed\n");
         return SHREWD_BASIC_ERR_MEM_NOMEM;
     }
     if (NULL != label) {
@@ -568,37 +611,44 @@ int shrewd_basic_reflect_dump_write(const shrewd_basic_reflect_type_t *type,
     dump_emit(&ctx);
     /* One log record: the prefix line, then the dump body from the next
        line on - unprefixed. */
-    shrewd_basic_log_write(SHREWD_BASIC_LOG_LEVEL_INFO, shrewd_basic_reflect_log,
-                     "dump", file, line, func, "\n%s", ctx.buf);
-    int status = (0 != ctx.nomem) ? SHREWD_BASIC_ERR_MEM_NOMEM
-                                  : SHREWD_BASIC_ERR_OK;
+    shrewd_basic_log_write(SHREWD_BASIC_LOG_LEVEL_INFO,
+                           shrewd_basic_reflect_log,
+                           "dump",
+                           file,
+                           line,
+                           func,
+                           "\n%s",
+                           ctx.buf);
+    int status = (0 != ctx.nomem) ? SHREWD_BASIC_ERR_MEM_NOMEM : SHREWD_BASIC_ERR_OK;
     (void)shrewd_basic_platform_free((void **)&ctx.buf);
     return status;
 }
 
 /* --- type self-print -------------------------------------------------- */
 
-static void describe_field(dump_ctx_t *ctx, const char *indent,
-                           const shrewd_basic_reflect_field_t *field)
+static void
+describe_field(dump_ctx_t *ctx, const char *indent, const shrewd_basic_reflect_field_t *field)
 {
     char shape[64] = {0};
-    const char *base = (NULL != field->sb_refl_type)
-            ? field->sb_refl_type->sb_refl_name : "?";
-    const char *ptr = (0u != (field->sb_refl_flags
-                              & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) ? "*" : "";
-    if (0u != (field->sb_refl_flags
-               & (SHREWD_BASIC_REFLECT_FIELD_F_DARRAY
-                  | SHREWD_BASIC_REFLECT_FIELD_F_SENTINEL))) {
+    const char *base = (NULL != field->sb_refl_type) ? field->sb_refl_type->sb_refl_name : "?";
+    const char *ptr = (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) ? "*" : "";
+    if (0u
+        != (field->sb_refl_flags
+            & (SHREWD_BASIC_REFLECT_FIELD_F_DARRAY | SHREWD_BASIC_REFLECT_FIELD_F_SENTINEL))) {
         snprintf(shape, sizeof(shape), "%s%s[]", ptr, base);
     } else if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_ARRAY)) {
-        snprintf(shape, sizeof(shape), "%s%s[%zu]", ptr, base,
-                 field->sb_refl_count);
+        snprintf(shape, sizeof(shape), "%s%s[%zu]", ptr, base, field->sb_refl_count);
     } else {
         snprintf(shape, sizeof(shape), "%s%s", ptr, base);
     }
-    dump_append(ctx, "%s%-12s %-12s off=%-4zu size=%-4zu align=%zu", indent,
-                field->sb_refl_name, shape, field->sb_refl_offset,
-                field->sb_refl_size, shrewd_basic_reflect_field_align(field));
+    dump_append(ctx,
+                "%s%-12s %-12s off=%-4zu size=%-4zu align=%zu",
+                indent,
+                field->sb_refl_name,
+                shape,
+                field->sb_refl_offset,
+                field->sb_refl_size,
+                shrewd_basic_reflect_field_align(field));
     if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED)) {
         dump_append(ctx, " owned");
     }
@@ -606,8 +656,7 @@ static void describe_field(dump_ctx_t *ctx, const char *indent,
         dump_append(ctx, " stringbuf");
     }
     if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_BITS)) {
-        dump_append(ctx, " bits(%zu@%zu)", field->sb_refl_bit_width,
-                    field->sb_refl_bit_offset);
+        dump_append(ctx, " bits(%zu@%zu)", field->sb_refl_bit_width, field->sb_refl_bit_offset);
     }
     if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_UNION)) {
         dump_append(ctx, " union");
@@ -622,18 +671,25 @@ int shrewd_basic_reflect_describe(const shrewd_basic_reflect_type_t *type)
 {
     dump_ctx_t ctx = {0};
     if (NULL == type) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
-                         "describe", "describe: type is NULL\n");
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_reflect_log,
+                         "describe",
+                         "describe: type is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     if (SHREWD_BASIC_ERR_OK != dump_init(&ctx)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_reflect_log,
-                         "describe", "describe: allocation failed\n");
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_reflect_log,
+                         "describe",
+                         "describe: allocation failed\n");
         return SHREWD_BASIC_ERR_MEM_NOMEM;
     }
-    dump_append(&ctx, "%s (%s, %zu bytes, align %zu)", type->sb_refl_name,
+    dump_append(&ctx,
+                "%s (%s, %zu bytes, align %zu)",
+                type->sb_refl_name,
                 shrewd_basic_reflect_kind_name(type->sb_refl_kind),
-                type->sb_refl_size, type->sb_refl_align);
+                type->sb_refl_size,
+                type->sb_refl_align);
     dump_emit(&ctx);
     switch (type->sb_refl_kind) {
     case SHREWD_BASIC_REFLECT_KIND_STRUCT:
@@ -643,25 +699,26 @@ int shrewd_basic_reflect_describe(const shrewd_basic_reflect_type_t *type)
         break;
     case SHREWD_BASIC_REFLECT_KIND_ENUM:
         for (size_t i = 0; i < type->sb_refl_enum_count; ++i) {
-            dump_append(&ctx, "  %s = %lld", type->sb_refl_enum[i].sb_refl_name,
+            dump_append(&ctx,
+                        "  %s = %lld",
+                        type->sb_refl_enum[i].sb_refl_name,
                         (long long)type->sb_refl_enum[i].sb_refl_value);
             dump_emit(&ctx);
         }
         break;
     case SHREWD_BASIC_REFLECT_KIND_ARRAY:
-        dump_append(&ctx, "  row of %zu x %s (stride %zu)",
+        dump_append(&ctx,
+                    "  row of %zu x %s (stride %zu)",
                     type->sb_refl_elem_count,
-                    (NULL != type->sb_refl_elem) ? type->sb_refl_elem->sb_refl_name
-                                                 : "?",
+                    (NULL != type->sb_refl_elem) ? type->sb_refl_elem->sb_refl_name : "?",
                     type->sb_refl_elem_stride);
         dump_emit(&ctx);
         break;
     case SHREWD_BASIC_REFLECT_KIND_UNION:
         for (size_t i = 0; i < type->sb_refl_variant_count; ++i) {
-            const shrewd_basic_reflect_variant_t *variant =
-                    &type->sb_refl_variants[i];
-            dump_append(&ctx, "  case %lld (%s):",
-                        (long long)variant->sb_refl_tag, variant->sb_refl_name);
+            const shrewd_basic_reflect_variant_t *variant = &type->sb_refl_variants[i];
+            dump_append(
+                &ctx, "  case %lld (%s):", (long long)variant->sb_refl_tag, variant->sb_refl_name);
             dump_emit(&ctx);
             for (size_t j = 0; j < variant->sb_refl_field_count; ++j) {
                 describe_field(&ctx, "    ", &variant->sb_refl_fields[j]);
@@ -672,10 +729,9 @@ int shrewd_basic_reflect_describe(const shrewd_basic_reflect_type_t *type)
         break; /* primitives and opaque types: header line only */
     }
     /* One log record: the prefix line, then the body unprefixed. */
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_INFO, shrewd_basic_reflect_log,
-                     "describe", "\n%s", ctx.buf);
-    int status = (0 != ctx.nomem) ? SHREWD_BASIC_ERR_MEM_NOMEM
-                                  : SHREWD_BASIC_ERR_OK;
+    shrewd_basic_log(
+        SHREWD_BASIC_LOG_LEVEL_INFO, shrewd_basic_reflect_log, "describe", "\n%s", ctx.buf);
+    int status = (0 != ctx.nomem) ? SHREWD_BASIC_ERR_MEM_NOMEM : SHREWD_BASIC_ERR_OK;
     (void)shrewd_basic_platform_free((void **)&ctx.buf);
     return status;
 }
@@ -683,13 +739,16 @@ int shrewd_basic_reflect_describe(const shrewd_basic_reflect_type_t *type)
 /* --- layout report ---------------------------------------------------- */
 
 int shrewd_basic_reflect_layout(const shrewd_basic_reflect_type_t *type,
-                                shrewd_basic_reflect_layout_fn fn, void *ctx)
+                                shrewd_basic_reflect_layout_fn fn,
+                                void *ctx)
 {
     size_t cursor = 0;
     if ((NULL == type) || (NULL == fn)
-            || (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
-                         "layout", "layout: type or fn is NULL, or not a struct\n");
+        || (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_reflect_log,
+                         "layout",
+                         "layout: type or fn is NULL, or not a struct\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     /* Emit in ascending (offset, declaration index) order by selecting,
@@ -698,18 +757,15 @@ int shrewd_basic_reflect_layout(const shrewd_basic_reflect_type_t *type,
     for (size_t rank = 0; rank < type->sb_refl_field_count; ++rank) {
         const shrewd_basic_reflect_field_t *pick = NULL;
         for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
-            const shrewd_basic_reflect_field_t *field =
-                    &type->sb_refl_fields[i];
+            const shrewd_basic_reflect_field_t *field = &type->sb_refl_fields[i];
             size_t before = 0;
             for (size_t j = 0; j < type->sb_refl_field_count; ++j) {
-                const shrewd_basic_reflect_field_t *other =
-                        &type->sb_refl_fields[j];
+                const shrewd_basic_reflect_field_t *other = &type->sb_refl_fields[j];
                 if (j == i) {
                     continue;
                 }
                 if ((other->sb_refl_offset < field->sb_refl_offset)
-                        || ((other->sb_refl_offset == field->sb_refl_offset)
-                            && (j < i))) {
+                    || ((other->sb_refl_offset == field->sb_refl_offset) && (j < i))) {
                     ++before;
                 }
             }
@@ -726,8 +782,7 @@ int shrewd_basic_reflect_layout(const shrewd_basic_reflect_type_t *type,
         entry.offset = pick->sb_refl_offset;
         entry.size = pick->sb_refl_size;
         entry.align = shrewd_basic_reflect_field_align(pick);
-        entry.pad_before = (pick->sb_refl_offset > cursor)
-                ? (pick->sb_refl_offset - cursor) : 0;
+        entry.pad_before = (pick->sb_refl_offset > cursor) ? (pick->sb_refl_offset - cursor) : 0;
         if (cursor < (pick->sb_refl_offset + pick->sb_refl_size)) {
             cursor = pick->sb_refl_offset + pick->sb_refl_size;
         }

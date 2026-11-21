@@ -39,7 +39,8 @@ static int btree_free_node(shrewd_basic_btree_node_t *node)
 }
 
 static int btree_foreach_node(const shrewd_basic_btree_node_t *node,
-                              shrewd_basic_btree_visit_fn visit, void *ctx)
+                              shrewd_basic_btree_visit_fn visit,
+                              void *ctx)
 {
     if (NULL == node) {
         return SHREWD_BASIC_ERR_OK;
@@ -63,7 +64,8 @@ static int btree_foreach_node(const shrewd_basic_btree_node_t *node,
  */
 static shrewd_basic_btree_node_t *btree_remove_node(shrewd_basic_btree_t *tree,
                                                     shrewd_basic_btree_node_t *node,
-                                                    const void *key, void **out,
+                                                    const void *key,
+                                                    void **out,
                                                     int *status)
 {
     if (NULL == node) {
@@ -92,24 +94,26 @@ static shrewd_basic_btree_node_t *btree_remove_node(shrewd_basic_btree_t *tree,
         }
         shrewd_basic_btree_node_t *successor = btree_min_node(node->right);
         node->data = successor->data;
-        node->right = btree_remove_node(tree, node->right, successor->data,
-                                        NULL, status);
+        node->right = btree_remove_node(tree, node->right, successor->data, NULL, status);
     }
     return node;
 }
 
-int shrewd_basic_btree_create(shrewd_basic_btree_cmp_fn cmp, void *ctx,
-                              shrewd_basic_btree_t **out)
+int shrewd_basic_btree_create(shrewd_basic_btree_cmp_fn cmp, void *ctx, shrewd_basic_btree_t **out)
 {
     if ((NULL == cmp) || (NULL == out)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "btree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "btree",
                          "create: cmp or out is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     void *block = NULL;
     int status = shrewd_basic_platform_calloc(&block, 1, sizeof(shrewd_basic_btree_t));
     if (SHREWD_BASIC_ERR_OK != status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "btree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "btree",
                          "create: allocation failed\n");
         return status;
     }
@@ -117,39 +121,43 @@ int shrewd_basic_btree_create(shrewd_basic_btree_cmp_fn cmp, void *ctx,
     tree->cmp = cmp;
     tree->ctx = ctx;
     *out = tree;
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_DEBUG, shrewd_basic_ds_log, "btree",
-                     "create ok\n");
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_DEBUG, shrewd_basic_ds_log, "btree", "create ok\n");
     return SHREWD_BASIC_ERR_OK;
 }
 
 int shrewd_basic_btree_destroy(shrewd_basic_btree_t *tree)
 {
     if (NULL == tree) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "btree",
-                         "destroy: tree is NULL\n");
+        shrewd_basic_log(
+            SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "btree", "destroy: tree is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     int status = btree_free_node(tree->root);
     if (SHREWD_BASIC_ERR_OK != status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "btree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "btree",
                          "destroy: node free failed\n");
         return status;
     }
     status = shrewd_basic_platform_free((void **)&tree);
     if (SHREWD_BASIC_ERR_OK != status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "btree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "btree",
                          "destroy: tree free failed\n");
         return status;
     }
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_DEBUG, shrewd_basic_ds_log, "btree",
-                     "destroy ok\n");
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_DEBUG, shrewd_basic_ds_log, "btree", "destroy ok\n");
     return SHREWD_BASIC_ERR_OK;
 }
 
 int shrewd_basic_btree_insert(shrewd_basic_btree_t *tree, void *data)
 {
     if ((NULL == tree) || (NULL == tree->cmp)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "btree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "btree",
                          "insert: tree or cmp is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -160,8 +168,8 @@ int shrewd_basic_btree_insert(shrewd_basic_btree_t *tree, void *data)
         parent = node;
         c = tree->cmp(data, node->data, tree->ctx);
         if (0 == c) {
-            shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log,
-                             "btree", "insert: key exists\n");
+            shrewd_basic_log(
+                SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "btree", "insert: key exists\n");
             return SHREWD_BASIC_ERR_KEY_EXISTS;
         }
         node = (0 > c) ? node->left : node->right;
@@ -169,7 +177,9 @@ int shrewd_basic_btree_insert(shrewd_basic_btree_t *tree, void *data)
     void *block = NULL;
     int status = shrewd_basic_platform_alloc(&block, sizeof(shrewd_basic_btree_node_t));
     if (SHREWD_BASIC_ERR_OK != status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "btree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "btree",
                          "insert: allocation failed\n");
         return status;
     }
@@ -185,16 +195,20 @@ int shrewd_basic_btree_insert(shrewd_basic_btree_t *tree, void *data)
         parent->right = fresh;
     }
     ++tree->size;
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "btree",
-                     "insert ok, size %zu\n", tree->size);
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE,
+                     shrewd_basic_ds_log,
+                     "btree",
+                     "insert ok, size %zu\n",
+                     tree->size);
     return SHREWD_BASIC_ERR_OK;
 }
 
-int shrewd_basic_btree_search(const shrewd_basic_btree_t *tree, const void *key,
-                              void **out)
+int shrewd_basic_btree_search(const shrewd_basic_btree_t *tree, const void *key, void **out)
 {
     if ((NULL == tree) || (NULL == tree->cmp) || (NULL == out)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "btree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "btree",
                          "search: tree, cmp or out is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -207,16 +221,17 @@ int shrewd_basic_btree_search(const shrewd_basic_btree_t *tree, const void *key,
         }
         node = (0 > c) ? node->left : node->right;
     }
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "btree",
-                     "search: key not found\n");
+    shrewd_basic_log(
+        SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "btree", "search: key not found\n");
     return SHREWD_BASIC_ERR_KEY_NOTFOUND;
 }
 
-int shrewd_basic_btree_remove(shrewd_basic_btree_t *tree, const void *key,
-                              void **out)
+int shrewd_basic_btree_remove(shrewd_basic_btree_t *tree, const void *key, void **out)
 {
     if ((NULL == tree) || (NULL == tree->cmp)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "btree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "btree",
                          "remove: tree or cmp is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -224,13 +239,18 @@ int shrewd_basic_btree_remove(shrewd_basic_btree_t *tree, const void *key,
     tree->root = btree_remove_node(tree, tree->root, key, out, &status);
     if (SHREWD_BASIC_ERR_OK == status) {
         --tree->size;
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "btree",
-                         "remove ok, size %zu\n", tree->size);
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE,
+                         shrewd_basic_ds_log,
+                         "btree",
+                         "remove ok, size %zu\n",
+                         tree->size);
     } else if (SHREWD_BASIC_ERR_KEY_NOTFOUND == status) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "btree",
-                         "remove: key not found\n");
+        shrewd_basic_log(
+            SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "btree", "remove: key not found\n");
     } else {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_ds_log, "btree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                         shrewd_basic_ds_log,
+                         "btree",
                          "remove: node free failed\n");
     }
     return status;
@@ -239,13 +259,15 @@ int shrewd_basic_btree_remove(shrewd_basic_btree_t *tree, const void *key,
 int shrewd_basic_btree_min(const shrewd_basic_btree_t *tree, void **out)
 {
     if ((NULL == tree) || (NULL == out)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "btree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "btree",
                          "min: tree or out is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     if (NULL == tree->root) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "btree",
-                         "min: empty\n");
+        shrewd_basic_log(
+            SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "btree", "min: empty\n");
         return SHREWD_BASIC_ERR_KEY_NOTFOUND;
     }
     *out = btree_min_node(tree->root)->data;
@@ -255,13 +277,15 @@ int shrewd_basic_btree_min(const shrewd_basic_btree_t *tree, void **out)
 int shrewd_basic_btree_max(const shrewd_basic_btree_t *tree, void **out)
 {
     if ((NULL == tree) || (NULL == out)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "btree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "btree",
                          "max: tree or out is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     if (NULL == tree->root) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "btree",
-                         "max: empty\n");
+        shrewd_basic_log(
+            SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_ds_log, "btree", "max: empty\n");
         return SHREWD_BASIC_ERR_KEY_NOTFOUND;
     }
     *out = btree_max_node(tree->root)->data;
@@ -269,10 +293,13 @@ int shrewd_basic_btree_max(const shrewd_basic_btree_t *tree, void **out)
 }
 
 int shrewd_basic_btree_foreach(const shrewd_basic_btree_t *tree,
-                               shrewd_basic_btree_visit_fn visit, void *ctx)
+                               shrewd_basic_btree_visit_fn visit,
+                               void *ctx)
 {
     if ((NULL == tree) || (NULL == visit)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "btree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "btree",
                          "foreach: tree or visit is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -282,7 +309,9 @@ int shrewd_basic_btree_foreach(const shrewd_basic_btree_t *tree,
 int shrewd_basic_btree_size(const shrewd_basic_btree_t *tree, size_t *out)
 {
     if ((NULL == tree) || (NULL == out)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_ds_log, "btree",
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_ds_log,
+                         "btree",
                          "size: tree or out is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }

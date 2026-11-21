@@ -70,27 +70,25 @@ int shrewd_basic_radix_destroy(shrewd_basic_radix_t *tree);
  * Insert @p value under @p key, splitting edges as needed.
  * Returns SHREWD_BASIC_ERR_KEY_EXISTS if the key is already stored.
  */
-int shrewd_basic_radix_insert(shrewd_basic_radix_t *tree, const char *key,
-                              void *value);
+int shrewd_basic_radix_insert(shrewd_basic_radix_t *tree, const char *key, void *value);
 
 /**
  * Store the value matching @p key into @p *out (required).
  * Returns SHREWD_BASIC_ERR_KEY_NOTFOUND when no key matches.
  */
-int shrewd_basic_radix_search(const shrewd_basic_radix_t *tree, const char *key,
-                              void **out);
+int shrewd_basic_radix_search(const shrewd_basic_radix_t *tree, const char *key, void **out);
 
 /**
  * Remove @p key and store its value into @p *out (NULL discards); the path
  * is re-compressed afterwards. Returns SHREWD_BASIC_ERR_KEY_NOTFOUND when
  * no key matches.
  */
-int shrewd_basic_radix_remove(shrewd_basic_radix_t *tree, const char *key,
-                              void **out);
+int shrewd_basic_radix_remove(shrewd_basic_radix_t *tree, const char *key, void **out);
 
 /** Visit all keys in lexicographic order until @p visit returns non-OK. */
 int shrewd_basic_radix_foreach(const shrewd_basic_radix_t *tree,
-                               shrewd_basic_radix_visit_fn visit, void *ctx);
+                               shrewd_basic_radix_visit_fn visit,
+                               void *ctx);
 
 /**
  * Visit every key starting with @p prefix, in lexicographic order; @p visit

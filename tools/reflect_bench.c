@@ -21,49 +21,74 @@
 
 /* A 32-field struct: stresses table scans in find_field/resolve. */
 typedef struct {
-    int32_t f0;  int32_t f1;  int32_t f2;  int32_t f3;
-    int32_t f4;  int32_t f5;  int32_t f6;  int32_t f7;
-    int32_t f8;  int32_t f9;  int32_t f10; int32_t f11;
-    int32_t f12; int32_t f13; int32_t f14; int32_t f15;
-    int32_t f16; int32_t f17; int32_t f18; int32_t f19;
-    int32_t f20; int32_t f21; int32_t f22; int32_t f23;
-    int32_t f24; int32_t f25; int32_t f26; int32_t f27;
-    int32_t f28; int32_t f29; int32_t f30; int32_t f31;
+    int32_t f0;
+    int32_t f1;
+    int32_t f2;
+    int32_t f3;
+    int32_t f4;
+    int32_t f5;
+    int32_t f6;
+    int32_t f7;
+    int32_t f8;
+    int32_t f9;
+    int32_t f10;
+    int32_t f11;
+    int32_t f12;
+    int32_t f13;
+    int32_t f14;
+    int32_t f15;
+    int32_t f16;
+    int32_t f17;
+    int32_t f18;
+    int32_t f19;
+    int32_t f20;
+    int32_t f21;
+    int32_t f22;
+    int32_t f23;
+    int32_t f24;
+    int32_t f25;
+    int32_t f26;
+    int32_t f27;
+    int32_t f28;
+    int32_t f29;
+    int32_t f30;
+    int32_t f31;
 } wide_t;
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(wide_type, wide_t,
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f0),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f1),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f2),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f3),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f4),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f5),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f6),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f7),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f8),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f9),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f10),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f11),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f12),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f13),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f14),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f15),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f16),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f17),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f18),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f19),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f20),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f21),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f22),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f23),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f24),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f25),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f26),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f27),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f28),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f29),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f30),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f31));
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(wide_type,
+                                 wide_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f0),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f1),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f2),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f3),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f4),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f5),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f6),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f7),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f8),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f9),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f10),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f11),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f12),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f13),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f14),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f15),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f16),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f17),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f18),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f19),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f20),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f21),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f22),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f23),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f24),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f25),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f26),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f27),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f28),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f29),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f30),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wide_t, f31));
 
 /* A hub with dynamic arrays: exercises the allocation-heavy walkers. */
 typedef struct {
@@ -73,12 +98,12 @@ typedef struct {
     size_t value_count;
 } hub_t;
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(hub_type, hub_t,
-    SHREWD_BASIC_REFLECT_FIELD_PTR_DARRAY(hub_t, points, point_count,
-                                          shrewd_basic_reflect_int32),
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(
+    hub_type,
+    hub_t,
+    SHREWD_BASIC_REFLECT_FIELD_PTR_DARRAY(hub_t, points, point_count, shrewd_basic_reflect_int32),
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(hub_t, point_count),
-    SHREWD_BASIC_REFLECT_FIELD_DARRAY(hub_t, values, value_count,
-                                      shrewd_basic_reflect_int32),
+    SHREWD_BASIC_REFLECT_FIELD_DARRAY(hub_t, values, value_count, shrewd_basic_reflect_int32),
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(hub_t, value_count));
 
 static double now_ns(void)
@@ -90,7 +115,9 @@ static double now_ns(void)
 
 static void report(const char *what, long iters, double ns)
 {
-    printf("  %-28s %8ld iters  %10.1f ns/op\n", what, iters,
+    printf("  %-28s %8ld iters  %10.1f ns/op\n",
+           what,
+           iters,
            (0 < iters) ? (ns / (double)iters) : 0.0);
 }
 
@@ -128,7 +155,9 @@ static hub_t *hub_build(size_t points, size_t values)
 int main(void)
 {
     printf("reflect_bench: wide_t (32 fields), hub_t (%d point targets, "
-           "%d scalars)\n", 1000, 5000);
+           "%d scalars)\n",
+           1000,
+           5000);
 
     /*
      * Silence the log modules first: measurement loops must not pay for

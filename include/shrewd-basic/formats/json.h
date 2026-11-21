@@ -66,18 +66,18 @@ typedef struct shrewd_basic_json_info shrewd_basic_json_info_t;
  * compact output.
  */
 typedef struct shrewd_basic_json_options {
-    int pretty;               /**< serialize: indented output. */
-    int indent;               /**< serialize: spaces per level (0 = 2). */
-    int max_depth;            /**< parse/serialize: nesting limit (0 = 32). */
-    int allow_comments;       /**< parse: accept // line and /_ block comments. */
-    int allow_trailing_commas;/**< parse: accept [1,] and {"a":1,}. */
-    int allow_nan;            /**< encode: NaN/inf become null (default: error). */
-    int allow_unknown_union;  /**< encode: unknown union tag -> null body. */
-    int strict;               /**< decode: unknown keys and alias conflicts error. */
-    int use_defaults;         /**< decode: missing keys materialize DEFAULT values. */
-    int key_match;            /**< decode: SHREWD_BASIC_JSON_KEY_MATCH_*. */
-    int escape_unicode;       /**< serialize: non-ASCII as \\uXXXX escapes. */
-    int validate_utf8;        /**< parse: reject invalid UTF-8 in strings. */
+    int pretty;                /**< serialize: indented output. */
+    int indent;                /**< serialize: spaces per level (0 = 2). */
+    int max_depth;             /**< parse/serialize: nesting limit (0 = 32). */
+    int allow_comments;        /**< parse: accept // line and /_ block comments. */
+    int allow_trailing_commas; /**< parse: accept [1,] and {"a":1,}. */
+    int allow_nan;             /**< encode: NaN/inf become null (default: error). */
+    int allow_unknown_union;   /**< encode: unknown union tag -> null body. */
+    int strict;                /**< decode: unknown keys and alias conflicts error. */
+    int use_defaults;          /**< decode: missing keys materialize DEFAULT values. */
+    int key_match;             /**< decode: SHREWD_BASIC_JSON_KEY_MATCH_*. */
+    int escape_unicode;        /**< serialize: non-ASCII as \\uXXXX escapes. */
+    int validate_utf8;         /**< parse: reject invalid UTF-8 in strings. */
 } shrewd_basic_json_options_t;
 
 /** Key matching strategies for decode. */
@@ -99,8 +99,7 @@ typedef struct shrewd_basic_json_error {
 /* --- value model ------------------------------------------------------ */
 
 /** Create a null/array/object value (@p kind must be one of those three). */
-int shrewd_basic_json_new(shrewd_basic_json_kind_t kind,
-                          shrewd_basic_json_value_t **out);
+int shrewd_basic_json_new(shrewd_basic_json_kind_t kind, shrewd_basic_json_value_t **out);
 
 /** Create a boolean value. */
 int shrewd_basic_json_new_bool(bool value, shrewd_basic_json_value_t **out);
@@ -118,12 +117,10 @@ int shrewd_basic_json_new_u64(uint64_t value, shrewd_basic_json_value_t **out);
 int shrewd_basic_json_new_f64(double value, shrewd_basic_json_value_t **out);
 
 /** Create a string value (copies @p text; NULL becomes ""). */
-int shrewd_basic_json_new_string(const char *text,
-                                 shrewd_basic_json_value_t **out);
+int shrewd_basic_json_new_string(const char *text, shrewd_basic_json_value_t **out);
 
 /** Create a string value from @p n bytes (copies; no NUL needed). */
-int shrewd_basic_json_new_string_n(const char *text, size_t n,
-                                   shrewd_basic_json_value_t **out);
+int shrewd_basic_json_new_string_n(const char *text, size_t n, shrewd_basic_json_value_t **out);
 
 /** Release a value tree (NULL is accepted). */
 void shrewd_basic_json_value_free(shrewd_basic_json_value_t *value);
@@ -131,23 +128,21 @@ void shrewd_basic_json_value_free(shrewd_basic_json_value_t *value);
 /* --- inspection ------------------------------------------------------- */
 
 /** Kind of @p value (SHREWD_BASIC_JSON_NULL for NULL). */
-shrewd_basic_json_kind_t shrewd_basic_json_kind(
-        const shrewd_basic_json_value_t *value);
+shrewd_basic_json_kind_t shrewd_basic_json_kind(const shrewd_basic_json_value_t *value);
 
 /** Members of an object or elements of an array (0 otherwise). */
 size_t shrewd_basic_json_count(const shrewd_basic_json_value_t *value);
 
 /** Element/member value at @p index, or NULL out of range. */
-shrewd_basic_json_value_t *shrewd_basic_json_at(
-        const shrewd_basic_json_value_t *value, size_t index);
+shrewd_basic_json_value_t *shrewd_basic_json_at(const shrewd_basic_json_value_t *value,
+                                                size_t index);
 
 /** Key of the object member at @p index, or NULL out of range. */
-const char *shrewd_basic_json_key_at(const shrewd_basic_json_value_t *value,
-                                     size_t index);
+const char *shrewd_basic_json_key_at(const shrewd_basic_json_value_t *value, size_t index);
 
 /** First object member named @p key, or NULL (duplicate keys: first wins). */
-shrewd_basic_json_value_t *shrewd_basic_json_get(
-        const shrewd_basic_json_value_t *value, const char *key);
+shrewd_basic_json_value_t *shrewd_basic_json_get(const shrewd_basic_json_value_t *value,
+                                                 const char *key);
 
 /**
  * Typed views. The to_i64/to_u64/to_f64 readers accept any number
@@ -156,14 +151,10 @@ shrewd_basic_json_value_t *shrewd_basic_json_get(
  * out-of-range values. to_string returns the content (NULL unless the
  * value is a string). number_text returns the exact token.
  */
-int shrewd_basic_json_to_bool(const shrewd_basic_json_value_t *value,
-                              bool *out);
-int shrewd_basic_json_to_i64(const shrewd_basic_json_value_t *value,
-                             int64_t *out);
-int shrewd_basic_json_to_u64(const shrewd_basic_json_value_t *value,
-                             uint64_t *out);
-int shrewd_basic_json_to_f64(const shrewd_basic_json_value_t *value,
-                             double *out);
+int shrewd_basic_json_to_bool(const shrewd_basic_json_value_t *value, bool *out);
+int shrewd_basic_json_to_i64(const shrewd_basic_json_value_t *value, int64_t *out);
+int shrewd_basic_json_to_u64(const shrewd_basic_json_value_t *value, uint64_t *out);
+int shrewd_basic_json_to_f64(const shrewd_basic_json_value_t *value, double *out);
 const char *shrewd_basic_json_to_string(const shrewd_basic_json_value_t *value);
 const char *shrewd_basic_json_number_text(const shrewd_basic_json_value_t *value);
 
@@ -174,12 +165,12 @@ const char *shrewd_basic_json_number_text(const shrewd_basic_json_value_t *value
  * object). An existing first member with the key is replaced (its old
  * value is freed).
  */
-int shrewd_basic_json_set(shrewd_basic_json_value_t *object, const char *key,
+int shrewd_basic_json_set(shrewd_basic_json_value_t *object,
+                          const char *key,
                           shrewd_basic_json_value_t *item);
 
 /** Append @p item to @p array (ownership passes to the array). */
-int shrewd_basic_json_append(shrewd_basic_json_value_t *array,
-                             shrewd_basic_json_value_t *item);
+int shrewd_basic_json_append(shrewd_basic_json_value_t *array, shrewd_basic_json_value_t *item);
 
 /** Remove the first object member named @p key (frees its value). */
 int shrewd_basic_json_remove(shrewd_basic_json_value_t *value, const char *key);
@@ -191,7 +182,8 @@ int shrewd_basic_json_remove_at(shrewd_basic_json_value_t *value, size_t index);
  * Replace the array element (or object member) at @p index with @p item,
  * freeing the previous value. Ownership of @p item passes in on success.
  */
-int shrewd_basic_json_replace_at(shrewd_basic_json_value_t *value, size_t index,
+int shrewd_basic_json_replace_at(shrewd_basic_json_value_t *value,
+                                 size_t index,
                                  shrewd_basic_json_value_t *item);
 
 /* --- text I/O --------------------------------------------------------- */
@@ -202,14 +194,14 @@ int shrewd_basic_json_replace_at(shrewd_basic_json_value_t *value, size_t index,
  * text and SHREWD_BASIC_ERR_JSON_DEPTH past the nesting limit; @p error
  * (optional) receives the byte offset and a description.
  */
-int shrewd_basic_json_parse(const char *text, size_t length,
+int shrewd_basic_json_parse(const char *text,
+                            size_t length,
                             shrewd_basic_json_value_t **out,
                             const shrewd_basic_json_options_t *options,
                             shrewd_basic_json_error_t *error);
 
 /** Sink callback for streaming output; return non-zero on I/O failure. */
-typedef int (*shrewd_basic_json_write_fn)(void *ctx, const char *data,
-                                          size_t length);
+typedef int (*shrewd_basic_json_write_fn)(void *ctx, const char *data, size_t length);
 
 /**
  * Serialize @p value through a writer callback (the streaming core:
@@ -217,7 +209,8 @@ typedef int (*shrewd_basic_json_write_fn)(void *ctx, const char *data,
  * wrappers below are conveniences over this.
  */
 int shrewd_basic_json_serialize_to(const shrewd_basic_json_value_t *value,
-                                   shrewd_basic_json_write_fn write, void *ctx,
+                                   shrewd_basic_json_write_fn write,
+                                   void *ctx,
                                    const shrewd_basic_json_options_t *options,
                                    shrewd_basic_json_error_t *error);
 
@@ -225,7 +218,8 @@ int shrewd_basic_json_serialize_to(const shrewd_basic_json_value_t *value,
 int shrewd_basic_json_encode_to(const void *object,
                                 const shrewd_basic_reflect_type_t *type,
                                 const shrewd_basic_json_info_t *info,
-                                shrewd_basic_json_write_fn write, void *ctx,
+                                shrewd_basic_json_write_fn write,
+                                void *ctx,
                                 const shrewd_basic_json_options_t *options,
                                 shrewd_basic_json_error_t *error);
 
@@ -258,13 +252,13 @@ void shrewd_basic_json_text_free(char *text);
 typedef struct shrewd_basic_json_pull shrewd_basic_json_pull_t;
 
 typedef enum shrewd_basic_json_token_kind {
-    SHREWD_BASIC_JSON_TOKEN_END = 0,     /**< No more tokens. */
+    SHREWD_BASIC_JSON_TOKEN_END = 0, /**< No more tokens. */
     SHREWD_BASIC_JSON_TOKEN_OBJECT_BEGIN,
     SHREWD_BASIC_JSON_TOKEN_OBJECT_END,
     SHREWD_BASIC_JSON_TOKEN_ARRAY_BEGIN,
     SHREWD_BASIC_JSON_TOKEN_ARRAY_END,
-    SHREWD_BASIC_JSON_TOKEN_KEY,         /**< @c text = the key. */
-    SHREWD_BASIC_JSON_TOKEN_VALUE        /**< A scalar: see @c value_kind. */
+    SHREWD_BASIC_JSON_TOKEN_KEY,  /**< @c text = the key. */
+    SHREWD_BASIC_JSON_TOKEN_VALUE /**< A scalar: see @c value_kind. */
 } shrewd_basic_json_token_kind_t;
 
 typedef struct shrewd_basic_json_token {
@@ -278,12 +272,12 @@ typedef struct shrewd_basic_json_token {
  * Streaming source: fill up to @p capacity bytes into @p buf; report
  * the count in @p out_read (0 means end of input).
  */
-typedef int (*shrewd_basic_json_read_fn)(void *ctx, char *buf, size_t capacity,
-                                         size_t *out_read);
+typedef int (*shrewd_basic_json_read_fn)(void *ctx, char *buf, size_t capacity, size_t *out_read);
 
 /** Open a pull parser over a complete text buffer. */
 int shrewd_basic_json_pull_open(shrewd_basic_json_pull_t **out,
-                                const char *text, size_t length,
+                                const char *text,
+                                size_t length,
                                 const shrewd_basic_json_options_t *options,
                                 shrewd_basic_json_error_t *error);
 
@@ -302,8 +296,7 @@ int shrewd_basic_json_pull_next(shrewd_basic_json_pull_t *pull,
  * Capture the value that starts at the current position into a new DOM
  * subtree (the parser consumes exactly that value's tokens).
  */
-int shrewd_basic_json_pull_capture(shrewd_basic_json_pull_t *pull,
-                                   shrewd_basic_json_value_t **out);
+int shrewd_basic_json_pull_capture(shrewd_basic_json_pull_t *pull, shrewd_basic_json_value_t **out);
 
 /** Release a pull parser. */
 void shrewd_basic_json_pull_close(shrewd_basic_json_pull_t *pull);
@@ -366,7 +359,9 @@ int shrewd_basic_json_decode_value(const shrewd_basic_json_value_t *value,
                                    shrewd_basic_json_error_t *error);
 
 /** Parse text and decode it into @p object (zeroed first). */
-int shrewd_basic_json_decode(const char *text, size_t length, void *object,
+int shrewd_basic_json_decode(const char *text,
+                             size_t length,
+                             void *object,
                              const shrewd_basic_reflect_type_t *type,
                              const shrewd_basic_json_info_t *info,
                              const shrewd_basic_json_options_t *options,
@@ -379,7 +374,8 @@ int shrewd_basic_json_decode(const char *text, size_t length, void *object,
  * be NULL) supplies the policy so ops->destroy hooks can release their
  * custom pointer targets.
  */
-int shrewd_basic_json_free(void *object, const shrewd_basic_reflect_type_t *type,
+int shrewd_basic_json_free(void *object,
+                           const shrewd_basic_reflect_type_t *type,
                            const shrewd_basic_json_info_t *info);
 
 /* --- policy layer (optional, per-type) ------------------------------- */
@@ -402,13 +398,14 @@ int shrewd_basic_json_free(void *object, const shrewd_basic_reflect_type_t *type
 #define SHREWD_BASIC_JSON_F_REQUIRED ((uint32_t)2u)   /**< decode: missing key errors. */
 #define SHREWD_BASIC_JSON_F_HIDDEN ((uint32_t)4u)     /**< never encoded or decoded. */
 #define SHREWD_BASIC_JSON_F_RANGE ((uint32_t)8u)      /**< value must sit in [min, max]. */
-#define SHREWD_BASIC_JSON_F_BORROWED ((uint32_t)16u)  /**< pointer is app-owned: never decoded or freed. */
+#define SHREWD_BASIC_JSON_F_BORROWED                                                               \
+    ((uint32_t)16u) /**< pointer is app-owned: never decoded or freed. */
 
 /** How a DEFAULT row stores its value. */
-#define SHREWD_BASIC_JSON_DEF_NONE 0   /**< No default declared. */
-#define SHREWD_BASIC_JSON_DEF_NUM 1    /**< Numeric (def_u bits + def_d value). */
-#define SHREWD_BASIC_JSON_DEF_STR 2    /**< String literal (def_s). */
-#define SHREWD_BASIC_JSON_DEF_JSON 3   /**< JSON text (def_s), any shape. */
+#define SHREWD_BASIC_JSON_DEF_NONE 0 /**< No default declared. */
+#define SHREWD_BASIC_JSON_DEF_NUM 1  /**< Numeric (def_u bits + def_d value). */
+#define SHREWD_BASIC_JSON_DEF_STR 2  /**< String literal (def_s). */
+#define SHREWD_BASIC_JSON_DEF_JSON 3 /**< JSON text (def_s), any shape. */
 
 /**
  * Application callbacks for one field (JSON-flavored counterpart of the
@@ -430,21 +427,21 @@ typedef struct shrewd_basic_json_ops {
 
 /** One merged policy view of a field (also the json_keys() callback unit). */
 typedef struct shrewd_basic_json_key_info {
-    const char *field;          /**< Member name. */
-    const char *const *keys;    /**< Accepted keys, canonical first. */
-    size_t key_count;           /**< Length of @c keys (>= 1). */
-    uint32_t flags;             /**< SHREWD_BASIC_JSON_F_*. */
-    double min;                 /**< RANGE bounds (with F_RANGE). */
+    const char *field;       /**< Member name. */
+    const char *const *keys; /**< Accepted keys, canonical first. */
+    size_t key_count;        /**< Length of @c keys (>= 1). */
+    uint32_t flags;          /**< SHREWD_BASIC_JSON_F_*. */
+    double min;              /**< RANGE bounds (with F_RANGE). */
     double max;
     const shrewd_basic_json_ops_t *ops; /**< Custom hooks, or NULL. */
-    int elem_ops;               /**< The hooks apply per element (arrays). */
-    int union_style;            /**< SHREWD_BASIC_JSON_UNION_*. */
-    const char *format;         /**< Schema "format" annotation, or NULL. */
-    const char *pattern;        /**< Schema "pattern" annotation, or NULL. */
-    int def_kind;               /**< SHREWD_BASIC_JSON_DEF_*. */
-    uint64_t def_u;             /**< DEF_NUM: integer bit pattern. */
-    double def_d;               /**< DEF_NUM: floating value. */
-    const char *def_s;          /**< DEF_STR: the literal. */
+    int elem_ops;                       /**< The hooks apply per element (arrays). */
+    int union_style;                    /**< SHREWD_BASIC_JSON_UNION_*. */
+    const char *format;                 /**< Schema "format" annotation, or NULL. */
+    const char *pattern;                /**< Schema "pattern" annotation, or NULL. */
+    int def_kind;                       /**< SHREWD_BASIC_JSON_DEF_*. */
+    uint64_t def_u;                     /**< DEF_NUM: integer bit pattern. */
+    double def_d;                       /**< DEF_NUM: floating value. */
+    const char *def_s;                  /**< DEF_STR: the literal. */
 } shrewd_basic_json_key_info_t;
 
 /** Per-field policy row (produced by the macros below). */
@@ -480,58 +477,68 @@ struct shrewd_basic_json_info {
  * import with SHREWD_BASIC_REFLECT_TYPE_DECLARE-style extern (the
  * object is extern like the reflect descriptors).
  */
-#define SHREWD_BASIC_JSON_DEFINE(var, type_ref, ...)                           \
-    extern const shrewd_basic_json_info_t var;                                 \
-    static const shrewd_basic_json_field_policy_t var##_policies[] = {         \
-        __VA_ARGS__                                                            \
-    };                                                                         \
-    const shrewd_basic_json_info_t var = {                                     \
-        .type = &(type_ref),                                                   \
-        .fields = var##_policies,                                              \
-        .field_count = sizeof(var##_policies)                                  \
-                / sizeof(var##_policies[0])                                    \
-    }
+#define SHREWD_BASIC_JSON_DEFINE(var, type_ref, ...)                                               \
+    extern const shrewd_basic_json_info_t var;                                                     \
+    static const shrewd_basic_json_field_policy_t var##_policies[] = {__VA_ARGS__};                \
+    const shrewd_basic_json_info_t var                                                             \
+        = {.type = &(type_ref),                                                                    \
+           .fields = var##_policies,                                                               \
+           .field_count = sizeof(var##_policies) / sizeof(var##_policies[0])}
 
 /** Import a policy defined by SHREWD_BASIC_JSON_DEFINE() elsewhere. */
-#define SHREWD_BASIC_JSON_DECLARE(var)                                         \
-    extern const shrewd_basic_json_info_t var
+#define SHREWD_BASIC_JSON_DECLARE(var) extern const shrewd_basic_json_info_t var
 
 /*
  * Key aliases: the first name is the canonical key (encode emits it),
  * the rest are accepted on decode. Later KEY rows for the same member
  * replace earlier ones.
  */
-#define SHREWD_BASIC_JSON_KEY(member, ...)                                      \
-    {                                                                          \
-        .field = #member,                                                       \
-        .keys = (const char *const[]){ __VA_ARGS__, NULL },                    \
-        .key_count = (sizeof((const char *const[]){ __VA_ARGS__, NULL })       \
-                      / sizeof(const char *)) - 1,                             \
-        .flags = 0, .min = 0.0, .max = 0.0,                                    \
-        .ops = NULL, .elem_ops = 0, .union_style = 0, .has_union_style = 0, \
-        .format = NULL, .pattern = NULL                    \
-    }
+#define SHREWD_BASIC_JSON_KEY(member, ...)                                                         \
+    {.field = #member,                                                                             \
+     .keys = (const char *const[]){__VA_ARGS__, NULL},                                             \
+     .key_count = (sizeof((const char *const[]){__VA_ARGS__, NULL}) / sizeof(const char *)) - 1,   \
+     .flags = 0,                                                                                   \
+     .min = 0.0,                                                                                   \
+     .max = 0.0,                                                                                   \
+     .ops = NULL,                                                                                  \
+     .elem_ops = 0,                                                                                \
+     .union_style = 0,                                                                             \
+     .has_union_style = 0,                                                                         \
+     .format = NULL,                                                                               \
+     .pattern = NULL}
 
 /** Skip a zero-valued field on encode (false/0/""/NULL/empty containers). */
-#define SHREWD_BASIC_JSON_OMIT_EMPTY(member)                                    \
-    {                                                                          \
-        .field = #member, .keys = NULL, .key_count = 0,                         \
-        .flags = SHREWD_BASIC_JSON_F_OMIT_EMPTY, .min = 0.0, .max = 0.0,       \
-        .ops = NULL, .elem_ops = 0, .union_style = 0, .has_union_style = 0, \
-        .format = NULL, .pattern = NULL                    \
-    }
+#define SHREWD_BASIC_JSON_OMIT_EMPTY(member)                                                       \
+    {.field = #member,                                                                             \
+     .keys = NULL,                                                                                 \
+     .key_count = 0,                                                                               \
+     .flags = SHREWD_BASIC_JSON_F_OMIT_EMPTY,                                                      \
+     .min = 0.0,                                                                                   \
+     .max = 0.0,                                                                                   \
+     .ops = NULL,                                                                                  \
+     .elem_ops = 0,                                                                                \
+     .union_style = 0,                                                                             \
+     .has_union_style = 0,                                                                         \
+     .format = NULL,                                                                               \
+     .pattern = NULL}
 
 /**
  * The key must be present on decode - or materialized from a DEFAULT row
  * when use_defaults is on.
  */
-#define SHREWD_BASIC_JSON_REQUIRED(member)                                      \
-    {                                                                          \
-        .field = #member, .keys = NULL, .key_count = 0,                         \
-        .flags = SHREWD_BASIC_JSON_F_REQUIRED, .min = 0.0, .max = 0.0,         \
-        .ops = NULL, .elem_ops = 0, .union_style = 0, .has_union_style = 0, \
-        .format = NULL, .pattern = NULL                    \
-    }
+#define SHREWD_BASIC_JSON_REQUIRED(member)                                                         \
+    {.field = #member,                                                                             \
+     .keys = NULL,                                                                                 \
+     .key_count = 0,                                                                               \
+     .flags = SHREWD_BASIC_JSON_F_REQUIRED,                                                        \
+     .min = 0.0,                                                                                   \
+     .max = 0.0,                                                                                   \
+     .ops = NULL,                                                                                  \
+     .elem_ops = 0,                                                                                \
+     .union_style = 0,                                                                             \
+     .has_union_style = 0,                                                                         \
+     .format = NULL,                                                                               \
+     .pattern = NULL}
 
 /**
  * Default value materialized when the key is missing and the decode
@@ -540,30 +547,46 @@ struct shrewd_basic_json_info {
  * only - struct/array defaults use SHREWD_BASIC_JSON_DEFAULT_JSON().
  * A materialized default satisfies REQUIRED.
  */
-#define SHREWD_BASIC_JSON_DEFAULT(member, value)                                \
-    {                                                                          \
-        .field = #member, .keys = NULL, .key_count = 0, .flags = 0,             \
-        .min = 0.0, .max = 0.0, .ops = NULL, .elem_ops = 0,                     \
-        .union_style = 0, .has_union_style = 0,                                 \
-        .format = NULL, .pattern = NULL,                                        \
-        .def_kind = SHREWD_BASIC_JSON_DEF_NUM,                                  \
-        .def_u = (uint64_t)(value), .def_d = (double)(value), .def_s = NULL     \
-    }
+#define SHREWD_BASIC_JSON_DEFAULT(member, value)                                                   \
+    {.field = #member,                                                                             \
+     .keys = NULL,                                                                                 \
+     .key_count = 0,                                                                               \
+     .flags = 0,                                                                                   \
+     .min = 0.0,                                                                                   \
+     .max = 0.0,                                                                                   \
+     .ops = NULL,                                                                                  \
+     .elem_ops = 0,                                                                                \
+     .union_style = 0,                                                                             \
+     .has_union_style = 0,                                                                         \
+     .format = NULL,                                                                               \
+     .pattern = NULL,                                                                              \
+     .def_kind = SHREWD_BASIC_JSON_DEF_NUM,                                                        \
+     .def_u = (uint64_t)(value),                                                                   \
+     .def_d = (double)(value),                                                                     \
+     .def_s = NULL}
 
 /**
  * String default (a C literal) materialized on missing keys under
  * use_defaults: decode allocates and copies the text, so json_free
  * releases it like any decoded string.
  */
-#define SHREWD_BASIC_JSON_DEFAULT_STR(member, text)                             \
-    {                                                                          \
-        .field = #member, .keys = NULL, .key_count = 0, .flags = 0,             \
-        .min = 0.0, .max = 0.0, .ops = NULL, .elem_ops = 0,                     \
-        .union_style = 0, .has_union_style = 0,                                 \
-        .format = NULL, .pattern = NULL,                                        \
-        .def_kind = SHREWD_BASIC_JSON_DEF_STR,                                  \
-        .def_u = 0, .def_d = 0.0, .def_s = (text)                               \
-    }
+#define SHREWD_BASIC_JSON_DEFAULT_STR(member, text)                                                \
+    {.field = #member,                                                                             \
+     .keys = NULL,                                                                                 \
+     .key_count = 0,                                                                               \
+     .flags = 0,                                                                                   \
+     .min = 0.0,                                                                                   \
+     .max = 0.0,                                                                                   \
+     .ops = NULL,                                                                                  \
+     .elem_ops = 0,                                                                                \
+     .union_style = 0,                                                                             \
+     .has_union_style = 0,                                                                         \
+     .format = NULL,                                                                               \
+     .pattern = NULL,                                                                              \
+     .def_kind = SHREWD_BASIC_JSON_DEF_STR,                                                        \
+     .def_u = 0,                                                                                   \
+     .def_d = 0.0,                                                                                 \
+     .def_s = (text)}
 
 /**
  * Default as raw JSON text (a C literal), materialized on missing keys
@@ -574,15 +597,23 @@ struct shrewd_basic_json_info {
  * Flexible-tail (FAM) fields are skipped (the caller sizes the root for
  * the JSON that is present, not for defaults).
  */
-#define SHREWD_BASIC_JSON_DEFAULT_JSON(member, text)                            \
-    {                                                                          \
-        .field = #member, .keys = NULL, .key_count = 0, .flags = 0,             \
-        .min = 0.0, .max = 0.0, .ops = NULL, .elem_ops = 0,                     \
-        .union_style = 0, .has_union_style = 0,                                 \
-        .format = NULL, .pattern = NULL,                                        \
-        .def_kind = SHREWD_BASIC_JSON_DEF_JSON,                                 \
-        .def_u = 0, .def_d = 0.0, .def_s = (text)                               \
-    }
+#define SHREWD_BASIC_JSON_DEFAULT_JSON(member, text)                                               \
+    {.field = #member,                                                                             \
+     .keys = NULL,                                                                                 \
+     .key_count = 0,                                                                               \
+     .flags = 0,                                                                                   \
+     .min = 0.0,                                                                                   \
+     .max = 0.0,                                                                                   \
+     .ops = NULL,                                                                                  \
+     .elem_ops = 0,                                                                                \
+     .union_style = 0,                                                                             \
+     .has_union_style = 0,                                                                         \
+     .format = NULL,                                                                               \
+     .pattern = NULL,                                                                              \
+     .def_kind = SHREWD_BASIC_JSON_DEF_JSON,                                                       \
+     .def_u = 0,                                                                                   \
+     .def_d = 0.0,                                                                                 \
+     .def_s = (text)}
 
 /**
  * The pointer field is application-owned: decode never writes it and
@@ -590,76 +621,122 @@ struct shrewd_basic_json_info {
  * the target first) and hand it whatever lifetime you like - a literal,
  * a borrowed buffer, your own allocation.
  */
-#define SHREWD_BASIC_JSON_BORROWED(member)                                      \
-    {                                                                          \
-        .field = #member, .keys = NULL, .key_count = 0,                         \
-        .flags = SHREWD_BASIC_JSON_F_BORROWED, .min = 0.0, .max = 0.0,         \
-        .ops = NULL, .elem_ops = 0, .union_style = 0, .has_union_style = 0, \
-        .format = NULL, .pattern = NULL                    \
-    }
+#define SHREWD_BASIC_JSON_BORROWED(member)                                                         \
+    {.field = #member,                                                                             \
+     .keys = NULL,                                                                                 \
+     .key_count = 0,                                                                               \
+     .flags = SHREWD_BASIC_JSON_F_BORROWED,                                                        \
+     .min = 0.0,                                                                                   \
+     .max = 0.0,                                                                                   \
+     .ops = NULL,                                                                                  \
+     .elem_ops = 0,                                                                                \
+     .union_style = 0,                                                                             \
+     .has_union_style = 0,                                                                         \
+     .format = NULL,                                                                               \
+     .pattern = NULL}
 
 /** The field never appears in JSON (neither direction). */
-#define SHREWD_BASIC_JSON_HIDDEN(member)                                        \
-    {                                                                          \
-        .field = #member, .keys = NULL, .key_count = 0,                         \
-        .flags = SHREWD_BASIC_JSON_F_HIDDEN, .min = 0.0, .max = 0.0,           \
-        .ops = NULL, .elem_ops = 0, .union_style = 0, .has_union_style = 0, \
-        .format = NULL, .pattern = NULL                    \
-    }
+#define SHREWD_BASIC_JSON_HIDDEN(member)                                                           \
+    {.field = #member,                                                                             \
+     .keys = NULL,                                                                                 \
+     .key_count = 0,                                                                               \
+     .flags = SHREWD_BASIC_JSON_F_HIDDEN,                                                          \
+     .min = 0.0,                                                                                   \
+     .max = 0.0,                                                                                   \
+     .ops = NULL,                                                                                  \
+     .elem_ops = 0,                                                                                \
+     .union_style = 0,                                                                             \
+     .has_union_style = 0,                                                                         \
+     .format = NULL,                                                                               \
+     .pattern = NULL}
 
 /** Numeric bounds checked on encode and decode. */
-#define SHREWD_BASIC_JSON_RANGE(member, lo, hi)                                 \
-    {                                                                          \
-        .field = #member, .keys = NULL, .key_count = 0,                         \
-        .flags = SHREWD_BASIC_JSON_F_RANGE, .min = (double)(lo),               \
-        .max = (double)(hi),                                                   \
-        .ops = NULL, .elem_ops = 0, .union_style = 0, .has_union_style = 0, \
-        .format = NULL, .pattern = NULL                    \
-    }
+#define SHREWD_BASIC_JSON_RANGE(member, lo, hi)                                                    \
+    {.field = #member,                                                                             \
+     .keys = NULL,                                                                                 \
+     .key_count = 0,                                                                               \
+     .flags = SHREWD_BASIC_JSON_F_RANGE,                                                           \
+     .min = (double)(lo),                                                                          \
+     .max = (double)(hi),                                                                          \
+     .ops = NULL,                                                                                  \
+     .elem_ops = 0,                                                                                \
+     .union_style = 0,                                                                             \
+     .has_union_style = 0,                                                                         \
+     .format = NULL,                                                                               \
+     .pattern = NULL}
 
 /** Custom encode/decode/check hooks for one field. */
-#define SHREWD_BASIC_JSON_OPS(member, ops_ref)                                  \
-    {                                                                          \
-        .field = #member, .keys = NULL, .key_count = 0, .flags = 0,             \
-        .min = 0.0, .max = 0.0, .ops = &(ops_ref), .elem_ops = 0,                 \
-        .union_style = 0, .has_union_style = 0                                 \
-    }
+#define SHREWD_BASIC_JSON_OPS(member, ops_ref)                                                     \
+    {.field = #member,                                                                             \
+     .keys = NULL,                                                                                 \
+     .key_count = 0,                                                                               \
+     .flags = 0,                                                                                   \
+     .min = 0.0,                                                                                   \
+     .max = 0.0,                                                                                   \
+     .ops = &(ops_ref),                                                                            \
+     .elem_ops = 0,                                                                                \
+     .union_style = 0,                                                                             \
+     .has_union_style = 0}
 
 /** Schema "format" annotation (e.g. "date-time"); annotation only. */
-#define SHREWD_BASIC_JSON_FORMAT(member, text)                              \
-    {                                                                          \
-        .field = #member, .keys = NULL, .key_count = 0, .flags = 0,             \
-        .min = 0.0, .max = 0.0, .ops = NULL, .elem_ops = 0,                     \
-        .union_style = 0, .has_union_style = 0,                                \
-        .format = (text), .pattern = NULL                                      \
-    }
+#define SHREWD_BASIC_JSON_FORMAT(member, text)                                                     \
+    {.field = #member,                                                                             \
+     .keys = NULL,                                                                                 \
+     .key_count = 0,                                                                               \
+     .flags = 0,                                                                                   \
+     .min = 0.0,                                                                                   \
+     .max = 0.0,                                                                                   \
+     .ops = NULL,                                                                                  \
+     .elem_ops = 0,                                                                                \
+     .union_style = 0,                                                                             \
+     .has_union_style = 0,                                                                         \
+     .format = (text),                                                                             \
+     .pattern = NULL}
 
 /** Schema "pattern" annotation; annotation only (no regex engine). */
-#define SHREWD_BASIC_JSON_PATTERN(member, text)                             \
-    {                                                                          \
-        .field = #member, .keys = NULL, .key_count = 0, .flags = 0,             \
-        .min = 0.0, .max = 0.0, .ops = NULL, .elem_ops = 0,                     \
-        .union_style = 0, .has_union_style = 0,                                \
-        .format = NULL, .pattern = (text)                                      \
-    }
+#define SHREWD_BASIC_JSON_PATTERN(member, text)                                                    \
+    {.field = #member,                                                                             \
+     .keys = NULL,                                                                                 \
+     .key_count = 0,                                                                               \
+     .flags = 0,                                                                                   \
+     .min = 0.0,                                                                                   \
+     .max = 0.0,                                                                                   \
+     .ops = NULL,                                                                                  \
+     .elem_ops = 0,                                                                                \
+     .union_style = 0,                                                                             \
+     .has_union_style = 0,                                                                         \
+     .format = NULL,                                                                               \
+     .pattern = (text)}
 
 /** Custom hooks applied PER ELEMENT of an array-shaped field. */
-#define SHREWD_BASIC_JSON_OPS_ELEM(member, ops_ref)                            \
-    {                                                                          \
-        .field = #member, .keys = NULL, .key_count = 0, .flags = 0,             \
-        .min = 0.0, .max = 0.0, .ops = &(ops_ref), .elem_ops = 1,               \
-        .union_style = 0, .has_union_style = 0,                        \
-        .format = NULL, .pattern = NULL                                 \
-    }
+#define SHREWD_BASIC_JSON_OPS_ELEM(member, ops_ref)                                                \
+    {.field = #member,                                                                             \
+     .keys = NULL,                                                                                 \
+     .key_count = 0,                                                                               \
+     .flags = 0,                                                                                   \
+     .min = 0.0,                                                                                   \
+     .max = 0.0,                                                                                   \
+     .ops = &(ops_ref),                                                                            \
+     .elem_ops = 1,                                                                                \
+     .union_style = 0,                                                                             \
+     .has_union_style = 0,                                                                         \
+     .format = NULL,                                                                               \
+     .pattern = NULL}
 
 /** Pick the union body style for one union field. */
-#define SHREWD_BASIC_JSON_UNION_STYLE(member, style)                            \
-    {                                                                          \
-        .field = #member, .keys = NULL, .key_count = 0, .flags = 0,             \
-        .min = 0.0, .max = 0.0, .ops = NULL, .elem_ops = 0,                       \
-        .union_style = (int)(style), .has_union_style = 1,          \
-        .format = NULL, .pattern = NULL                      \
-    }
+#define SHREWD_BASIC_JSON_UNION_STYLE(member, style)                                               \
+    {.field = #member,                                                                             \
+     .keys = NULL,                                                                                 \
+     .key_count = 0,                                                                               \
+     .flags = 0,                                                                                   \
+     .min = 0.0,                                                                                   \
+     .max = 0.0,                                                                                   \
+     .ops = NULL,                                                                                  \
+     .elem_ops = 0,                                                                                \
+     .union_style = (int)(style),                                                                  \
+     .has_union_style = 1,                                                                         \
+     .format = NULL,                                                                               \
+     .pattern = NULL}
 
 /**
  * Query a value by RFC 6901 JSON Pointer ("/a/b/0"; "" selects the root,
@@ -686,7 +763,8 @@ int shrewd_basic_json_pointer_set(shrewd_basic_json_value_t *root,
  * rules of shrewd_basic_json_decode_value() apply to that subtree).
  */
 int shrewd_basic_json_decode_pointer(const shrewd_basic_json_value_t *value,
-                                     const char *pointer, void *object,
+                                     const char *pointer,
+                                     void *object,
                                      const shrewd_basic_reflect_type_t *type,
                                      const shrewd_basic_json_info_t *info,
                                      const shrewd_basic_json_options_t *options,
@@ -725,8 +803,7 @@ int shrewd_basic_json_value_size(const shrewd_basic_json_value_t *value,
                                  size_t *out_size);
 
 /** Callback of shrewd_basic_json_keys(); return non-zero to stop early. */
-typedef int (*shrewd_basic_json_keys_fn)(void *ctx,
-                                         const shrewd_basic_json_key_info_t *key);
+typedef int (*shrewd_basic_json_keys_fn)(void *ctx, const shrewd_basic_json_key_info_t *key);
 
 /**
  * Enumerate the JSON keys of a type in descriptor order (the schema
@@ -735,7 +812,8 @@ typedef int (*shrewd_basic_json_keys_fn)(void *ctx,
  */
 int shrewd_basic_json_keys(const shrewd_basic_reflect_type_t *type,
                            const shrewd_basic_json_info_t *info,
-                           shrewd_basic_json_keys_fn fn, void *ctx);
+                           shrewd_basic_json_keys_fn fn,
+                           void *ctx);
 
 #ifdef __cplusplus
 }

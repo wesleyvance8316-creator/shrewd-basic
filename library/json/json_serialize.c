@@ -17,21 +17,18 @@ SHREWD_BASIC_LOG_MODULE_DECLARE(shrewd_basic_json_log);
  * with options.escape_unicode - all non-ASCII as \uXXXX).
  */
 
-static int json_out(shrewd_basic_json_write_fn write, void *ctx,
-                    const char *text, size_t length)
+static int json_out(shrewd_basic_json_write_fn write, void *ctx, const char *text, size_t length)
 {
     return write(ctx, text, length);
 }
 
-static int json_out_str(shrewd_basic_json_write_fn write, void *ctx,
-                        const char *text)
+static int json_out_str(shrewd_basic_json_write_fn write, void *ctx, const char *text)
 {
     return write(ctx, text, strlen(text));
 }
 
 /* Emit one code point as \uXXXX (or a surrogate pair past the BMP). */
-static int json_out_u_escape(shrewd_basic_json_write_fn write, void *ctx,
-                             unsigned code)
+static int json_out_u_escape(shrewd_basic_json_write_fn write, void *ctx, unsigned code)
 {
     char text[16] = {0};
     if (0x10000u > code) {
@@ -39,17 +36,18 @@ static int json_out_u_escape(shrewd_basic_json_write_fn write, void *ctx,
         return json_out_str(write, ctx, text);
     }
     code -= 0x10000u;
-    (void)snprintf(text, sizeof(text), "\\u%04x\\u%04x",
-                   0xd800u + (code >> 10), 0xdc00u + (code & 0x3ffu));
+    (void)snprintf(
+        text, sizeof(text), "\\u%04x\\u%04x", 0xd800u + (code >> 10), 0xdc00u + (code & 0x3ffu));
     return json_out_str(write, ctx, text);
 }
 
-static int json_write_string(shrewd_basic_json_write_fn write, void *ctx,
-                             const char *text, int escape_unicode)
+static int
+json_write_string(shrewd_basic_json_write_fn write, void *ctx, const char *text, int escape_unicode)
 {
     int status = json_out_str(write, ctx, "\"");
     for (const unsigned char *p = (const unsigned char *)text;
-         (SHREWD_BASIC_ERR_OK == status) && ('\0' != *p); ++p) {
+         (SHREWD_BASIC_ERR_OK == status) && ('\0' != *p);
+         ++p) {
         switch (*p) {
         case '"':
             status = json_out_str(write, ctx, "\\\"");
@@ -75,21 +73,18 @@ static int json_write_string(shrewd_basic_json_write_fn write, void *ctx,
         default:
             if (0x20 > *p) {
                 char escape[8] = {0};
-                (void)snprintf(escape, sizeof(escape), "\\u%04x",
-                               (unsigned int)*p);
+                (void)snprintf(escape, sizeof(escape), "\\u%04x", (unsigned int)*p);
                 status = json_out_str(write, ctx, escape);
             } else if ((0 != escape_unicode) && (0x7f < *p)) {
                 unsigned code = 0;
-                size_t used = json_utf8_decode(p,
-                        json_strn_len((const char *)p, 4), &code);
+                size_t used = json_utf8_decode(p, json_strn_len((const char *)p, 4), &code);
                 if (0 < used) {
                     status = json_out_u_escape(write, ctx, code);
                     p += used - 1;
                 } else {
                     /* Invalid sequence: escape the raw byte. */
                     char escape[8] = {0};
-                    (void)snprintf(escape, sizeof(escape), "\\u%04x",
-                                   (unsigned int)*p);
+                    (void)snprintf(escape, sizeof(escape), "\\u%04x", (unsigned int)*p);
                     status = json_out_str(write, ctx, escape);
                 }
             } else {
@@ -104,17 +99,18 @@ static int json_write_string(shrewd_basic_json_write_fn write, void *ctx,
     return status;
 }
 
-static int json_write_value(shrewd_basic_json_write_fn write, void *ctx,
+static int json_write_value(shrewd_basic_json_write_fn write,
+                            void *ctx,
                             const shrewd_basic_json_value_t *value,
                             const shrewd_basic_json_options_t *options,
-                            shrewd_basic_json_error_t *error, int depth)
+                            shrewd_basic_json_error_t *error,
+                            int depth)
 {
     int status = SHREWD_BASIC_ERR_OK;
     if (depth > json_opt_depth(options)) {
         if (NULL != error) {
             error->offset = 0;
-            (void)snprintf(error->message, sizeof(error->message),
-                           "nesting too deep");
+            (void)snprintf(error->message, sizeof(error->message), "nesting too deep");
         }
         return SHREWD_BASIC_ERR_JSON_DEPTH;
     }
@@ -126,8 +122,8 @@ static int json_write_value(shrewd_basic_json_write_fn write, void *ctx,
     case SHREWD_BASIC_JSON_NUMBER:
         return json_out_str(write, ctx, value->u.number.raw);
     case SHREWD_BASIC_JSON_STRING:
-        return json_write_string(write, ctx, value->u.string,
-                                 (NULL != options) ? options->escape_unicode : 0);
+        return json_write_string(
+            write, ctx, value->u.string, (NULL != options) ? options->escape_unicode : 0);
     default:
         break;
     }
@@ -143,30 +139,27 @@ static int json_write_value(shrewd_basic_json_write_fn write, void *ctx,
             }
             if ((SHREWD_BASIC_ERR_OK == status) && (0 != pretty)) {
                 status = json_out_str(write, ctx, "\n");
-                for (int s = 0; (SHREWD_BASIC_ERR_OK == status)
-                        && (s < (depth * indent)); ++s) {
+                for (int s = 0; (SHREWD_BASIC_ERR_OK == status) && (s < (depth * indent)); ++s) {
                     status = json_out_str(write, ctx, " ");
                 }
             }
             if ((SHREWD_BASIC_ERR_OK == status) && (0 != is_object)) {
-                status = json_write_string(write, ctx,
+                status = json_write_string(write,
+                                           ctx,
                                            shrewd_basic_json_key_at(value, i),
-                                           (NULL != options)
-                                                   ? options->escape_unicode : 0);
+                                           (NULL != options) ? options->escape_unicode : 0);
                 if (SHREWD_BASIC_ERR_OK == status) {
                     status = json_out_str(write, ctx, pretty ? ": " : ":");
                 }
             }
             if (SHREWD_BASIC_ERR_OK == status) {
-                status = json_write_value(write, ctx,
-                                          shrewd_basic_json_at(value, i),
-                                          options, error, depth + 1);
+                status = json_write_value(
+                    write, ctx, shrewd_basic_json_at(value, i), options, error, depth + 1);
             }
         }
         if ((SHREWD_BASIC_ERR_OK == status) && (0 != pretty) && (0 < count)) {
             status = json_out_str(write, ctx, "\n");
-            for (int s = 0; (SHREWD_BASIC_ERR_OK == status)
-                    && (s < ((depth - 1) * indent)); ++s) {
+            for (int s = 0; (SHREWD_BASIC_ERR_OK == status) && (s < ((depth - 1) * indent)); ++s) {
                 status = json_out_str(write, ctx, " ");
             }
         }
@@ -178,13 +171,16 @@ static int json_write_value(shrewd_basic_json_write_fn write, void *ctx,
 }
 
 int shrewd_basic_json_serialize_to(const shrewd_basic_json_value_t *value,
-                                   shrewd_basic_json_write_fn write, void *ctx,
+                                   shrewd_basic_json_write_fn write,
+                                   void *ctx,
                                    const shrewd_basic_json_options_t *options,
                                    shrewd_basic_json_error_t *error)
 {
     if ((NULL == value) || (NULL == write)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_json_log,
-                         "serialize", "serialize_to: value or write is NULL\n");
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_json_log,
+                         "serialize",
+                         "serialize_to: value or write is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     if (NULL != error) {
@@ -216,8 +212,10 @@ int shrewd_basic_json_serialize(const shrewd_basic_json_value_t *value,
     json_buf_t buf = {0};
     int status = 0;
     if ((NULL == value) || (NULL == out_text)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_json_log,
-                         "serialize", "serialize: value or out_text is NULL\n");
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_json_log,
+                         "serialize",
+                         "serialize: value or out_text is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     *out_text = NULL;
@@ -231,8 +229,11 @@ int shrewd_basic_json_serialize(const shrewd_basic_json_value_t *value,
         return status;
     }
     *out_text = buf.data; /* ownership moves to the caller */
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_json_log,
-                     "serialize", "serialize ok (%zu bytes)\n", buf.len);
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE,
+                     shrewd_basic_json_log,
+                     "serialize",
+                     "serialize ok (%zu bytes)\n",
+                     buf.len);
     return SHREWD_BASIC_ERR_OK;
 }
 

@@ -67,7 +67,8 @@ bool shrewd_basic_queue_empty(const shrewd_basic_queue_t *queue);
 
 /** Visit payloads front to back until @p visit returns non-OK. */
 int shrewd_basic_queue_foreach(const shrewd_basic_queue_t *queue,
-                               shrewd_basic_queue_visit_fn visit, void *ctx);
+                               shrewd_basic_queue_visit_fn visit,
+                               void *ctx);
 
 #ifdef __cplusplus
 }

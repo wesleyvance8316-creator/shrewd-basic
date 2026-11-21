@@ -25,16 +25,16 @@ extern "C" {
 
 /** Allocation function macros; override to plug in a custom allocator. */
 #ifndef SHREWD_BASIC_MALLOC
-#define SHREWD_BASIC_MALLOC  malloc
+#define SHREWD_BASIC_MALLOC malloc
 #endif
 #ifndef SHREWD_BASIC_CALLOC
-#define SHREWD_BASIC_CALLOC  calloc
+#define SHREWD_BASIC_CALLOC calloc
 #endif
 #ifndef SHREWD_BASIC_REALLOC
 #define SHREWD_BASIC_REALLOC realloc
 #endif
 #ifndef SHREWD_BASIC_FREE
-#define SHREWD_BASIC_FREE    free
+#define SHREWD_BASIC_FREE free
 #endif
 
 /**

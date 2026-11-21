@@ -55,8 +55,7 @@ int main(void)
     shrewd_basic_log_module_t *found = NULL;
     status = shrewd_basic_log_module_find("demo", &found);
     print_status("find(\"demo\")", status);
-    printf("  find() sees the DEFINE module: %s\n",
-           (found == g_demo) ? "yes" : "no");
+    printf("  find() sees the DEFINE module: %s\n", (found == g_demo) ? "yes" : "no");
     fflush(stdout);
     shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_FATAL, g_demo, "level", "FATAL message\n");
     shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, g_demo, "level", "ERROR message\n");
@@ -66,8 +65,8 @@ int main(void)
     shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, g_demo, "level", "TRACE message\n");
 
     banner("2. level mask filtering: only ERROR | WARN pass");
-    status = shrewd_basic_log_module_set_level(g_demo,
-                SHREWD_BASIC_LOG_LEVEL_ERROR | SHREWD_BASIC_LOG_LEVEL_WARN);
+    status = shrewd_basic_log_module_set_level(
+        g_demo, SHREWD_BASIC_LOG_LEVEL_ERROR | SHREWD_BASIC_LOG_LEVEL_WARN);
     print_status("set_level(ERROR | WARN)", status);
     shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_FATAL, g_demo, "filter", "FATAL is masked out\n");
     shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, g_demo, "filter", "ERROR passes\n");
@@ -83,16 +82,16 @@ int main(void)
     for (size_t i = 0; i < sizeof(data); ++i) {
         data[i] = (unsigned char)(i + 1);
     }
-    shrewd_basic_log_hex(SHREWD_BASIC_LOG_LEVEL_INFO, g_demo, "hex",
-                         "one row per 16 bytes", data, sizeof(data));
+    shrewd_basic_log_hex(
+        SHREWD_BASIC_LOG_LEVEL_INFO, g_demo, "hex", "one row per 16 bytes", data, sizeof(data));
 
     banner("4. file output is plain text (no colors)");
     status = shrewd_basic_log_module_set_file(g_demo, DEMO_FILE);
     print_status("set_file(\"shrewd-basic-log-demo.txt\")", status);
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_INFO, g_demo, "file",
-                     "this line goes to %s\n", DEMO_FILE);
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, g_demo, "file",
-                     "plain text: files never get ANSI escapes\n");
+    shrewd_basic_log(
+        SHREWD_BASIC_LOG_LEVEL_INFO, g_demo, "file", "this line goes to %s\n", DEMO_FILE);
+    shrewd_basic_log(
+        SHREWD_BASIC_LOG_LEVEL_ERROR, g_demo, "file", "plain text: files never get ANSI escapes\n");
     /* Replacing the stream closes the owned file. */
     shrewd_basic_log_module_set_stream(g_demo, stderr);
     printf("  file content read back:\n");
@@ -113,26 +112,34 @@ int main(void)
     banner("5. set_stream(): same logger, different stream");
     status = shrewd_basic_log_module_set_stream(g_demo, stdout);
     print_status("set_stream(stdout)", status);
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, g_demo, "stdout",
-                     "this WARN went to stdout\n");
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, g_demo, "stdout", "this WARN went to stdout\n");
     status = shrewd_basic_log_module_set_stream(g_demo, stderr);
     print_status("set_stream(stderr)  (the default)", status);
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_INFO, g_demo, "stderr",
-                     "and this INFO is back on stderr\n");
+    shrewd_basic_log(
+        SHREWD_BASIC_LOG_LEVEL_INFO, g_demo, "stderr", "and this INFO is back on stderr\n");
 
     banner("6. core writers called directly (the macros wrap these)");
-    status = shrewd_basic_log_write(SHREWD_BASIC_LOG_LEVEL_INFO, g_demo,
-                                    "direct", __FILE__, __LINE__, __func__,
+    status = shrewd_basic_log_write(SHREWD_BASIC_LOG_LEVEL_INFO,
+                                    g_demo,
+                                    "direct",
+                                    __FILE__,
+                                    __LINE__,
+                                    __func__,
                                     "shrewd_basic_log_write() return value "
                                     "shown above\n");
     print_status("shrewd_basic_log_write(...)", status);
-    status = shrewd_basic_log_hex_write(SHREWD_BASIC_LOG_LEVEL_DEBUG, g_demo,
-                                        "direct", "shrewd_basic_log_hex_write()",
-                                        data, 8, __FILE__, __LINE__, __func__);
+    status = shrewd_basic_log_hex_write(SHREWD_BASIC_LOG_LEVEL_DEBUG,
+                                        g_demo,
+                                        "direct",
+                                        "shrewd_basic_log_hex_write()",
+                                        data,
+                                        8,
+                                        __FILE__,
+                                        __LINE__,
+                                        __func__);
     print_status("shrewd_basic_log_hex_write(...)", status);
-    status = shrewd_basic_log_write(SHREWD_BASIC_LOG_LEVEL_INFO, NULL,
-                                    "direct", __FILE__, __LINE__, __func__,
-                                    "not logged\n");
+    status = shrewd_basic_log_write(
+        SHREWD_BASIC_LOG_LEVEL_INFO, NULL, "direct", __FILE__, __LINE__, __func__, "not logged\n");
     print_status("shrewd_basic_log_write(NULL module)", status);
 
     banner("7. runtime module: create / find / set_level / destroy");
@@ -142,17 +149,15 @@ int main(void)
     found = NULL;
     status = shrewd_basic_log_module_find("net", &found);
     print_status("find(\"net\")", status);
-    printf("  find() returned the created module: %s\n",
-           (found == net) ? "yes" : "no");
+    printf("  find() returned the created module: %s\n", (found == net) ? "yes" : "no");
     fflush(stdout);
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_INFO, net, "net",
-                     "runtime module logging to the default stream\n");
+    shrewd_basic_log(
+        SHREWD_BASIC_LOG_LEVEL_INFO, net, "net", "runtime module logging to the default stream\n");
     status = shrewd_basic_log_module_set_level(net, SHREWD_BASIC_LOG_LEVEL_ERROR);
     print_status("set_level(net, ERROR)", status);
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_INFO, net, "net",
-                     "masked out on the runtime module\n");
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, net, "net",
-                     "ERROR passes on the runtime module\n");
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_INFO, net, "net", "masked out on the runtime module\n");
+    shrewd_basic_log(
+        SHREWD_BASIC_LOG_LEVEL_ERROR, net, "net", "ERROR passes on the runtime module\n");
     status = shrewd_basic_log_module_destroy(net);
     print_status("destroy(net)", status);
     found = NULL;
@@ -171,16 +176,20 @@ int main(void)
     (void)shrewd_basic_log_module_create("g1", SHREWD_BASIC_LOG_LEVEL_ALL, &g1);
     status = shrewd_basic_log_set_global_file(DEMO_GLOBAL_FILE);
     print_status("set_global_file(shrewd-basic-log-demo-global.txt)", status);
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_INFO, g1, "global",
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_INFO,
+                     g1,
+                     "global",
                      "module without its own stream follows the global file\n");
     status = shrewd_basic_log_set_global_file("/no/such/dir/log.txt");
     print_status("set_global_file(bad path) rejects", status);
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, g1, "global",
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR,
+                     g1,
+                     "global",
                      "still the previous file after the failed open\n");
     status = shrewd_basic_log_set_global_stream(stderr);
     print_status("set_global_stream(stderr) resets", status);
-    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_INFO, g1, "global",
-                     "and this line is back on stderr\n");
+    shrewd_basic_log(
+        SHREWD_BASIC_LOG_LEVEL_INFO, g1, "global", "and this line is back on stderr\n");
     (void)shrewd_basic_log_module_destroy(g1);
     printf("  global file content read back:\n");
     {
@@ -198,6 +207,8 @@ int main(void)
     fflush(stdout);
 
     printf("\nDemo done. The plain-text files are kept at ./%s and ./%s"
-           " for inspection.\n", DEMO_FILE, DEMO_GLOBAL_FILE);
+           " for inspection.\n",
+           DEMO_FILE,
+           DEMO_GLOBAL_FILE);
     return EXIT_SUCCESS;
 }
