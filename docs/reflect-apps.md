@@ -49,11 +49,12 @@ reflect 是通用地基(描述符 + 查询/读写/图算法/遍历);本档收录
 - 工程配套:3 测试套件(值模型/映射/策略)、`programs/json_demo.c`、
   `tools/json_bench.*`。
 
-## 2. 二进制序列化(struct ↔ bytes)候选
+## 2. 二进制序列化(struct ↔ bytes,已实现)
 
 **动机**:协议编解码、共享内存、持久化快照——JSON 之外的第二大映射需求。
 
-**拟议形态**(独立模块,如 `shrewd-basic/bin`):
+**落地形态**(独立模块 `shrewd-basic/bin`,头文件
+`shrewd-basic/formats/bin.h`):
 
 ```c
 int shrewd_basic_bin_encode(const void *obj, const type_t *type,
@@ -67,8 +68,17 @@ int shrewd_basic_bin_decode(const void *bytes, size_t n, void *obj,
 沿用 json 的"decode 先清零、free 递归非空"模型(无需登记表);描述符的
 `sb_refl_align`(对齐)与版本指纹是前置件,已就位。
 
-**规模**:新模块约 800 行 + 测试。**状态:⏳ 需求驱动**——设计可直接套
-json 的三层经验,需求确认即启动。
+**实现现状**(2026-11-21):`shrewd_basic_bin_encode()` /
+`shrewd_basic_bin_decode()` / `shrewd_basic_bin_value_size()` /
+`shrewd_basic_bin_free()` / `shrewd_basic_bin_bytes_free()`,选项含端序
+(LE/BE/本机)、自然对齐填充、用户版本戳;12 字节自描述头("SBIN"+格式
+版本+flags+版本号),规范宽度标量(成员宽度不泄漏到线格式,ILP32 的 long
+仍编 8 字节 int64)、presence/长度前缀的字符串与指针、派生计数的动态
+数组/哨兵表/柔性尾部、tag+活动变体的 union、按单元规范宽度的位组。
+所有权与错误契约同 json(BIN_FORMAT/BIN_UNSUPPORTED 号段 -400);环无
+线格式(报错,共享目标按树展开);ops-get/set 与 opaque 字段暂不支持。
+测试 8 套件(valgrind 干净),`programs/bin_demo.c` 演示。
+**状态:✅ 已实现**。
 
 ## 3. 通用文本格式化/解析(render/scan)候选
 

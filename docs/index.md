@@ -40,5 +40,6 @@ compile-time reflection module.
 | log | `shrewd-basic/log/log.h` | leveled logging with per-module masks and outputs |
 | reflect | `shrewd-basic/reflect/reflect.h` | compile-time type metadata for generic code |
 | json | `shrewd-basic/formats/json.h` | JSON value model, parser and serializer |
+| bin | `shrewd-basic/formats/bin.h` | binary struct serialization over reflect metadata |
 
 The API reference below is generated from the public headers.

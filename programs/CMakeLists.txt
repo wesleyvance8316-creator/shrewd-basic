@@ -28,3 +28,11 @@ target_link_libraries(shrewd-basic-json-demo
         PRIVATE
             shrewd-basic
             shrewd-basic-warnings)
+
+# Bin demo: wire bytes, round trip, flexible tails via value_size.
+add_executable(shrewd-basic-bin-demo bin_demo.c)
+
+target_link_libraries(shrewd-basic-bin-demo
+        PRIVATE
+            shrewd-basic
+            shrewd-basic-warnings)
