@@ -575,3 +575,107 @@ int shrewd_basic_reflect_dump_write(const shrewd_basic_reflect_type_t *type,
     (void)shrewd_basic_platform_free((void **)&ctx.buf);
     return status;
 }
+
+/* --- type self-print -------------------------------------------------- */
+
+static void describe_field(dump_ctx_t *ctx, const char *indent,
+                           const shrewd_basic_reflect_field_t *field)
+{
+    char shape[64];
+    const char *base = (NULL != field->sb_refl_type)
+            ? field->sb_refl_type->sb_refl_name : "?";
+    const char *ptr = (0u != (field->sb_refl_flags
+                              & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) ? "*" : "";
+    if (0u != (field->sb_refl_flags
+               & (SHREWD_BASIC_REFLECT_FIELD_F_DARRAY
+                  | SHREWD_BASIC_REFLECT_FIELD_F_SENTINEL))) {
+        snprintf(shape, sizeof(shape), "%s%s[]", ptr, base);
+    } else if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_ARRAY)) {
+        snprintf(shape, sizeof(shape), "%s%s[%zu]", ptr, base,
+                 field->sb_refl_count);
+    } else {
+        snprintf(shape, sizeof(shape), "%s%s", ptr, base);
+    }
+    dump_append(ctx, "%s%-12s %-12s off=%-4zu size=%-4zu align=%zu", indent,
+                field->sb_refl_name, shape, field->sb_refl_offset,
+                field->sb_refl_size, shrewd_basic_reflect_field_align(field));
+    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED)) {
+        dump_append(ctx, " owned");
+    }
+    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
+        dump_append(ctx, " stringbuf");
+    }
+    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_BITS)) {
+        dump_append(ctx, " bits(%zu@%zu)", field->sb_refl_bit_width,
+                    field->sb_refl_bit_offset);
+    }
+    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_UNION)) {
+        dump_append(ctx, " union");
+    }
+    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_FLEX)) {
+        dump_append(ctx, " flex");
+    }
+    dump_emit(ctx);
+}
+
+int shrewd_basic_reflect_describe(const shrewd_basic_reflect_type_t *type)
+{
+    dump_ctx_t ctx;
+    if (NULL == type) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "describe", "describe: type is NULL\n");
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    if (SHREWD_BASIC_ERR_OK != dump_init(&ctx)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_reflect_log,
+                         "describe", "describe: allocation failed\n");
+        return SHREWD_BASIC_ERR_MEM_NOMEM;
+    }
+    dump_append(&ctx, "%s (%s, %zu bytes, align %zu)", type->sb_refl_name,
+                shrewd_basic_reflect_kind_name(type->sb_refl_kind),
+                type->sb_refl_size, type->sb_refl_align);
+    dump_emit(&ctx);
+    switch (type->sb_refl_kind) {
+    case SHREWD_BASIC_REFLECT_KIND_STRUCT:
+        for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
+            describe_field(&ctx, "  ", &type->sb_refl_fields[i]);
+        }
+        break;
+    case SHREWD_BASIC_REFLECT_KIND_ENUM:
+        for (size_t i = 0; i < type->sb_refl_enum_count; ++i) {
+            dump_append(&ctx, "  %s = %lld", type->sb_refl_enum[i].sb_refl_name,
+                        (long long)type->sb_refl_enum[i].sb_refl_value);
+            dump_emit(&ctx);
+        }
+        break;
+    case SHREWD_BASIC_REFLECT_KIND_ARRAY:
+        dump_append(&ctx, "  row of %zu x %s (stride %zu)",
+                    type->sb_refl_elem_count,
+                    (NULL != type->sb_refl_elem) ? type->sb_refl_elem->sb_refl_name
+                                                 : "?",
+                    type->sb_refl_elem_stride);
+        dump_emit(&ctx);
+        break;
+    case SHREWD_BASIC_REFLECT_KIND_UNION:
+        for (size_t i = 0; i < type->sb_refl_variant_count; ++i) {
+            const shrewd_basic_reflect_variant_t *variant =
+                    &type->sb_refl_variants[i];
+            dump_append(&ctx, "  case %lld (%s):",
+                        (long long)variant->sb_refl_tag, variant->sb_refl_name);
+            dump_emit(&ctx);
+            for (size_t j = 0; j < variant->sb_refl_field_count; ++j) {
+                describe_field(&ctx, "    ", &variant->sb_refl_fields[j]);
+            }
+        }
+        break;
+    default:
+        break; /* primitives and opaque types: header line only */
+    }
+    /* One log record: the prefix line, then the body unprefixed. */
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_INFO, shrewd_basic_reflect_log,
+                     "describe", "\n%s", ctx.buf);
+    int status = (0 != ctx.nomem) ? SHREWD_BASIC_ERR_MEM_NOMEM
+                                  : SHREWD_BASIC_ERR_OK;
+    (void)shrewd_basic_platform_free((void **)&ctx.buf);
+    return status;
+}

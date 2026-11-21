@@ -1014,6 +1014,19 @@ int shrewd_basic_reflect_field_set(void *object,
                                    const void *value, size_t value_size);
 
 /**
+ * Print a type's self-description (the descriptor, not an object)
+ * through the "reflect" log module as one INFO record: the header line
+ * (name, kind, size, alignment) then one line per field - name, shape
+ * (pointer/array markers), offset, size, alignment and flag notes
+ * (owned/stringbuf/bits/union/flex). ENUM types list their constants,
+ * ARRAY rows their element shape, UNION types their variants. Useful
+ * for debugging registrations and generating documentation. Returns
+ * SHREWD_BASIC_ERR_OK, SHREWD_BASIC_ERR_MEM_NOMEM or
+ * SHREWD_BASIC_ERR_ARG_INVALID.
+ */
+int shrewd_basic_reflect_describe(const shrewd_basic_reflect_type_t *type);
+
+/**
  * Pretty-print @p object according to @p type through the "reflect" log
  * module as a single log record (one prefix line, then the unprefixed
  * dump body from the next line on; level INFO). @p label may be NULL.

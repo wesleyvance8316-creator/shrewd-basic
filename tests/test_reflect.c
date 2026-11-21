@@ -4161,6 +4161,63 @@ static void test_descriptor_meta(void)
     }
 }
 
+static void test_describe_type(void)
+{
+    shrewd_basic_log_module_t *module = NULL;
+    FILE *stream = tmpfile();
+    char buf[4096];
+    size_t n = 0;
+
+    expect_true("describe tmpfile", NULL != stream);
+    if (NULL == stream) {
+        return;
+    }
+    expect_eq_int("describe find module",
+                  shrewd_basic_log_module_find("reflect", &module),
+                  SHREWD_BASIC_ERR_OK);
+    if (NULL == module) {
+        fclose(stream);
+        return;
+    }
+    expect_eq_int("describe set stream",
+                  shrewd_basic_log_module_set_stream(module, stream),
+                  SHREWD_BASIC_ERR_OK);
+
+    expect_eq_int("describe person",
+                  shrewd_basic_reflect_describe(&g_person_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("describe enum",
+                  shrewd_basic_reflect_describe(&g_mode_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("describe union",
+                  shrewd_basic_reflect_describe(&g_payload_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("describe NULL",
+                  shrewd_basic_reflect_describe(NULL),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+
+    fflush(stream);
+    rewind(stream);
+    n = fread(buf, 1, sizeof(buf) - 1, stream);
+    buf[n] = '\0';
+    expect_true("describe header",
+                NULL != strstr(buf, "person_t (struct,"));
+    expect_true("describe field line",
+                NULL != strstr(buf, "age"));
+    expect_true("describe align",
+                NULL != strstr(buf, "align="));
+    expect_true("describe shape marker",
+                NULL != strstr(buf, "int32[3]"));
+    expect_true("describe enum constants",
+                NULL != strstr(buf, "mode_t (enum"));
+    expect_true("describe union cases",
+                NULL != strstr(buf, "case "));
+    expect_eq_int("describe restore stream",
+                  shrewd_basic_log_module_set_stream(module, stderr),
+                  SHREWD_BASIC_ERR_OK);
+    fclose(stream);
+}
+
 int main(void)
 {
     test_describe();
@@ -4169,6 +4226,7 @@ int main(void)
     test_lookup_list();
     test_registry();
     test_descriptor_meta();
+    test_describe_type();
     test_get_set_scalars();
     test_get_set_string();
     test_nested();
