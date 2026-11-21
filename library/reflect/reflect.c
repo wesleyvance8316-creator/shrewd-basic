@@ -243,9 +243,18 @@ int shrewd_basic_reflect_enum_find_value(const shrewd_basic_reflect_type_t *type
  * lookups race-free without locking (each thread warms its own cache);
  * applications that want one shared index instead build a caller-hosted
  * list (shrewd_basic_reflect_list_register + the *_list interfaces).
+ *
+ * Build-time knob: -DSHREWD_BASIC_REFLECT_LOOKUP_SLOTS=n sets the per-
+ * thread capacity; 0 disables the cache entirely (every lookup is a
+ * plain linear scan).
  */
-#define REFLECT_LOOKUP_SLOTS 8
+#ifndef SHREWD_BASIC_REFLECT_LOOKUP_SLOTS
+#define SHREWD_BASIC_REFLECT_LOOKUP_SLOTS 8
+#endif
+#define REFLECT_LOOKUP_SLOTS SHREWD_BASIC_REFLECT_LOOKUP_SLOTS
 #define REFLECT_LOOKUP_FIELDS 64
+
+#if REFLECT_LOOKUP_SLOTS > 0
 
 typedef struct reflect_lookup {
     const shrewd_basic_reflect_type_t *type;
@@ -338,6 +347,26 @@ static int reflect_lookup_query(const shrewd_basic_reflect_type_t *type,
     }
     return 0;
 }
+
+#else /* cache disabled: every lookup is a plain linear scan */
+
+static void reflect_lookup_build(const shrewd_basic_reflect_type_t *type)
+{
+    (void)type;
+}
+
+static int reflect_lookup_query(const shrewd_basic_reflect_type_t *type,
+                                const char *name, size_t name_len,
+                                const shrewd_basic_reflect_field_t **out_field)
+{
+    (void)type;
+    (void)name;
+    (void)name_len;
+    (void)out_field;
+    return 0;
+}
+
+#endif /* REFLECT_LOOKUP_SLOTS */
 
 /*
  * Linear find over a bare field list (a union variant's fields, which
