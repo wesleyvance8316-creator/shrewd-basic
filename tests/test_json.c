@@ -7,6 +7,7 @@
  * mutation, and compact/pretty output with text-identical round-trips.
  */
 
+#include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -346,7 +347,7 @@ static void test_value_model(void)
                   shrewd_basic_json_new(SHREWD_BASIC_JSON_NUMBER, &item),
                   SHREWD_BASIC_ERR_ARG_INVALID);
     expect_eq_int("model nonfinite",
-                  shrewd_basic_json_new_f64(1.0 / 0.0, &item),
+                  shrewd_basic_json_new_f64(HUGE_VAL, &item),
                   SHREWD_BASIC_ERR_ARG_INVALID);
     shrewd_basic_json_value_free(object); /* frees the nested array too */
 }

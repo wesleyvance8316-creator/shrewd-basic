@@ -38,7 +38,8 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(shrewd-basic-warnings INTERFACE
             -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
 elseif(MSVC)
-    target_compile_options(shrewd-basic-warnings INTERFACE /W4)
+    target_compile_options(shrewd-basic-warnings INTERFACE /W4
+            /D_CRT_SECURE_NO_WARNINGS)
 endif()
 
 enable_testing()

@@ -358,10 +358,10 @@ int shrewd_basic_reflect_diff(const void *a, const void *b,
     }
     diff_path_t report;
     diff_path_t *trace = NULL;
+    report.buf = path_out;
+    report.cap = path_out_size;
+    report.len = 0;
     if ((NULL != path_out) && (0 < path_out_size)) {
-        report.buf = path_out;
-        report.cap = path_out_size;
-        report.len = 0;
         path_out[0] = '\0';
         trace = &report;
     }

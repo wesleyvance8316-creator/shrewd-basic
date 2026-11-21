@@ -72,9 +72,23 @@ else
 fi
 
 echo "== MSVC"
-if command -v wine > /dev/null 2>&1 && [ -d "${MSVC_WINE:-}" ]; then
-    echo "msvc-wine present at ${MSVC_WINE}: run its cl wrapper manually"
+msvc_wine="${MSVC_WINE:-$HOME/msvc-wine}"
+if command -v wine64 > /dev/null 2>&1 \
+        && [ -x "$msvc_wine/install/bin/x64/cl" ]; then
+    # Real cl.exe under wine. Two quirks encoded here: CMake's /Zi adds
+    # /Fd//FS which trips C1902 (pdb manager) under wine - use /Z7; and
+    # the debug CRT DLLs are not on wine's search path - link the release
+    # runtime (tests run either way under wine64).
+    PATH="$msvc_wine/install/bin/x64:$PATH" CC=cl \
+        cmake -S "$root" -B "$work/msvc" \
+            -DCMAKE_SYSTEM_NAME=Windows \
+            -DCMAKE_CROSSCOMPILING_EMULATOR=wine64 \
+            -DCMAKE_C_FLAGS_DEBUG="/Z7 /Ob0 /Od /RTC1" \
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL > /dev/null
+    cmake --build "$work/msvc" -j > /dev/null
+    (cd "$work/msvc" && ctest --output-on-failure)
 else
     echo "skipped: needs a Windows host, or msvc-wine on Linux"
-    echo "  (apt install wine64 msitools cabextract, then mstorsjo/msvc-wine)"
+    echo "  (apt install wine64 msitools cabextract, then mstorsjo/msvc-wine;"
+    echo "   MSVC_WINE overrides the install location, default ~/msvc-wine)"
 fi
