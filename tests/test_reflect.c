@@ -4548,6 +4548,74 @@ static void test_allocator(void)
                 (0 < tally.allocs) && (tally.frees == tally.allocs));
 }
 
+static void test_hash_cycles(void)
+{
+    node_t self;
+    node_t a2;
+    node_t b2;
+    node_t a3;
+    node_t b3;
+    node_t c3;
+    node_t other;
+    size_t h_self = 0;
+    size_t h_two = 0;
+    size_t h_three = 0;
+    size_t h_other = 0;
+    bool same = false;
+
+    /* Self-loop, two-cycle and three-cycle are all bisimilar infinite
+       chains: equal() says equal, and the refined hash must agree. */
+    memset(&self, 0, sizeof(self));
+    self.data = 7;
+    self.next = &self;
+    memset(&a2, 0, sizeof(a2));
+    memset(&b2, 0, sizeof(b2));
+    a2.data = 7;
+    b2.data = 7;
+    a2.next = &b2;
+    b2.next = &a2;
+    memset(&a3, 0, sizeof(a3));
+    memset(&b3, 0, sizeof(b3));
+    memset(&c3, 0, sizeof(c3));
+    a3.data = 7;
+    b3.data = 7;
+    c3.data = 7;
+    a3.next = &b3;
+    b3.next = &c3;
+    c3.next = &a3;
+
+    expect_eq_int("cycle hash self",
+                  shrewd_basic_reflect_hash(&self, &g_node_reflect, &h_self),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("cycle hash two",
+                  shrewd_basic_reflect_hash(&a2, &g_node_reflect, &h_two),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("cycle hash three",
+                  shrewd_basic_reflect_hash(&a3, &g_node_reflect, &h_three),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("cycle hash self == two", h_self == h_two);
+    expect_true("cycle hash two == three", h_two == h_three);
+
+    /* The equal walk agrees on all three shapes. */
+    expect_eq_int("cycle equal self two",
+                  shrewd_basic_reflect_equal(&self, &a2, &g_node_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("cycle equal self two yes", same);
+    expect_eq_int("cycle equal two three",
+                  shrewd_basic_reflect_equal(&a2, &a3, &g_node_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("cycle equal two three yes", same);
+
+    /* Different content still differs. */
+    memset(&other, 0, sizeof(other));
+    other.data = 8;
+    other.next = &other;
+    expect_eq_int("cycle hash other",
+                  shrewd_basic_reflect_hash(&other, &g_node_reflect, &h_other),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("cycle hash other differs", h_other != h_self);
+}
+
 int main(void)
 {
     test_describe();
@@ -4561,6 +4629,7 @@ int main(void)
     test_layout();
     test_diff_all();
     test_allocator();
+    test_hash_cycles();
     test_get_set_scalars();
     test_get_set_string();
     test_nested();

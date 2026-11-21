@@ -1427,15 +1427,18 @@ int shrewd_basic_reflect_diff_all(const void *a, const void *b,
 
 /**
  * Hash a value graph consistently with shrewd_basic_reflect_equal():
- * equal objects always hash equal (see the caveat below). Leaves fold
- * into a 64-bit FNV-1a stream through canonical encodings (integers by
- * value, floats with -0.0 folded and NaNs as a fixed marker, strings by
- * content, opaque targets by address) so the result is endianness- and
- * width-independent. Caveat: cyclic graphs hash by shape with
- * back-edges folded as a marker, so two bisimilar but differently
- * shaped cycles (both "equal" under reflect_equal) may hash
- * differently. A depth-capped region folds as a marker on both sides,
- * matching reflect_equal()'s cap. Effective ops->hash overrides a node.
+ * equal objects always hash equal. Leaves fold into a 64-bit FNV-1a
+ * stream through canonical encodings (integers by value, floats with
+ * -0.0 folded and NaNs as a fixed marker, strings by content, opaque
+ * targets by address) so the result is endianness- and
+ * width-independent. Shared and cyclic targets are folded by iterative
+ * color refinement, making the hash bisimulation-invariant: a self-loop
+ * hashes the same as a two-cycle, a diamond like its shared tail. A
+ * depth-capped region folds as a marker on both sides, matching
+ * reflect_equal()'s cap, so structures differing only beyond the cap
+ * may still collide. Effective ops->hash overrides a node. Returns
+ * SHREWD_BASIC_ERR_OK, SHREWD_BASIC_ERR_MEM_NOMEM or
+ * SHREWD_BASIC_ERR_ARG_INVALID.
  */
 int shrewd_basic_reflect_hash(const void *object,
                               const shrewd_basic_reflect_type_t *type,
