@@ -1,22 +1,41 @@
 include(GNUInstallDirs)
 
-# Library sources: every .c below library/ - core code in src/,
-# data-structure components in ds/, the log module in log/, platform
-# wrappers in platform/. CONFIGURE_DEPENDS re-runs the glob when files
-# are added or removed, so no manual source list is needed.
-# Internal headers live in include/shrewd-basic-internal and are only visible
-# to this target; public headers are in include/shrewd-basic.
-file(GLOB_RECURSE SHREWD_BASIC_SOURCES CONFIGURE_DEPENDS
-        "${CMAKE_CURRENT_SOURCE_DIR}/*.c")
+# Library sources, one set per component (CONFIGURE_DEPENDS re-runs the
+# glob when files are added or removed):
+#   core components - ds, log, platform, reflect - always build;
+#   data-format applications - bin, json, ... - contribute their sources
+#   only while the matching SHREWD_BASIC_FORMAT_* option is on, an empty
+#   set otherwise (no glob runs for a disabled format).
+# Internal headers live in include/shrewd-basic-internal and are only
+# visible to this target; public headers are in include/shrewd-basic.
+file(GLOB_RECURSE SHREWD_BASIC_DS_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/ds/*.c")
+file(GLOB_RECURSE SHREWD_BASIC_LOG_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/log/*.c")
+file(GLOB_RECURSE SHREWD_BASIC_PLATFORM_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/platform/*.c")
+file(GLOB_RECURSE SHREWD_BASIC_REFLECT_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/reflect/*.c")
 
-# Data-format applications are optional: trim their sources out of the
-# library when the matching SHREWD_BASIC_FORMAT_* option is off.
-if(NOT SHREWD_BASIC_FORMAT_JSON)
-    list(FILTER SHREWD_BASIC_SOURCES EXCLUDE REGEX "library/json/[^/]*\.c$")
+set(SHREWD_BASIC_FORMAT_BIN_SOURCES "")
+if(SHREWD_BASIC_FORMAT_BIN)
+    file(GLOB_RECURSE SHREWD_BASIC_FORMAT_BIN_SOURCES CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/bin/*.c")
 endif()
-if(NOT SHREWD_BASIC_FORMAT_BIN)
-    list(FILTER SHREWD_BASIC_SOURCES EXCLUDE REGEX "library/bin/[^/]*\.c$")
+
+set(SHREWD_BASIC_FORMAT_JSON_SOURCES "")
+if(SHREWD_BASIC_FORMAT_JSON)
+    file(GLOB_RECURSE SHREWD_BASIC_FORMAT_JSON_SOURCES CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/json/*.c")
 endif()
+
+set(SHREWD_BASIC_SOURCES
+        ${SHREWD_BASIC_DS_SOURCES}
+        ${SHREWD_BASIC_LOG_SOURCES}
+        ${SHREWD_BASIC_PLATFORM_SOURCES}
+        ${SHREWD_BASIC_REFLECT_SOURCES}
+        ${SHREWD_BASIC_FORMAT_BIN_SOURCES}
+        ${SHREWD_BASIC_FORMAT_JSON_SOURCES})
 
 if(NOT SHREWD_BASIC_BUILD_STATIC AND NOT SHREWD_BASIC_BUILD_SHARED)
     message(FATAL_ERROR
