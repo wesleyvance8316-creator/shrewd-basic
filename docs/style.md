@@ -41,6 +41,22 @@
 tools/check-style.sh        # 三段:clang-format / clang-tidy / 条件括号
 ```
 
+### Git 钩子(版本化)
+
+`.githooks/` 提供两级风格闸门,克隆后一次性启用:
+
+```sh
+tools/install-hooks.sh      # git config core.hooksPath .githooks
+```
+
+- **pre-commit(快)**:对暂存的 .c/.h 做 `clang-format --dry-run` +
+  条件括号检查;发现漂移即拒绝提交并给出修复命令。merge/rebase 期间
+  自动跳过;
+- **pre-push(全量)**:跑 `tools/check-style.sh` 整树(含 clang-tidy),
+  较慢;紧急时 `git push --no-verify` 可绕过。
+
+检查对象是工作树文件;`*.h.in` 模板与纯删除提交不参与。
+
 `BUILD=BUILD_DIR` 指定 clang-tidy 的编译数据库目录(默认 build)。
 clang-format 修复用 `clang-format -i FILE...`;clang-tidy 修复用
 `clang-tidy -fix -p BUILD_DIR FILE`。
