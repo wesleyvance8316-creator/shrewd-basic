@@ -1,3 +1,4 @@
+# Core tests (always built).
 add_executable(shrewd-basic-tests test_shrewd_basic.c)
 
 target_link_libraries(shrewd-basic-tests
@@ -29,6 +30,10 @@ target_link_libraries(shrewd-basic-reflect-tests
             shrewd-basic
             shrewd-basic-warnings)
 
+# --- Data-format tests: built only for the enabled formats. ---
+
+if(SHREWD_BASIC_FORMAT_JSON)
+
 # JSON module tests (value model, parser, serializer).
 add_executable(shrewd-basic-json-tests test_json.c)
 
@@ -53,6 +58,10 @@ target_link_libraries(shrewd-basic-json-policy-tests
             shrewd-basic
             shrewd-basic-warnings)
 
+endif()
+
+if(SHREWD_BASIC_FORMAT_BIN)
+
 # Bin format tests (binary struct mapping over reflect metadata).
 add_executable(shrewd-basic-bin-tests test_bin.c)
 
@@ -61,12 +70,20 @@ target_link_libraries(shrewd-basic-bin-tests
             shrewd-basic
             shrewd-basic-warnings)
 
+endif()
+
 # Test binary returns non-zero on failure, so a plain COMMAND run is enough.
 add_test(NAME shrewd-basic.unit COMMAND shrewd-basic-tests)
 add_test(NAME shrewd-basic.ds COMMAND shrewd-basic-ds-tests)
 add_test(NAME shrewd-basic.log COMMAND shrewd-basic-log-tests)
 add_test(NAME shrewd-basic.reflect COMMAND shrewd-basic-reflect-tests)
-add_test(NAME shrewd-basic.bin COMMAND shrewd-basic-bin-tests)
+
+if(SHREWD_BASIC_FORMAT_JSON)
 add_test(NAME shrewd-basic.json COMMAND shrewd-basic-json-tests)
 add_test(NAME shrewd-basic.json-map COMMAND shrewd-basic-json-map-tests)
 add_test(NAME shrewd-basic.json-policy COMMAND shrewd-basic-json-policy-tests)
+endif()
+
+if(SHREWD_BASIC_FORMAT_BIN)
+add_test(NAME shrewd-basic.bin COMMAND shrewd-basic-bin-tests)
+endif()

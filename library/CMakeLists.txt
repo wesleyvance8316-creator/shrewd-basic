@@ -9,6 +9,15 @@ include(GNUInstallDirs)
 file(GLOB_RECURSE SHREWD_BASIC_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/*.c")
 
+# Data-format applications are optional: trim their sources out of the
+# library when the matching SHREWD_BASIC_FORMAT_* option is off.
+if(NOT SHREWD_BASIC_FORMAT_JSON)
+    list(FILTER SHREWD_BASIC_SOURCES EXCLUDE REGEX "library/json/[^/]*\.c$")
+endif()
+if(NOT SHREWD_BASIC_FORMAT_BIN)
+    list(FILTER SHREWD_BASIC_SOURCES EXCLUDE REGEX "library/bin/[^/]*\.c$")
+endif()
+
 if(NOT SHREWD_BASIC_BUILD_STATIC AND NOT SHREWD_BASIC_BUILD_SHARED)
     message(FATAL_ERROR
             "Enable SHREWD_BASIC_BUILD_STATIC and/or SHREWD_BASIC_BUILD_SHARED")

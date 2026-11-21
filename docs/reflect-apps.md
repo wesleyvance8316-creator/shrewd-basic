@@ -102,6 +102,29 @@ visit/diff 全差异已把公共递归做好,每种格式只是叶子层编码:
 
 ---
 
+## 构建选项(按需裁剪)
+
+数据格式应用是**可选件**:核心(reflect/log/platform/ds)总是构建,
+每个格式一个 CMake 开关,启用项目需要的即可:
+
+```sh
+cmake -B build -DSHREWD_BASIC_FORMAT_JSON=ON \   # json(默认 ON)
+          -DSHREWD_BASIC_FORMAT_BIN=OFF          # bin(默认 ON)
+```
+
+| 选项 | 影响 | 默认 |
+|---|---|---|
+| `SHREWD_BASIC_FORMAT_JSON` | json 源码、json 测试三套件、json demo | ON |
+| `SHREWD_BASIC_FORMAT_BIN` | bin 源码、bin 测试、bin demo | ON |
+
+生成的 `shrewd-basic/config/config.h` 提供特性探测宏
+`SHREWD_BASIC_FORMAT_JSON` / `SHREWD_BASIC_FORMAT_BIN`(0/1),消费方
+代码可按宏条件编译。未来的 yaml/xml/ini/csv 各自追加一个同款选项
+即可(顶层 CMakeLists 的选项块 + library/tests/programs 各一段
+`if()`)。
+
+---
+
 ## 需求登记约定
 
 新的应用层需求记入本档(动机/拟议形态/设计要点/规模/状态),

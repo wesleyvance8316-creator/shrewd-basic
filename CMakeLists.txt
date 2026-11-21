@@ -32,6 +32,13 @@ option(SHREWD_BASIC_INSTALL "Generate install rules" ${SHREWD_BASIC_IS_TOP_LEVEL
 option(SHREWD_BASIC_BUILD_STATIC "Build the static library (libshrewd-basic.a)" ON)
 option(SHREWD_BASIC_BUILD_SHARED "Build the shared library (libshrewd-basic.so)" OFF)
 
+# Data-format serialization applications (the formats/ layer). Core -
+# reflect, log, platform, ds - is always built; enable exactly the
+# formats the consuming project needs. Future formats (yaml, xml, ini,
+# csv) get one option each here.
+option(SHREWD_BASIC_FORMAT_JSON "Build the json format (formats/json.h)" ON)
+option(SHREWD_BASIC_FORMAT_BIN "Build the bin format (formats/bin.h)" ON)
+
 # Warnings applied to our own targets only (link against this INTERFACE target).
 add_library(shrewd-basic-warnings INTERFACE)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")

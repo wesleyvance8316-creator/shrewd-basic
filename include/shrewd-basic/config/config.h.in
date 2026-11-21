@@ -12,6 +12,12 @@
 /** Set to 1 to enable internal consistency checks, 0 to disable. */
 #cmakedefine01 SHREWD_BASIC_ENABLE_ASSERTS
 
+/** Set to 1 when the json format (formats/json.h) is compiled in. */
+#cmakedefine01 SHREWD_BASIC_FORMAT_JSON
+
+/** Set to 1 when the bin format (formats/bin.h) is compiled in. */
+#cmakedefine01 SHREWD_BASIC_FORMAT_BIN
+
 /**
  * Default log level mask, matching the level bit masks of
  * shrewd-basic/log/log.h: 0 = none, 1 = fatal, 2 = error, 4 = warn,
