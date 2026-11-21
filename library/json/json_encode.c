@@ -46,7 +46,7 @@ static int json_field_empty(const shrewd_basic_reflect_field_t *field,
         return (NULL == reflect_load_ptr(at)) ? 1 : 0;
     }
     if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
-        return (0 == reflect_strn_len((const char *)at, field->sb_refl_count)) ? 1 : 0;
+        return (0 == reflect_wstrn_len(at, field->sb_refl_stride, field->sb_refl_count)) ? 1 : 0;
     }
     if (0u
         != (field->sb_refl_flags
@@ -75,6 +75,16 @@ static int json_field_empty(const shrewd_basic_reflect_field_t *field,
     case SHREWD_BASIC_REFLECT_KIND_STRING: {
         const char *text = reflect_load_str(at);
         return ((NULL == text) || ('\0' == text[0])) ? 1 : 0;
+    }
+    case SHREWD_BASIC_REFLECT_KIND_STRING16:
+    case SHREWD_BASIC_REFLECT_KIND_STRING32: {
+        /* Empty when NULL or the first code unit is zero. */
+        size_t unit = reflect_string_unit(field->sb_refl_type->sb_refl_kind);
+        const void *text = reflect_load_ptr(at);
+        if (NULL == text) {
+            return 1;
+        }
+        return (0 == reflect_wstrn_len(text, unit, 1)) ? 1 : 0;
     }
     default:
         return 0;
@@ -351,6 +361,11 @@ static int json_encode_field(json_map_ctx_t *ctx,
             reflect_bits_extract(unit, field->sb_refl_bit_offset, field->sb_refl_bit_width), out);
     }
     if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
+        if (1 != field->sb_refl_stride) {
+            /* Wide buffer: needs the UTF-8 mapping (not yet). */
+            return json_map_fail(
+                ctx, SHREWD_BASIC_ERR_JSON_UNSUPPORTED, "wide string buffer has no JSON form yet");
+        }
         return shrewd_basic_json_new_string_n(
             (const char *)at, reflect_strn_len((const char *)at, field->sb_refl_count), out);
     }

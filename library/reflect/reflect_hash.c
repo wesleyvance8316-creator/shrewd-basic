@@ -237,13 +237,16 @@ static int hash_content_value(hash_ctx_t *ctx,
         *h = hash_u64(*h, bits);
         return SHREWD_BASIC_ERR_OK;
     }
-    case SHREWD_BASIC_REFLECT_KIND_STRING: {
-        const char *text = reflect_load_str(value);
+    case SHREWD_BASIC_REFLECT_KIND_STRING:
+    case SHREWD_BASIC_REFLECT_KIND_STRING16:
+    case SHREWD_BASIC_REFLECT_KIND_STRING32: {
+        const void *text = reflect_load_ptr(value);
         if (NULL == text) {
             *h = hash_u64(*h, 0);
         } else {
+            size_t unit = reflect_string_unit(type->sb_refl_kind);
             *h = hash_u64(*h, 1);
-            *h = hash_bytes(*h, text, strlen(text));
+            *h = hash_bytes(*h, text, reflect_wstrn_len(text, unit, SIZE_MAX) * unit);
         }
         return SHREWD_BASIC_ERR_OK;
     }
@@ -310,11 +313,12 @@ static int hash_content_fields(hash_ctx_t *ctx,
             continue;
         }
         if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
-            /* Text buffers fold by content up to the first NUL. */
-            const char *text = (const char *)(value + field->sb_refl_offset);
-            size_t len = reflect_strn_len(text, field->sb_refl_count);
+            /* Text buffers fold by content up to the first NUL unit. */
+            const void *text = value + field->sb_refl_offset;
+            size_t unit = field->sb_refl_stride;
+            size_t len = reflect_wstrn_len(text, unit, field->sb_refl_count);
             *h = hash_u64(*h, 1);
-            *h = hash_bytes(*h, text, len);
+            *h = hash_bytes(*h, text, len * unit);
             continue;
         }
         if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_BITS)) {

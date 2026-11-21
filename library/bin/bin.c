@@ -897,7 +897,7 @@ static void bin_free_value(const shrewd_basic_reflect_type_t *type, void *value,
     if (BIN_MAX_DEPTH <= depth) {
         return;
     }
-    if (SHREWD_BASIC_REFLECT_KIND_STRING == type->sb_refl_kind) {
+    if (0 != reflect_kind_is_string(type->sb_refl_kind)) {
         void *text = NULL;
         memcpy(&text, value, sizeof(text));
         {

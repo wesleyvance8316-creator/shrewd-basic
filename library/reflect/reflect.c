@@ -124,6 +124,22 @@ const shrewd_basic_reflect_type_t shrewd_basic_reflect_string
        .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
        .sb_refl_field_count = 0,
        .sb_refl_fields = NULL};
+const shrewd_basic_reflect_type_t shrewd_basic_reflect_string16
+    = {.sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_STRING16,
+       .sb_refl_name = "string16",
+       .sb_refl_size = sizeof(const void *),
+       .sb_refl_align = _Alignof(const void *),
+       .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
+       .sb_refl_field_count = 0,
+       .sb_refl_fields = NULL};
+const shrewd_basic_reflect_type_t shrewd_basic_reflect_string32
+    = {.sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_STRING32,
+       .sb_refl_name = "string32",
+       .sb_refl_size = sizeof(const void *),
+       .sb_refl_align = _Alignof(const void *),
+       .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
+       .sb_refl_field_count = 0,
+       .sb_refl_fields = NULL};
 const shrewd_basic_reflect_type_t shrewd_basic_reflect_void
     = {.sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_OPAQUE,
        .sb_refl_name = "void",
@@ -163,6 +179,10 @@ const char *shrewd_basic_reflect_kind_name(shrewd_basic_reflect_kind_t kind) {
         return "double";
     case SHREWD_BASIC_REFLECT_KIND_STRING:
         return "string";
+    case SHREWD_BASIC_REFLECT_KIND_STRING16:
+        return "string16";
+    case SHREWD_BASIC_REFLECT_KIND_STRING32:
+        return "string32";
     case SHREWD_BASIC_REFLECT_KIND_STRUCT:
         return "struct";
     case SHREWD_BASIC_REFLECT_KIND_ARRAY:
@@ -556,6 +576,8 @@ int shrewd_basic_reflect_check_type(const shrewd_basic_reflect_type_t *type) {
     case SHREWD_BASIC_REFLECT_KIND_FLOAT:
     case SHREWD_BASIC_REFLECT_KIND_DOUBLE:
     case SHREWD_BASIC_REFLECT_KIND_STRING:
+    case SHREWD_BASIC_REFLECT_KIND_STRING16:
+    case SHREWD_BASIC_REFLECT_KIND_STRING32:
     case SHREWD_BASIC_REFLECT_KIND_OPAQUE:
         break;
     default:
@@ -1626,7 +1648,7 @@ static int reflect_clone_target(const shrewd_basic_reflect_type_t *type,
         }
         return status;
     }
-    if (SHREWD_BASIC_REFLECT_KIND_STRING == type->sb_refl_kind) {
+    if (0 != reflect_kind_is_string(type->sb_refl_kind)) {
         *out = (void *)(uintptr_t)src;
         return SHREWD_BASIC_ERR_OK;
     }
@@ -1783,15 +1805,16 @@ static int reflect_copy_fields(const shrewd_basic_reflect_field_t *fields,
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
                 }
-            } else if ((SHREWD_BASIC_REFLECT_KIND_STRING == field->sb_refl_type->sb_refl_kind)
+            } else if ((0 != reflect_kind_is_string(field->sb_refl_type->sb_refl_kind))
                        && (0u
                            != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED))) {
                 /*
                  * Owned string: clone the content through the clone map,
                  * so strings shared between fields stay shared. NULL
                  * stays NULL (the clone storage is zero-initialized).
+                 * Wide strings copy code units up to the NUL unit.
                  */
-                const char *text = reflect_load_str(src_elem);
+                const void *text = reflect_load_ptr(src_elem);
                 if (NULL == text) {
                     continue;
                 }
@@ -1805,8 +1828,9 @@ static int reflect_copy_fields(const shrewd_basic_reflect_field_t *fields,
                     memcpy(dst_elem, &existing, sizeof(existing));
                     continue;
                 }
+                size_t unit = reflect_string_unit(field->sb_refl_type->sb_refl_kind);
+                size_t length = (reflect_wstrn_len(text, unit, SIZE_MAX) + 1) * unit;
                 void *copy = NULL;
-                size_t length = strlen(text) + 1;
                 status = reflect_alloc_block(alloc, &copy, length);
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
@@ -1974,7 +1998,7 @@ static int reflect_destroy_target(const shrewd_basic_reflect_type_t *type,
         reflect_alloc_free(alloc, pointee);
         return SHREWD_BASIC_ERR_OK;
     }
-    if (SHREWD_BASIC_REFLECT_KIND_STRING == type->sb_refl_kind) {
+    if (0 != reflect_kind_is_string(type->sb_refl_kind)) {
         return SHREWD_BASIC_ERR_OK;
     }
     if (SHREWD_BASIC_REFLECT_KIND_OPAQUE == type->sb_refl_kind) {
@@ -2049,7 +2073,7 @@ static int reflect_destroy_fields(const shrewd_basic_reflect_field_t *fields,
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
                 }
-            } else if ((SHREWD_BASIC_REFLECT_KIND_STRING == field->sb_refl_type->sb_refl_kind)
+            } else if ((0 != reflect_kind_is_string(field->sb_refl_type->sb_refl_kind))
                        && (0u
                            != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED))) {
                 /* Owned string: freed once (shared strings are visited once). */

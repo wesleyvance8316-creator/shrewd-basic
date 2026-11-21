@@ -132,13 +132,16 @@ static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
     case SHREWD_BASIC_REFLECT_KIND_DOUBLE:
         *out_equal = (reflect_load_f64(a, nbytes) == reflect_load_f64(b, nbytes));
         return SHREWD_BASIC_ERR_OK;
-    case SHREWD_BASIC_REFLECT_KIND_STRING: {
-        const char *left = reflect_load_str(a);
-        const char *right = reflect_load_str(b);
+    case SHREWD_BASIC_REFLECT_KIND_STRING:
+    case SHREWD_BASIC_REFLECT_KIND_STRING16:
+    case SHREWD_BASIC_REFLECT_KIND_STRING32: {
+        const void *left = reflect_load_ptr(a);
+        const void *right = reflect_load_ptr(b);
         if ((NULL == left) || (NULL == right)) {
             *out_equal = (left == right);
         } else {
-            *out_equal = (0 == strcmp(left, right));
+            size_t unit = reflect_string_unit(type->sb_refl_kind);
+            *out_equal = (0 != reflect_wstrn_eq(left, right, unit, SIZE_MAX));
         }
         return SHREWD_BASIC_ERR_OK;
     }
@@ -245,12 +248,13 @@ static int reflect_equal_fields(const shrewd_basic_reflect_field_t *fields,
             continue;
         }
         if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
-            /* Text buffers compare by content up to the first NUL. */
-            const char *text_a = (const char *)(a + field->sb_refl_offset);
-            const char *text_b = (const char *)(b + field->sb_refl_offset);
-            size_t len_a = reflect_strn_len(text_a, field->sb_refl_count);
-            size_t len_b = reflect_strn_len(text_b, field->sb_refl_count);
-            if ((len_a != len_b) || (0 != memcmp(text_a, text_b, len_a))) {
+            /* Text buffers compare by content up to the first NUL unit. */
+            const void *text_a = a + field->sb_refl_offset;
+            const void *text_b = b + field->sb_refl_offset;
+            size_t unit = field->sb_refl_stride;
+            size_t len_a = reflect_wstrn_len(text_a, unit, field->sb_refl_count);
+            size_t len_b = reflect_wstrn_len(text_b, unit, field->sb_refl_count);
+            if ((len_a != len_b) || (0 != memcmp(text_a, text_b, len_a * unit))) {
                 *out_equal = false;
                 return SHREWD_BASIC_ERR_OK;
             }
@@ -521,11 +525,12 @@ static int diff_all_fields(const shrewd_basic_reflect_field_t *fields,
             continue;
         }
         if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
-            const char *text_a = (const char *)(a + field->sb_refl_offset);
-            const char *text_b = (const char *)(b + field->sb_refl_offset);
-            size_t len_a = reflect_strn_len(text_a, field->sb_refl_count);
-            size_t len_b = reflect_strn_len(text_b, field->sb_refl_count);
-            if ((len_a != len_b) || (0 != memcmp(text_a, text_b, len_a))) {
+            const void *text_a = a + field->sb_refl_offset;
+            const void *text_b = b + field->sb_refl_offset;
+            size_t unit = field->sb_refl_stride;
+            size_t len_a = reflect_wstrn_len(text_a, unit, field->sb_refl_count);
+            size_t len_b = reflect_wstrn_len(text_b, unit, field->sb_refl_count);
+            if ((len_a != len_b) || (0 != memcmp(text_a, text_b, len_a * unit))) {
                 status = diff_all_report(all, diff, SHREWD_BASIC_REFLECT_DIFF_VALUE);
                 if (SHREWD_BASIC_ERR_OK != status) {
                     return status;
@@ -659,11 +664,15 @@ static int diff_all_value(const shrewd_basic_reflect_type_t *type,
         return (reflect_load_f64(a, nbytes) == reflect_load_f64(b, nbytes))
                    ? SHREWD_BASIC_ERR_OK
                    : diff_all_report(all, diff, SHREWD_BASIC_REFLECT_DIFF_VALUE);
-    case SHREWD_BASIC_REFLECT_KIND_STRING: {
-        const char *left = reflect_load_str(a);
-        const char *right = reflect_load_str(b);
-        int same
-            = (NULL == left) ? (left == right) : ((NULL != right) && (0 == strcmp(left, right)));
+    case SHREWD_BASIC_REFLECT_KIND_STRING:
+    case SHREWD_BASIC_REFLECT_KIND_STRING16:
+    case SHREWD_BASIC_REFLECT_KIND_STRING32: {
+        const void *left = reflect_load_ptr(a);
+        const void *right = reflect_load_ptr(b);
+        size_t unit = reflect_string_unit(type->sb_refl_kind);
+        int same = (NULL == left)
+                       ? (left == right)
+                       : ((NULL != right) && (0 != reflect_wstrn_eq(left, right, unit, SIZE_MAX)));
         return (same) ? SHREWD_BASIC_ERR_OK
                       : diff_all_report(all, diff, SHREWD_BASIC_REFLECT_DIFF_VALUE);
     }

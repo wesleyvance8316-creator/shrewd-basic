@@ -121,7 +121,16 @@ typedef enum shrewd_basic_reflect_kind {
     SHREWD_BASIC_REFLECT_KIND_STRUCT, /**< Aggregate with field descriptors. */
     SHREWD_BASIC_REFLECT_KIND_ARRAY,  /**< Fixed array value: one row of a multi-dimension array. */
     SHREWD_BASIC_REFLECT_KIND_UNION,  /**< Tagged union: one variant active per tag value. */
-    SHREWD_BASIC_REFLECT_KIND_OPAQUE  /**< Unknown pointee (shrewd_basic_reflect_void). */
+    SHREWD_BASIC_REFLECT_KIND_OPAQUE, /**< Unknown pointee (shrewd_basic_reflect_void). */
+    /*
+     * Wide strings (appended so existing kind values stay stable): the
+     * value is a pointer to - or a buffer of - NUL-unit-terminated code
+     * units, compared and hashed by code unit. Not a _Generic mapping:
+     * char32_t aliases unsigned int on every mainstream platform, so an
+     * automatic association would silently steal plain integer pointers.
+     */
+    SHREWD_BASIC_REFLECT_KIND_STRING16, /**< char16_t * / wchar_t * (16-bit units). */
+    SHREWD_BASIC_REFLECT_KIND_STRING32  /**< char32_t * / wchar_t * (32-bit units). */
 } shrewd_basic_reflect_kind_t;
 
 typedef struct shrewd_basic_reflect_type shrewd_basic_reflect_type_t;
@@ -309,6 +318,8 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_uint64;
 extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_float;
 extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_double;
 extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_string;
+extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_string16;
+extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_string32;
 extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
 
 /*
@@ -655,6 +666,90 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
      .sb_refl_stride = sizeof(((struct_type *)0)->member),                                         \
      .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED,                                   \
      .sb_refl_ops = &(ops_ref)}
+
+/*
+ * Wide strings (char16_t / char32_t / wchar_t): the value is a pointer
+ * to - or a buffer of - NUL-unit-terminated code units. equal/diff/hash
+ * compare code units up to the NUL unit, copy/destroy clone and free
+ * the owned content, dump escapes per code unit. No automatic _Generic
+ * mapping: char32_t aliases unsigned int on mainstream platforms, so
+ * integer pointers must keep failing to compile instead of silently
+ * becoming strings. SHREWD_BASIC_REFLECT_FIELD_WSTRING picks the unit
+ * width from wchar_t at compile time (WCHAR_MAX).
+ *
+ * The wide pointer forms lack _OPS twins on purpose - add one beside
+ * these when a real call site needs a field-level ops override.
+ */
+#define SHREWD_BASIC_REFLECT_FIELD_STRING16(struct_type, member)                                   \
+    {.sb_refl_name = #member,                                                                      \
+     .sb_refl_type = &shrewd_basic_reflect_string16,                                               \
+     .sb_refl_offset = offsetof(struct_type, member),                                              \
+     .sb_refl_size = sizeof(((struct_type *)0)->member),                                           \
+     .sb_refl_count = (size_t)1,                                                                   \
+     .sb_refl_stride = sizeof(((struct_type *)0)->member),                                         \
+     .sb_refl_flags = (uint32_t)0}
+
+#define SHREWD_BASIC_REFLECT_FIELD_STRING16_OWNED(struct_type, member)                             \
+    {.sb_refl_name = #member,                                                                      \
+     .sb_refl_type = &shrewd_basic_reflect_string16,                                               \
+     .sb_refl_offset = offsetof(struct_type, member),                                              \
+     .sb_refl_size = sizeof(((struct_type *)0)->member),                                           \
+     .sb_refl_count = (size_t)1,                                                                   \
+     .sb_refl_stride = sizeof(((struct_type *)0)->member),                                         \
+     .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED}
+
+#define SHREWD_BASIC_REFLECT_FIELD_STRING16_BUFFER(struct_type, member)                            \
+    {.sb_refl_name = #member,                                                                      \
+     .sb_refl_type = &shrewd_basic_reflect_string16,                                               \
+     .sb_refl_offset = offsetof(struct_type, member),                                              \
+     .sb_refl_size = sizeof(((struct_type *)0)->member),                                           \
+     .sb_refl_count = sizeof(((struct_type *)0)->member) / sizeof(((struct_type *)0)->member[0]),  \
+     .sb_refl_stride = sizeof(((struct_type *)0)->member[0]),                                      \
+     .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_ARRAY | SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF}
+
+#define SHREWD_BASIC_REFLECT_FIELD_STRING32(struct_type, member)                                   \
+    {.sb_refl_name = #member,                                                                      \
+     .sb_refl_type = &shrewd_basic_reflect_string32,                                               \
+     .sb_refl_offset = offsetof(struct_type, member),                                              \
+     .sb_refl_size = sizeof(((struct_type *)0)->member),                                           \
+     .sb_refl_count = (size_t)1,                                                                   \
+     .sb_refl_stride = sizeof(((struct_type *)0)->member),                                         \
+     .sb_refl_flags = (uint32_t)0}
+
+#define SHREWD_BASIC_REFLECT_FIELD_STRING32_OWNED(struct_type, member)                             \
+    {.sb_refl_name = #member,                                                                      \
+     .sb_refl_type = &shrewd_basic_reflect_string32,                                               \
+     .sb_refl_offset = offsetof(struct_type, member),                                              \
+     .sb_refl_size = sizeof(((struct_type *)0)->member),                                           \
+     .sb_refl_count = (size_t)1,                                                                   \
+     .sb_refl_stride = sizeof(((struct_type *)0)->member),                                         \
+     .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED}
+
+#define SHREWD_BASIC_REFLECT_FIELD_STRING32_BUFFER(struct_type, member)                            \
+    {.sb_refl_name = #member,                                                                      \
+     .sb_refl_type = &shrewd_basic_reflect_string32,                                               \
+     .sb_refl_offset = offsetof(struct_type, member),                                              \
+     .sb_refl_size = sizeof(((struct_type *)0)->member),                                           \
+     .sb_refl_count = sizeof(((struct_type *)0)->member) / sizeof(((struct_type *)0)->member[0]),  \
+     .sb_refl_stride = sizeof(((struct_type *)0)->member[0]),                                      \
+     .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_ARRAY | SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF}
+
+/* wchar_t forms: the unit width follows the platform's wchar_t. */
+#if WCHAR_MAX <= 0xFFFF
+#define SHREWD_BASIC_REFLECT_FIELD_WSTRING(struct_type, member)                                    \
+    SHREWD_BASIC_REFLECT_FIELD_STRING16(struct_type, member)
+#define SHREWD_BASIC_REFLECT_FIELD_WSTRING_OWNED(struct_type, member)                              \
+    SHREWD_BASIC_REFLECT_FIELD_STRING16_OWNED(struct_type, member)
+#define SHREWD_BASIC_REFLECT_FIELD_WSTRING_BUFFER(struct_type, member)                             \
+    SHREWD_BASIC_REFLECT_FIELD_STRING16_BUFFER(struct_type, member)
+#else
+#define SHREWD_BASIC_REFLECT_FIELD_WSTRING(struct_type, member)                                    \
+    SHREWD_BASIC_REFLECT_FIELD_STRING32(struct_type, member)
+#define SHREWD_BASIC_REFLECT_FIELD_WSTRING_OWNED(struct_type, member)                              \
+    SHREWD_BASIC_REFLECT_FIELD_STRING32_OWNED(struct_type, member)
+#define SHREWD_BASIC_REFLECT_FIELD_WSTRING_BUFFER(struct_type, member)                             \
+    SHREWD_BASIC_REFLECT_FIELD_STRING32_BUFFER(struct_type, member)
+#endif
 
 /*
  * Describe a bit group inside a real integer unit member. @p unit is the

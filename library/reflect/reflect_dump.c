@@ -164,14 +164,63 @@ static void dump_string(dump_ctx_t *ctx, const char *text, size_t str_max) {
 }
 
 /*
- * Render a string buffer (a F_STRINGBUF char[N]): quoted and escaped up
- * to the first NUL, or the whole buffer when unterminated.
+ * Render a wide string (or wide buffer) by code unit: ASCII escapes as
+ * in dump_escaped, every other unit becomes a \uXXXX / \UXXXXXXXX
+ * escape. @p max_units bounds the scan (SIZE_MAX for unbounded
+ * pointer strings).
  */
-static void dump_string_buf(dump_ctx_t *ctx, const char *buf, size_t size) {
-    size_t len = reflect_strn_len(buf, size);
+static void dump_wide(
+    dump_ctx_t *ctx, const void *text, size_t unit, size_t max_units, int bounded) {
+    const unsigned char *bytes = (const unsigned char *)text;
+    size_t len = 0;
+    if (NULL == text) {
+        dump_append(ctx, "(null)");
+        return;
+    }
+    len = reflect_wstrn_len(text, unit, max_units);
     dump_append(ctx, "\"");
-    dump_escaped(ctx, (const unsigned char *)buf, len);
+    for (size_t i = 0; i < len; ++i) {
+        uint32_t code = 0;
+        memcpy(&code, bytes + (i * unit), unit);
+        if ((0x20u <= code) && (0x7eu >= code) && ('\\' != code) && ('"' != code)) {
+            dump_append(ctx, "%c", (char)code);
+        } else if ('\\' == code) {
+            dump_append(ctx, "\\\\");
+        } else if ('"' == code) {
+            dump_append(ctx, "\\\"");
+        } else if ('\n' == code) {
+            dump_append(ctx, "\\n");
+        } else if ('\r' == code) {
+            dump_append(ctx, "\\r");
+        } else if ('\t' == code) {
+            dump_append(ctx, "\\t");
+        } else if (2 == unit) {
+            dump_append(ctx, "\\u%04x", (unsigned int)code);
+        } else {
+            dump_append(ctx, "\\U%08x", (unsigned int)code);
+        }
+    }
+    if ((0 != bounded) && (len >= max_units)
+        && (0 != reflect_wstrn_len(bytes + (len * unit), unit, 1))) {
+        dump_append(ctx, "...(truncated)");
+    }
     dump_append(ctx, "\"");
+}
+
+/*
+ * Render a string buffer (a F_STRINGBUF char[N] or wide buffer):
+ * quoted and escaped up to the first NUL unit, or the whole buffer when
+ * unterminated.
+ */
+static void dump_string_buf(dump_ctx_t *ctx, const void *buf, size_t unit, size_t size) {
+    if (1 == unit) {
+        size_t len = reflect_strn_len((const char *)buf, size);
+        dump_append(ctx, "\"");
+        dump_escaped(ctx, (const unsigned char *)buf, len);
+        dump_append(ctx, "\"");
+        return;
+    }
+    dump_wide(ctx, buf, unit, size, 0);
 }
 
 /* Render one value inline (scalars, array values, struct values). */
@@ -237,6 +286,11 @@ static void dump_scalar(dump_ctx_t *ctx,
         break;
     case SHREWD_BASIC_REFLECT_KIND_STRING:
         dump_string(ctx, reflect_load_str(bytes), str_max);
+        break;
+    case SHREWD_BASIC_REFLECT_KIND_STRING16:
+    case SHREWD_BASIC_REFLECT_KIND_STRING32:
+        dump_wide(
+            ctx, reflect_load_ptr(bytes), reflect_string_unit(type->sb_refl_kind), str_max, 1);
         break;
     case SHREWD_BASIC_REFLECT_KIND_ARRAY: {
         /* Row of a multi-dimension array: [ e, e, ... ] per level. */
@@ -381,7 +435,7 @@ static void dump_field_list(dump_ctx_t *ctx,
             && (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF))) {
             /* Text buffer: a quoted C string, not an element list. */
             dump_append(ctx, "%*s%s = ", pad, "", field->sb_refl_name);
-            dump_string_buf(ctx, (const char *)at, field->sb_refl_count);
+            dump_string_buf(ctx, at, field->sb_refl_stride, field->sb_refl_count);
             dump_emit(ctx);
             continue;
         }

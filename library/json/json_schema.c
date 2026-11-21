@@ -207,6 +207,8 @@ static int schema_scalar(const shrewd_basic_reflect_type_t *type,
         name = "integer";
         break;
     case SHREWD_BASIC_REFLECT_KIND_STRING:
+    case SHREWD_BASIC_REFLECT_KIND_STRING16:
+    case SHREWD_BASIC_REFLECT_KIND_STRING32:
         name = "string";
         break;
     default:

@@ -472,6 +472,11 @@ static int json_decode_field(json_map_ctx_t *ctx,
     if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
         const char *text = NULL;
         size_t length = 0;
+        if (1 != field->sb_refl_stride) {
+            /* Wide buffer: needs the UTF-8 mapping (not yet). */
+            return json_map_fail(
+                ctx, SHREWD_BASIC_ERR_JSON_UNSUPPORTED, "wide string buffer has no JSON form yet");
+        }
         if (SHREWD_BASIC_JSON_STRING != shrewd_basic_json_kind(value)) {
             return json_map_fail(ctx, SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH, "expected a string");
         }
@@ -986,7 +991,7 @@ static void json_release_pointer(const shrewd_basic_reflect_type_t *type,
         destroy(pointer);
         return;
     }
-    if (SHREWD_BASIC_REFLECT_KIND_STRING == type->sb_refl_kind) {
+    if (0 != reflect_kind_is_string(type->sb_refl_kind)) {
         /* A followed string: the pointee cell holds the content. */
         void *text = NULL;
         memcpy(&text, pointer, sizeof(text));
@@ -1001,7 +1006,7 @@ static void json_release_pointer(const shrewd_basic_reflect_type_t *type,
 static void json_release_value(const shrewd_basic_reflect_type_t *type,
                                void *value,
                                const shrewd_basic_json_info_t *info) {
-    if (SHREWD_BASIC_REFLECT_KIND_STRING == type->sb_refl_kind) {
+    if (0 != reflect_kind_is_string(type->sb_refl_kind)) {
         void *text = NULL;
         memcpy(&text, value, sizeof(text));
         shrewd_basic_platform_free(&text);

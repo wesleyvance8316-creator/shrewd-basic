@@ -113,6 +113,61 @@ static inline size_t reflect_strn_len(const char *text, size_t max) {
     return n;
 }
 
+/* Code-unit width of a string kind in bytes (0 for non-strings). */
+static inline size_t reflect_string_unit(shrewd_basic_reflect_kind_t kind) {
+    switch (kind) {
+    case SHREWD_BASIC_REFLECT_KIND_STRING:
+        return 1;
+    case SHREWD_BASIC_REFLECT_KIND_STRING16:
+        return 2;
+    case SHREWD_BASIC_REFLECT_KIND_STRING32:
+        return 4;
+    default:
+        return 0;
+    }
+}
+
+/* Non-zero for the three string kinds (char / char16 / char32). */
+static inline int reflect_kind_is_string(shrewd_basic_reflect_kind_t kind) {
+    return (0 != reflect_string_unit(kind)) ? 1 : 0;
+}
+
+/*
+ * Bounded strlen in code units for wide strings: scans at most
+ * @p max_units units of @p unit bytes each and stops at the first
+ * all-zero unit (the NUL code unit). reflect_strn_len() is the
+ * unit == 1 case.
+ */
+static inline size_t reflect_wstrn_len(const void *text, size_t unit, size_t max_units) {
+    const unsigned char *bytes = (const unsigned char *)text;
+    size_t n = 0;
+    while (n < max_units) {
+        size_t zero = 1;
+        for (size_t b = 0; b < unit; ++b) {
+            if (0 != bytes[(n * unit) + b]) {
+                zero = 0;
+                break;
+            }
+        }
+        if (0 != zero) {
+            break;
+        }
+        ++n;
+    }
+    return n;
+}
+
+/*
+ * Code-unit-semantic string comparison: equal when both sides carry the
+ * same code units up to the NUL unit. @p max_units bounds the scan
+ * (SIZE_MAX for unbounded pointer strings).
+ */
+static inline int reflect_wstrn_eq(const void *a, const void *b, size_t unit, size_t max_units) {
+    size_t len_a = reflect_wstrn_len(a, unit, max_units);
+    size_t len_b = reflect_wstrn_len(b, unit, max_units);
+    return ((len_a == len_b) && (0 == memcmp(a, b, len_a * unit))) ? 1 : 0;
+}
+
 /* Width-matched store: the write-side twin of reflect_load_u64(). */
 static inline void reflect_store_u64(unsigned char *bytes, size_t nbytes, uint64_t value) {
     switch (nbytes) {

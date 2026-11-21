@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <uchar.h>
 
 #include "shrewd-basic/log/log.h"
 #include "shrewd-basic/platform/memory.h"
@@ -3223,6 +3224,191 @@ static void test_cbit(void) {
     expect_true("cbit diff path", 0 == strcmp(path, "level"));
 }
 
+/* --- wide-string fixtures (STRING16/STRING32) -------------------------- */
+
+/*
+ * Wide content as integer-constant arrays (not u""/U"" literals): zero
+ * toolchain risk across the verification matrix.
+ */
+static const char16_t g_title_a[] = {'c', 'a', 'f', 0x00e9, 0}; /* café */
+static const char16_t g_title_b[] = {'c', 'a', 'f', 0x00e9, 0}; /* same, aliased */
+static const char16_t g_title_c[] = {'t', 'e', 'a', 0};         /* tea */
+static const char32_t g_body_a[] = {'h', 'i', 0x1f600, 0};      /* hi😀 */
+static const char16_t g_code_full[8] = {'o', 'k', 0, 0x3042, 0x3042, 0, 0, 0};
+static const char16_t g_code_tail[8] = {'o', 'k', 0, 0x7777, 0x7777, 0, 0, 0};
+static const char16_t g_code_long[8] = {'o', 'k', 'a', 'y', '!', 0, 0, 0};
+
+typedef struct {
+    const char16_t *title; /* borrowed */
+    const char32_t *body;  /* owned */
+    const wchar_t *label;  /* borrowed, unit width follows wchar_t */
+    char16_t code[8];      /* wide string buffer */
+    uint32_t id;
+} wtext_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_wtext_reflect,
+                                 wtext_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING16(wtext_t, title),
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING32_OWNED(wtext_t, body),
+                                 SHREWD_BASIC_REFLECT_FIELD_WSTRING(wtext_t, label),
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING16_BUFFER(wtext_t, code),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wtext_t, id));
+
+static void test_wstring(void) {
+    /* Descriptor shapes: kinds follow the declared unit width. */
+    const shrewd_basic_reflect_field_t *field = find_or_fail("wstr", &g_wtext_reflect, "title");
+    if (NULL == field) {
+        return;
+    }
+    expect_true("wstr kind16",
+                (SHREWD_BASIC_REFLECT_KIND_STRING16 == field->sb_refl_type->sb_refl_kind)
+                    && (sizeof(const char16_t *) == field->sb_refl_size));
+    field = find_or_fail("wstr", &g_wtext_reflect, "body");
+    expect_true("wstr kind32",
+                (NULL != field)
+                    && (SHREWD_BASIC_REFLECT_KIND_STRING32 == field->sb_refl_type->sb_refl_kind));
+    field = find_or_fail("wstr", &g_wtext_reflect, "label");
+    if (NULL != field) {
+        shrewd_basic_reflect_kind_t want = (2 == sizeof(wchar_t))
+                                               ? SHREWD_BASIC_REFLECT_KIND_STRING16
+                                               : SHREWD_BASIC_REFLECT_KIND_STRING32;
+        expect_true("wstr wstring width", want == field->sb_refl_type->sb_refl_kind);
+    }
+    field = find_or_fail("wstr", &g_wtext_reflect, "code");
+    expect_true("wstr buffer shape",
+                (NULL != field) && ((size_t)8 == field->sb_refl_count)
+                    && ((size_t)2 == field->sb_refl_stride)
+                    && (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)));
+    expect_eq_int(
+        "wstr check_type", shrewd_basic_reflect_check_type(&g_wtext_reflect), SHREWD_BASIC_ERR_OK);
+
+    /* Content semantics: distinct objects, equal code units. */
+    wtext_t left = {0};
+    wtext_t right = {0};
+    memset(&left, 0, sizeof(left));
+    memset(&right, 0, sizeof(right));
+    left.title = g_title_a;
+    right.title = g_title_b;
+    memcpy(left.code, g_code_full, sizeof(left.code));
+    memcpy(right.code, g_code_tail, sizeof(right.code)); /* tail after NUL differs */
+    left.id = 1;
+    right.id = 1;
+    bool same = false;
+    expect_eq_int("wstr equal",
+                  shrewd_basic_reflect_equal(&left, &right, &g_wtext_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wstr equal yes", same);
+    size_t ha = 0;
+    size_t hb = 0;
+    expect_eq_int("wstr hash a",
+                  shrewd_basic_reflect_hash(&left, &g_wtext_reflect, &ha),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("wstr hash b",
+                  shrewd_basic_reflect_hash(&right, &g_wtext_reflect, &hb),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wstr hash same", ha == hb);
+
+    /* A differing code unit is a first-class difference. */
+    right.title = g_title_c;
+    char path[64] = {0};
+    expect_eq_int("wstr diff",
+                  shrewd_basic_reflect_diff(&left, &right, &g_wtext_reflect, path, sizeof(path)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("wstr diff path", 0 == strcmp(path, "title"));
+
+    /* NULL handling: NULL == NULL, NULL != content. */
+    wtext_t empty = {0};
+    memset(&empty, 0, sizeof(empty));
+    wtext_t nulls = {0};
+    memset(&nulls, 0, sizeof(nulls));
+    same = false;
+    expect_eq_int("wstr null equal",
+                  shrewd_basic_reflect_equal(&empty, &nulls, &g_wtext_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wstr null equal yes", same);
+    nulls.title = g_title_a;
+    same = true;
+    expect_eq_int("wstr null differ",
+                  shrewd_basic_reflect_equal(&empty, &nulls, &g_wtext_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wstr null differ no", !same);
+
+    /* Buffer content stops at the NUL unit: differing tails stay equal,
+       a longer run of visible units differs. */
+    memcpy(right.code, g_code_long, sizeof(right.code));
+    right.title = g_title_a;
+    same = false;
+    expect_eq_int("wstr buf differ",
+                  shrewd_basic_reflect_equal(&left, &right, &g_wtext_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wstr buf differ no", !same);
+
+    /* Owned wide strings: copy clones content, shared strings stay shared. */
+    wtext_t *src = NULL;
+    wtext_t *twin = NULL;
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_calloc((void **)&src, 1, sizeof(*src))) {
+        expect_true("wstr alloc src", false);
+        return;
+    }
+    {
+        void *block = NULL;
+        size_t bytes = sizeof(g_body_a);
+        if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_calloc(&block, 1, bytes)) {
+            expect_true("wstr alloc body", false);
+            return;
+        }
+        memcpy(block, g_body_a, bytes);
+        src->body = (const char32_t *)block;
+        src->title = g_title_a;
+    }
+    expect_eq_int("wstr copy",
+                  shrewd_basic_reflect_copy((void **)&twin, src, &g_wtext_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wstr clone distinct", (NULL != twin) && (twin->body != src->body));
+    expect_true("wstr clone content",
+                (NULL != twin) && (0 == memcmp(twin->body, g_body_a, sizeof(g_body_a))));
+    expect_true("wstr clone borrow", (NULL != twin) && (twin->title == src->title));
+    same = false;
+    expect_eq_int("wstr clone equal",
+                  shrewd_basic_reflect_equal(src, twin, &g_wtext_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wstr clone equal yes", same);
+    expect_eq_int("wstr destroy src",
+                  shrewd_basic_reflect_destroy(src, &g_wtext_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("wstr destroy clone",
+                  shrewd_basic_reflect_destroy(twin, &g_wtext_reflect),
+                  SHREWD_BASIC_ERR_OK);
+
+    /* dump renders non-ASCII units as \u / \U escapes. */
+    shrewd_basic_log_module_t *module = NULL;
+    expect_eq_int(
+        "wstr find module", shrewd_basic_log_module_find("reflect", &module), SHREWD_BASIC_ERR_OK);
+    FILE *stream = tmpfile();
+    expect_true("wstr tmpfile", NULL != stream);
+    if (NULL == stream) {
+        return;
+    }
+    shrewd_basic_log_module_set_stream(module, stream);
+    wtext_t shown = {0};
+    memset(&shown, 0, sizeof(shown));
+    shown.title = g_title_a;
+    shown.body = g_body_a;
+    shown.code[0] = 'o';
+    shown.code[1] = 0x3042;
+    shown.code[2] = 0; /* escapes sit before the NUL unit */
+    expect_eq_int("wstr dump",
+                  shrewd_basic_reflect_dump(&g_wtext_reflect, &shown, "wtext"),
+                  SHREWD_BASIC_ERR_OK);
+    char buf[4096] = {0};
+    slurp(stream, buf, sizeof(buf));
+    expect_true("wstr dump escape16", NULL != strstr(buf, "caf\\u00e9"));
+    expect_true("wstr dump escape32", NULL != strstr(buf, "\\U0001f600"));
+    expect_true("wstr dump buf escape", NULL != strstr(buf, "o\\u3042"));
+    shrewd_basic_log_module_set_stream(module, stderr);
+    fclose(stream);
+}
+
 /* --- multi-dimension array fixtures ------------------------------------ */
 
 /* int32_t m[2][3]: a matrix of 2 rows x 3 columns. */
@@ -4536,6 +4722,7 @@ int main(void) {
     test_owned_strings();
     test_bits();
     test_cbit();
+    test_wstring();
     test_multidim();
     test_union();
     test_graph_ops();
