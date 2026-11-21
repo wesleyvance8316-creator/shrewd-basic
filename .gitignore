@@ -87,6 +87,10 @@ dkms.conf
 *.app
 
 # ---> JetBrains IDEs
+# User-specific editor state (CLion); keep it out of the repo.
+# Project-level config (vcs.xml, misc.xml, modules.xml, ...) stays tracked;
+# workspace.xml is already ignored by .idea/.gitignore.
+.idea/editor.xml
 
 
 # ---> VisualStudioCode
