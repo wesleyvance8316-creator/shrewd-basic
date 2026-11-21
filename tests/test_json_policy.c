@@ -535,24 +535,52 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(collide_reflect, collide_t,
 /* --- use_defaults / BORROWED fixture ---------------------------------- */
 
 typedef struct {
+    int32_t x;
+    int32_t y;
+    const char *note;
+} dpos_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(dpos_reflect, dpos_t,
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dpos_t, x),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dpos_t, y),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dpos_t, note));
+
+typedef struct {
     int32_t level;
     double ratio;
     const char *label;
     const char *unit; /* BORROWED: application-owned */
+    dpos_t pos;
+    int32_t scores[3];
 } dfl_t;
 
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(dfl_reflect, dfl_t,
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, level),
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, ratio),
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, label),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, unit));
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, unit),
+    SHREWD_BASIC_REFLECT_FIELD_STRUCT(dfl_t, pos, dpos_reflect),
+    SHREWD_BASIC_REFLECT_FIELD_ARRAY(dfl_t, scores, shrewd_basic_reflect_int32));
 
 SHREWD_BASIC_JSON_DEFINE(dfl_json, dfl_reflect,
     SHREWD_BASIC_JSON_DEFAULT(level, 7),
     SHREWD_BASIC_JSON_DEFAULT(ratio, 0.5),
     SHREWD_BASIC_JSON_DEFAULT_STR(label, "guest"),
     SHREWD_BASIC_JSON_REQUIRED(label),
-    SHREWD_BASIC_JSON_BORROWED(unit));
+    SHREWD_BASIC_JSON_BORROWED(unit),
+    SHREWD_BASIC_JSON_DEFAULT_JSON(pos, "{\"x\":1,\"y\":2,\"note\":\"hi\"}"),
+    SHREWD_BASIC_JSON_DEFAULT_JSON(scores, "[7,8,9]"));
+
+/* Broken default text: must surface as a syntax error at decode. */
+typedef struct {
+    int32_t v;
+} badfl_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(badfl_reflect, badfl_t,
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(badfl_t, v));
+
+SHREWD_BASIC_JSON_DEFINE(badfl_json, badfl_reflect,
+    SHREWD_BASIC_JSON_DEFAULT_JSON(v, "{oops"));
 
 static void test_use_defaults(void)
 {
@@ -628,6 +656,62 @@ static void test_use_defaults(void)
                   SHREWD_BASIC_ERR_OK);
     expect_true("borrowed survives free",
                 (NULL != target.unit) && (0 == strcmp(target.unit, "kg")));
+}
+
+static void test_defaults_json(void)
+{
+    shrewd_basic_json_options_t options;
+    dfl_t target;
+    memset(&options, 0, sizeof(options));
+    options.use_defaults = 1;
+
+    /* Struct and array defaults materialize from JSON text; strings
+       inside them are decode-allocated and freed by json_free. */
+    memset(&target, 0, sizeof(target));
+    expect_eq_int("defaults_json decode",
+                  decode_into("{}", &target, &dfl_reflect, &dfl_json,
+                              &options, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("defaults_json struct",
+                (1 == target.pos.x) && (2 == target.pos.y));
+    expect_streq("defaults_json nested str", target.pos.note, "hi");
+    expect_true("defaults_json array",
+                (7 == target.scores[0]) && (8 == target.scores[1])
+                && (9 == target.scores[2]));
+    expect_eq_int("defaults_json free",
+                  shrewd_basic_json_free(&target, &dfl_reflect, &dfl_json),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("defaults_json nested str released", NULL == target.pos.note);
+
+    /* A present key wins over the default entirely. */
+    memset(&target, 0, sizeof(target));
+    expect_eq_int("defaults_json override",
+                  decode_into("{\"pos\":{\"x\":5}}", &target, &dfl_reflect,
+                              &dfl_json, &options, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("defaults_json override pos",
+                (5 == target.pos.x) && (0 == target.pos.y)
+                && (NULL == target.pos.note));
+    expect_true("defaults_json array kept", 7 == target.scores[0]);
+    expect_eq_int("defaults_json override free",
+                  shrewd_basic_json_free(&target, &dfl_reflect, &dfl_json),
+                  SHREWD_BASIC_ERR_OK);
+
+    /* Invalid default text surfaces as a syntax error. */
+    {
+        shrewd_basic_json_options_t zero;
+        badfl_t bad;
+        memset(&zero, 0, sizeof(zero));
+        zero.use_defaults = 1;
+        memset(&bad, 0, sizeof(bad));
+        expect_eq_int("defaults_json bad text",
+                      decode_into("{}", &bad, &badfl_reflect, &badfl_json,
+                                  &zero, NULL),
+                      SHREWD_BASIC_ERR_JSON_SYNTAX);
+        expect_eq_int("defaults_json bad free",
+                      shrewd_basic_json_free(&bad, &badfl_reflect, &badfl_json),
+                      SHREWD_BASIC_ERR_OK);
+    }
 }
 
 static void test_loose_keys(void)
@@ -999,6 +1083,7 @@ int main(void)
 {
     test_key_aliases();
     test_use_defaults();
+    test_defaults_json();
     test_loose_keys();
     test_ops_targets();
     test_elem_ops();

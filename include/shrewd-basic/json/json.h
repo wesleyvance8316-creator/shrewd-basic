@@ -408,6 +408,7 @@ int shrewd_basic_json_free(void *object, const shrewd_basic_reflect_type_t *type
 #define SHREWD_BASIC_JSON_DEF_NONE 0   /**< No default declared. */
 #define SHREWD_BASIC_JSON_DEF_NUM 1    /**< Numeric (def_u bits + def_d value). */
 #define SHREWD_BASIC_JSON_DEF_STR 2    /**< String literal (def_s). */
+#define SHREWD_BASIC_JSON_DEF_JSON 3   /**< JSON text (def_s), any shape. */
 
 /**
  * Application callbacks for one field (JSON-flavored counterpart of the
@@ -561,6 +562,25 @@ struct shrewd_basic_json_info {
         .union_style = 0, .has_union_style = 0,                                 \
         .format = NULL, .pattern = NULL,                                        \
         .def_kind = SHREWD_BASIC_JSON_DEF_STR,                                  \
+        .def_u = 0, .def_d = 0.0, .def_s = (text)                               \
+    }
+
+/**
+ * Default as raw JSON text (a C literal), materialized on missing keys
+ * under use_defaults: decode parses the text and runs the field's normal
+ * mapping over it, so any shape works - struct/array defaults included
+ * (phase two). Strings and pointer targets inside the default are
+ * decode-allocated and json_free releases them like decoded values.
+ * Flexible-tail (FAM) fields are skipped (the caller sizes the root for
+ * the JSON that is present, not for defaults).
+ */
+#define SHREWD_BASIC_JSON_DEFAULT_JSON(member, text)                            \
+    {                                                                          \
+        .field = #member, .keys = NULL, .key_count = 0, .flags = 0,             \
+        .min = 0.0, .max = 0.0, .ops = NULL, .elem_ops = 0,                     \
+        .union_style = 0, .has_union_style = 0,                                 \
+        .format = NULL, .pattern = NULL,                                        \
+        .def_kind = SHREWD_BASIC_JSON_DEF_JSON,                                 \
         .def_u = 0, .def_d = 0.0, .def_s = (text)                               \
     }
 

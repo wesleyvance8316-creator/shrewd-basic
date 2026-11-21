@@ -597,9 +597,32 @@ static int json_decode_field(json_map_ctx_t *ctx,
 static int json_decode_default(json_map_ctx_t *ctx,
                                const shrewd_basic_reflect_field_t *field,
                                unsigned char *object,
-                               const shrewd_basic_json_key_info_t *view)
+                               const shrewd_basic_json_key_info_t *view,
+                               size_t depth)
 {
     unsigned char *at = object + field->sb_refl_offset;
+    if (SHREWD_BASIC_JSON_DEF_JSON == view->def_kind) {
+        /* Phase two: any shape. Parse the text and run the field's own
+           mapping over the DOM (skipping flexible tails: the root is
+           sized for the JSON that is present, not for defaults). */
+        shrewd_basic_json_value_t *dom = NULL;
+        int status = 0;
+        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_FLEX)) {
+            return SHREWD_BASIC_ERR_OK;
+        }
+        if ((NULL == view->def_s)
+                || (SHREWD_BASIC_ERR_OK
+                    != shrewd_basic_json_parse(view->def_s,
+                                               strlen(view->def_s), &dom, NULL,
+                                               NULL))) {
+            return json_map_fail(ctx, SHREWD_BASIC_ERR_JSON_SYNTAX,
+                                 "default for \"%s\" is not valid JSON",
+                                 field->sb_refl_name);
+        }
+        status = json_decode_field(ctx, dom, field, object, depth, view);
+        shrewd_basic_json_value_free(dom);
+        return status;
+    }
     if (NULL != view->ops) {
         return SHREWD_BASIC_ERR_OK;
     }
@@ -873,7 +896,8 @@ static int json_decode_fields(json_map_ctx_t *ctx,
         }
         if ((0 == present) && (0 != ctx->options->use_defaults)
                 && (SHREWD_BASIC_JSON_DEF_NONE != view.def_kind)) {
-            int status = json_decode_default(ctx, &fields[i], object, &view);
+            int status = json_decode_default(ctx, &fields[i], object, &view,
+                                             depth);
             if (SHREWD_BASIC_ERR_OK != status) {
                 return status;
             }
