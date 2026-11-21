@@ -49,7 +49,7 @@ static uint64_t hash_bytes(uint64_t h, const void *data, size_t nbytes)
 /* Fold a 64-bit word in little-endian byte order (stable everywhere). */
 static uint64_t hash_u64(uint64_t h, uint64_t word)
 {
-    unsigned char bytes[8];
+    unsigned char bytes[8] = {0};
     for (size_t i = 0; i < 8; ++i) {
         bytes[i] = (unsigned char)((word >> (8 * i)) & UINT64_C(0xff));
     }
@@ -352,8 +352,8 @@ int shrewd_basic_reflect_hash(const void *object,
                               const shrewd_basic_reflect_type_t *type,
                               size_t *out_hash)
 {
-    hash_graph_t graph;
-    hash_ctx_t ctx;
+    hash_graph_t graph = {0};
+    hash_ctx_t ctx = {0};
     uint64_t h = HASH_OFFSET;
     uint64_t *next = NULL;
     int status = SHREWD_BASIC_ERR_OK;

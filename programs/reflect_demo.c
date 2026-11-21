@@ -410,7 +410,7 @@ int main(void)
     /* The clone map of copy rides on the ds rbtree: silence that module
        too so the demo stays readable (a tiny warm-up copy registers it
        before the lookup). */
-    dyn_t warmup;
+    dyn_t warmup = {0};
     dyn_t *warmup_clone = NULL;
     memset(&warmup, 0, sizeof(warmup));
     (void)shrewd_basic_reflect_copy((void **)&warmup_clone, &warmup, &dyn_type);
@@ -420,7 +420,7 @@ int main(void)
         (void)shrewd_basic_log_module_set_level(ds_module, SHREWD_BASIC_LOG_LEVEL_NONE);
     }
 
-    person_t person;
+    person_t person = {0};
     memset(&person, 0, sizeof(person));
     person.name = "Alice";
     person.grade = 'A';
@@ -487,17 +487,17 @@ int main(void)
     person.handle = &handle_value; /* ops->render: dump shows handle#42 */
     (void)shrewd_basic_reflect_dump(&person_type, &person, "person");
 
-    node_t tail;
+    node_t tail = {0};
     memset(&tail, 0, sizeof(tail));
     tail.data = 2;
-    node_t head;
+    node_t head = {0};
     memset(&head, 0, sizeof(head));
     head.data = 1;
     head.next = &tail;
     printf("\n  self-referential list (node_t *next):\n");
     (void)shrewd_basic_reflect_dump(&node_type, &head, "node");
 
-    node_t loop;
+    node_t loop = {0};
     memset(&loop, 0, sizeof(loop));
     loop.next = &loop;
     printf("\n  self-cycle terminates at the depth cap:\n");
@@ -628,7 +628,7 @@ int main(void)
                                                       &mode_value));
     printf("  -> %lld\n", (long long)mode_value);
 
-    person_t other;
+    person_t other = {0};
     memset(&other, 0, sizeof(other));
     other = person;
     other.name = "Alice"; /* same content, different pointer */
@@ -744,7 +744,7 @@ int main(void)
     (void)shrewd_basic_reflect_visit(&loop, &node_type, demo_visit_print, NULL);
 
     banner("13. diff and hash: locate differences, fold values");
-    char diff_path[64];
+    char diff_path[64] = {0};
     print_status("diff(person, other)",
                  shrewd_basic_reflect_diff(&person, &other, &person_type,
                                            diff_path, sizeof(diff_path)));
@@ -766,8 +766,8 @@ int main(void)
            person_hash, other_hash);
 
     banner("14. string buffers: char[N] with C-string semantics");
-    text_t text_a;
-    text_t text_b;
+    text_t text_a = {0};
+    text_t text_b = {0};
     memset(&text_a, 0, sizeof(text_a));
     memset(&text_b, 0, sizeof(text_b));
     memcpy(text_a.title, "hello", 6);
@@ -823,7 +823,7 @@ int main(void)
     }
 
     banner("16. bit groups: named bits inside a register word");
-    reg_t reg;
+    reg_t reg = {0};
     memset(&reg, 0, sizeof(reg));
     reg.cfg = (1u << 0) | (5u << 1) | (100u << 8) | 0xf0u | 0xab000000u;
     reg.value = 7;
@@ -841,7 +841,7 @@ int main(void)
                          &reg, shrewd_basic_reflect_type_field_at(&reg_type, 1),
                          &mode, sizeof(mode)));
     printf("  cfg after write = 0x%08x (only bits 1-3 changed)\n", reg.cfg);
-    reg_t reg_other;
+    reg_t reg_other = {0};
     memset(&reg_other, 0, sizeof(reg_other));
     reg_other.cfg = (reg.cfg & 0xffffu) | 0x07000000u; /* same groups, other garbage */
     reg_other.value = 7;
@@ -852,7 +852,7 @@ int main(void)
            reg_same ? "equal" : "different");
 
     banner("17. multi-dimension arrays: rows as array value types");
-    matrix_t mx;
+    matrix_t mx = {0};
     memset(&mx, 0, sizeof(mx));
     for (size_t r = 0; r < 2; ++r) {
         for (size_t c = 0; c < 3; ++c) {
@@ -914,11 +914,11 @@ int main(void)
     {
         static const shrewd_basic_reflect_list_ops_t ops = {
             demo_reg_insert, demo_reg_find_type, demo_reg_find_name };
-        demo_reg_t registry;
-        shrewd_basic_reflect_list_t list;
+        demo_reg_t registry = {0};
+        shrewd_basic_reflect_list_t list = {0};
         const shrewd_basic_reflect_type_t *by_name = NULL;
         const shrewd_basic_reflect_field_t *by_field = NULL;
-        point_t origin;
+        point_t origin = {0};
         int32_t x = 0;
 
         memset(&registry, 0, sizeof(registry));
@@ -951,7 +951,7 @@ int main(void)
     banner("20. registry container and describe: name -> type out of the box");
     {
         SHREWD_BASIC_REFLECT_REGISTRY_DEFINE(demo_registry, 4);
-        shrewd_basic_reflect_list_t reg_list;
+        shrewd_basic_reflect_list_t reg_list = {0};
         const shrewd_basic_reflect_type_t *by_name = NULL;
 
         print_status("registry_bind(&registry, &list)",

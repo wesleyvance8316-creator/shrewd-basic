@@ -415,7 +415,7 @@ static void dump_field_list(dump_ctx_t *ctx, const shrewd_basic_reflect_field_t 
                             dump_emit(ctx);
                             continue;
                         }
-                        char text[DUMP_TEXT_MAX];
+                        char text[DUMP_TEXT_MAX] = {0};
                         if (0 != dump_render_target(field, pointer, text, sizeof(text))) {
                             dump_append(ctx, "%*s%s[%zu] = %s", pad, "",
                                         field->sb_refl_name, j, text);
@@ -459,7 +459,7 @@ static void dump_field_list(dump_ctx_t *ctx, const shrewd_basic_reflect_field_t 
                         if (NULL == pointer) {
                             dump_append(ctx, "(null)");
                         } else {
-                            char text[DUMP_TEXT_MAX];
+                            char text[DUMP_TEXT_MAX] = {0};
                             if (0 != dump_render_target(field, pointer, text, sizeof(text))) {
                                 dump_append(ctx, "%s", text);
                             } else if (0 != is_opaque) {
@@ -486,7 +486,7 @@ static void dump_field_list(dump_ctx_t *ctx, const shrewd_basic_reflect_field_t 
                 dump_append(ctx, "%*s%s = (null)", pad, "", field->sb_refl_name);
                 dump_emit(ctx);
             } else {
-                char text[DUMP_TEXT_MAX];
+                char text[DUMP_TEXT_MAX] = {0};
                 if (0 != dump_render_target(field, pointer, text, sizeof(text))) {
                     dump_append(ctx, "%*s%s = %s", pad, "", field->sb_refl_name, text);
                     dump_emit(ctx);
@@ -551,7 +551,7 @@ int shrewd_basic_reflect_dump_write(const shrewd_basic_reflect_type_t *type,
                          "dump", file, line, func, "dump: type \"%s\" is not a struct\n", type->sb_refl_name);
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
-    dump_ctx_t ctx;
+    dump_ctx_t ctx = {0};
     if (SHREWD_BASIC_ERR_OK != dump_init(&ctx)) {
         shrewd_basic_log_write(SHREWD_BASIC_LOG_LEVEL_ERROR, shrewd_basic_reflect_log,
                          "dump", file, line, func, "dump: allocation failed\n");
@@ -581,7 +581,7 @@ int shrewd_basic_reflect_dump_write(const shrewd_basic_reflect_type_t *type,
 static void describe_field(dump_ctx_t *ctx, const char *indent,
                            const shrewd_basic_reflect_field_t *field)
 {
-    char shape[64];
+    char shape[64] = {0};
     const char *base = (NULL != field->sb_refl_type)
             ? field->sb_refl_type->sb_refl_name : "?";
     const char *ptr = (0u != (field->sb_refl_flags
@@ -620,7 +620,7 @@ static void describe_field(dump_ctx_t *ctx, const char *indent,
 
 int shrewd_basic_reflect_describe(const shrewd_basic_reflect_type_t *type)
 {
-    dump_ctx_t ctx;
+    dump_ctx_t ctx = {0};
     if (NULL == type) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
                          "describe", "describe: type is NULL\n");
@@ -721,7 +721,7 @@ int shrewd_basic_reflect_layout(const shrewd_basic_reflect_type_t *type,
         if (NULL == pick) {
             break; /* unreachable: every rank has a holder */
         }
-        shrewd_basic_reflect_layout_entry_t entry;
+        shrewd_basic_reflect_layout_entry_t entry = {0};
         entry.field = pick;
         entry.offset = pick->sb_refl_offset;
         entry.size = pick->sb_refl_size;

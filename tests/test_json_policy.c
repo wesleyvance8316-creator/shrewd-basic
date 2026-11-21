@@ -175,7 +175,7 @@ static int decode_into(const char *text, void *target,
 
 static void test_key_aliases(void)
 {
-    cfg_t cfg;
+    cfg_t cfg = {0};
     memset(&cfg, 0, sizeof(cfg));
     cfg.age = 30;
     cfg.name = "bob";
@@ -193,7 +193,7 @@ static void test_key_aliases(void)
 
     /* Decode accepts every alias and the plain member name. */
     {
-        cfg_t target;
+        cfg_t target = {0};
         memset(&target, 0, sizeof(target));
         expect_eq_int("policy decode alias",
                       decode_into("{\"age\":20,\"NameID\":\"al\",\"score\":4}",
@@ -206,7 +206,7 @@ static void test_key_aliases(void)
                       SHREWD_BASIC_ERR_OK);
     }
     {
-        cfg_t target;
+        cfg_t target = {0};
         memset(&target, 0, sizeof(target));
         expect_eq_int("policy decode member name",
                       decode_into("{\"name\":\"x\"}", &target, &cfg_reflect,
@@ -220,7 +220,7 @@ static void test_key_aliases(void)
 
     /* Aliases conflict: last wins by default, strict rejects. */
     {
-        cfg_t target;
+        cfg_t target = {0};
         memset(&target, 0, sizeof(target));
         expect_eq_int("policy conflict",
                       decode_into("{\"name_id\":\"a\",\"nameID\":\"b\"}", &target,
@@ -232,9 +232,9 @@ static void test_key_aliases(void)
                       SHREWD_BASIC_ERR_OK);
     }
     {
-        shrewd_basic_json_options_t options;
-        shrewd_basic_json_error_t error;
-        cfg_t target;
+        shrewd_basic_json_options_t options = {0};
+        shrewd_basic_json_error_t error = {0};
+        cfg_t target = {0};
         memset(&options, 0, sizeof(options));
         options.strict = 1;
         memset(&target, 0, sizeof(target));
@@ -249,8 +249,8 @@ static void test_key_aliases(void)
 
     /* Strict rejects unknown keys. */
     {
-        shrewd_basic_json_options_t options;
-        cfg_t target;
+        shrewd_basic_json_options_t options = {0};
+        cfg_t target = {0};
         memset(&options, 0, sizeof(options));
         options.strict = 1;
         memset(&target, 0, sizeof(target));
@@ -268,8 +268,8 @@ static void test_required_range_check(void)
 {
     /* REQUIRED: the alias set must be present. */
     {
-        shrewd_basic_json_error_t error;
-        cfg_t target;
+        shrewd_basic_json_error_t error = {0};
+        cfg_t target = {0};
         memset(&target, 0, sizeof(target));
         expect_eq_int("policy required missing",
                       decode_into("{\"age\":1}", &target, &cfg_reflect, &cfg_json,
@@ -283,8 +283,8 @@ static void test_required_range_check(void)
 
     /* RANGE: checked both directions. */
     {
-        shrewd_basic_json_error_t error;
-        cfg_t target;
+        shrewd_basic_json_error_t error = {0};
+        cfg_t target = {0};
         memset(&target, 0, sizeof(target));
         expect_eq_int("policy range decode",
                       decode_into("{\"name\":\"x\",\"age\":200}", &target,
@@ -296,7 +296,7 @@ static void test_required_range_check(void)
                       SHREWD_BASIC_ERR_OK);
     }
     {
-        cfg_t cfg;
+        cfg_t cfg = {0};
         char *text = NULL;
         memset(&cfg, 0, sizeof(cfg));
         cfg.age = 200;
@@ -310,8 +310,8 @@ static void test_required_range_check(void)
 
     /* ops->check rejects on decode (and the error keeps the path). */
     {
-        shrewd_basic_json_error_t error;
-        cfg_t target;
+        shrewd_basic_json_error_t error = {0};
+        cfg_t target = {0};
         memset(&target, 0, sizeof(target));
         expect_eq_int("policy check decode",
                       decode_into("{\"name\":\"x\",\"score\":-2}", &target,
@@ -325,7 +325,7 @@ static void test_required_range_check(void)
 
     /* HIDDEN keys are ignored on decode even when present. */
     {
-        cfg_t target;
+        cfg_t target = {0};
         memset(&target, 0, sizeof(target));
         expect_eq_int("policy hidden decode",
                       decode_into("{\"name\":\"x\",\"secret\":\"zz\"}", &target,
@@ -340,7 +340,7 @@ static void test_required_range_check(void)
 
 static void test_union_styles(void)
 {
-    msg_t msg;
+    msg_t msg = {0};
     memset(&msg, 0, sizeof(msg));
 
     /* F4 flat: the variant's fields are promoted to the parent object
@@ -351,7 +351,7 @@ static void test_union_styles(void)
     expect_encode("policy union flat", &msg, &msg_reflect, &msg_flat_json,
                   "{\"kind\":\"MSG_POINT\",\"point\":{\"x\":1,\"y\":2}}");
     {
-        msg_t target;
+        msg_t target = {0};
         memset(&target, 0, sizeof(target));
         expect_eq_int("policy union flat decode",
                       decode_into("{\"point\":{\"x\":5,\"y\":6},\"kind\":\"MSG_POINT\"}",
@@ -371,7 +371,7 @@ static void test_union_styles(void)
     expect_encode("policy union unwrap", &msg, &msg_reflect, &msg_unwrap_json,
                   "{\"kind\":\"MSG_TEXT\",\"body\":\"hello\"}");
     {
-        msg_t target;
+        msg_t target = {0};
         memset(&target, 0, sizeof(target));
         expect_eq_int("policy union unwrap decode",
                       decode_into("{\"kind\":\"MSG_TEXT\",\"body\":\"hi\"}",
@@ -431,7 +431,7 @@ static int key_capture_cb(void *ctx, const shrewd_basic_json_key_info_t *key)
 
 static void test_keys_export(void)
 {
-    key_capture_t cap;
+    key_capture_t cap = {0};
     memset(&cap, 0, sizeof(cap));
     expect_eq_int("policy keys",
                   shrewd_basic_json_keys(&cfg_reflect, &cfg_json, key_capture_cb,
@@ -464,7 +464,7 @@ static void test_keys_export(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
     {
         char *text = NULL;
-        cfg_t cfg;
+        cfg_t cfg = {0};
         memset(&cfg, 0, sizeof(cfg));
         cfg.name = "x";
         expect_eq_int("policy encode mismatch",
@@ -584,8 +584,8 @@ SHREWD_BASIC_JSON_DEFINE(badfl_json, badfl_reflect,
 
 static void test_use_defaults(void)
 {
-    shrewd_basic_json_options_t options;
-    dfl_t target;
+    shrewd_basic_json_options_t options = {0};
+    dfl_t target = {0};
     memset(&options, 0, sizeof(options));
     options.use_defaults = 1;
 
@@ -660,8 +660,8 @@ static void test_use_defaults(void)
 
 static void test_defaults_json(void)
 {
-    shrewd_basic_json_options_t options;
-    dfl_t target;
+    shrewd_basic_json_options_t options = {0};
+    dfl_t target = {0};
     memset(&options, 0, sizeof(options));
     options.use_defaults = 1;
 
@@ -699,8 +699,8 @@ static void test_defaults_json(void)
 
     /* Invalid default text surfaces as a syntax error. */
     {
-        shrewd_basic_json_options_t zero;
-        badfl_t bad;
+        shrewd_basic_json_options_t zero = {0};
+        badfl_t bad = {0};
         memset(&zero, 0, sizeof(zero));
         zero.use_defaults = 1;
         memset(&bad, 0, sizeof(bad));
@@ -716,8 +716,8 @@ static void test_defaults_json(void)
 
 static void test_loose_keys(void)
 {
-    shrewd_basic_json_options_t options;
-    cfg_t target;
+    shrewd_basic_json_options_t options = {0};
+    cfg_t target = {0};
     memset(&options, 0, sizeof(options));
     options.key_match = SHREWD_BASIC_JSON_KEY_MATCH_LOOSE;
     memset(&target, 0, sizeof(target));
@@ -736,7 +736,7 @@ static void test_loose_keys(void)
 
     /* Colliding members under loose matching are refused outright. */
     {
-        collide_t collide;
+        collide_t collide = {0};
         memset(&collide, 0, sizeof(collide));
         expect_eq_int("loose collision",
                       decode_into("{\"name_id\":1}", &collide, &collide_reflect,
@@ -747,7 +747,7 @@ static void test_loose_keys(void)
 
 static void test_ops_targets(void)
 {
-    ext_t probe;
+    ext_t probe = {0};
     void *block = NULL;
     int32_t storage = 41;
 
@@ -855,7 +855,7 @@ SHREWD_BASIC_JSON_DEFINE(elem_json, elem_reflect,
 
 static void test_elem_ops(void)
 {
-    elem_t source;
+    elem_t source = {0};
     int32_t h1 = 10;
     int32_t h2 = 20;
     char *text = NULL;
@@ -895,8 +895,8 @@ static void test_elem_ops(void)
 
     /* Per-element check rejects bad elements with the index in the path. */
     {
-        shrewd_basic_json_error_t error;
-        elem_t target;
+        shrewd_basic_json_error_t error = {0};
+        elem_t target = {0};
         memset(&target, 0, sizeof(target));
         expect_eq_int("elem ops check",
                       decode_into("{\"values\":[1,2,-2]}", &target, &elem_reflect,
@@ -912,7 +912,7 @@ static void test_elem_ops(void)
 static void test_schema_sync(void)
 {
     char *text = NULL;
-    shrewd_basic_json_info_t probe;
+    shrewd_basic_json_info_t probe = {0};
 
     /* FORMAT/PATTERN rows land in the schema as annotations. */
     {
@@ -961,8 +961,8 @@ static void test_decode_pointer(void)
     const char *doc =
             "{\"header\":{\"id\":5},\"items\":[{\"x\":1,\"y\":2},{\"x\":3,\"y\":4}]}";
     shrewd_basic_json_value_t *root = NULL;
-    shrewd_basic_json_error_t error;
-    point_t target;
+    shrewd_basic_json_error_t error = {0};
+    point_t target = {0};
     int32_t id = 0;
 
     expect_eq_int("decode pointer parse",
@@ -998,7 +998,7 @@ static void test_schema_check(void)
     char *text = NULL;
     shrewd_basic_json_value_t *schema = NULL;
     shrewd_basic_json_value_t *doc = NULL;
-    shrewd_basic_json_error_t error;
+    shrewd_basic_json_error_t error = {0};
 
     /* Export cfg's schema and re-parse it (the self-consistency loop). */
     expect_eq_int("check schema export",

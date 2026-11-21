@@ -17,7 +17,7 @@
 
 int main(void)
 {
-    shape_t s;
+    shape_t s = {0};
     memset(&s, 0, sizeof(s));
     s.name = "shape";
     s.color = COLOR_GREEN;
@@ -29,7 +29,7 @@ int main(void)
     s.count = 3;
     (void)shrewd_basic_reflect_dump(&shape_t_reflect, &s, "shape");
 
-    shape_t t;
+    shape_t t = {0};
     memset(&t, 0, sizeof(t));
     t.name = "shape";
     t.color = COLOR_GREEN;

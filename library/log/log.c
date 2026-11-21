@@ -180,8 +180,8 @@ static const char *log_basename(const char *path)
 /* "[YYYY-MM-DD HH:mm:ss.xxxxxx]", local time, microseconds. */
 static void log_timestamp(char *buf, size_t size)
 {
-    struct timespec ts;
-    char timebuf[32];
+    struct timespec ts = {0};
+    char timebuf[32] = {0};
 
     if (TIME_UTC != timespec_get(&ts, TIME_UTC)) {
         snprintf(buf, size, "[1970-01-01 00:00:00.000000]");
@@ -389,7 +389,7 @@ int shrewd_basic_log_write(shrewd_basic_log_level_t level,
     log_lock();
     log_touch(module);
 
-    char timestamp[64];
+    char timestamp[64] = {0};
     log_timestamp(timestamp, sizeof(timestamp));
 
     FILE *out = log_output(module);
@@ -432,7 +432,7 @@ int shrewd_basic_log_hex_write(shrewd_basic_log_level_t level,
     log_lock();
     log_touch(module);
 
-    char timestamp[64];
+    char timestamp[64] = {0};
     log_timestamp(timestamp, sizeof(timestamp));
 
     FILE *out = log_output(module);

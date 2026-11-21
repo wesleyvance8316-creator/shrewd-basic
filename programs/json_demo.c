@@ -102,7 +102,7 @@ static void print_status(const char *what, int status)
 int main(void)
 {
     printf("=== 1. encode: struct -> JSON text ===\n");
-    msg_t msg;
+    msg_t msg = {0};
     memset(&msg, 0, sizeof(msg));
     msg.kind = MSG_POINT;
     msg.id = 42;
@@ -116,7 +116,7 @@ int main(void)
     printf("  compact: %s\n", text);
     shrewd_basic_json_text_free(text);
     {
-        shrewd_basic_json_options_t options;
+        shrewd_basic_json_options_t options = {0};
         memset(&options, 0, sizeof(options));
         options.pretty = 1;
         print_status("encode(msg, pretty)",
@@ -131,7 +131,7 @@ int main(void)
         const char *incoming =
                 "{\"kind\":\"MSG_TEXT\",\"id\":7,\"tag\":\"ok\","
                 "\"name\":\"n\",\"body\":{\"text\":\"hello\"}}";
-        shrewd_basic_json_error_t error;
+        shrewd_basic_json_error_t error = {0};
         void *block = NULL;
         (void)shrewd_basic_platform_calloc(&block, 1, sizeof(msg_t));
         print_status("decode(text)",
@@ -180,7 +180,7 @@ int main(void)
     printf("\n=== 4. policy: key aliases, omission, union styles ===\n");
     {
         char *policed = NULL;
-        msg_t tagged;
+        msg_t tagged = {0};
         memset(&tagged, 0, sizeof(tagged));
         tagged.kind = MSG_TEXT;
         tagged.id = 9;
@@ -212,8 +212,8 @@ int main(void)
 
     printf("\n=== 5. use_defaults + BORROWED: policy defaults, app-owned pointers ===\n");
     {
-        shrewd_basic_json_options_t options;
-        dfl_t cfg;
+        shrewd_basic_json_options_t options = {0};
+        dfl_t cfg = {0};
         memset(&options, 0, sizeof(options));
         options.use_defaults = 1;
         memset(&cfg, 0, sizeof(cfg));

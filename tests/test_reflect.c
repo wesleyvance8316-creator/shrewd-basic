@@ -384,7 +384,7 @@ static void test_find_field(void)
 
 static void test_get_set_scalars(void)
 {
-    person_t person;
+    person_t person = {0};
     memset(&person, 0, sizeof(person));
 
     const shrewd_basic_reflect_field_t *f = find_or_fail("scalars", &g_person_reflect, "age");
@@ -467,7 +467,7 @@ static void test_get_set_scalars(void)
 
 static void test_get_set_string(void)
 {
-    person_t person;
+    person_t person = {0};
     memset(&person, 0, sizeof(person));
 
     const shrewd_basic_reflect_field_t *f = find_or_fail("string", &g_person_reflect, "name");
@@ -497,7 +497,7 @@ static void test_get_set_string(void)
 
 static void test_nested(void)
 {
-    person_t person;
+    person_t person = {0};
     memset(&person, 0, sizeof(person));
 
     const shrewd_basic_reflect_field_t *home =
@@ -533,7 +533,7 @@ static void test_nested(void)
 
 static void test_array(void)
 {
-    person_t person;
+    person_t person = {0};
     memset(&person, 0, sizeof(person));
 
     const shrewd_basic_reflect_field_t *scores =
@@ -627,8 +627,8 @@ static void test_equal(void)
     bool same = false;
 
     /* Scalars and strings compare by value, not by pointer. */
-    person_t a;
-    person_t b;
+    person_t a = {0};
+    person_t b = {0};
     memset(&a, 0, sizeof(a));
     memset(&b, 0, sizeof(b));
     a.age = 30;
@@ -664,8 +664,8 @@ static void test_equal(void)
     expect_true("equal string null no", !same);
 
     /* Enums compare numerically. */
-    config_t ca;
-    config_t cb;
+    config_t ca = {0};
+    config_t cb = {0};
     memset(&ca, 0, sizeof(ca));
     memset(&cb, 0, sizeof(cb));
     ca.mode = MODE_ON;
@@ -681,16 +681,16 @@ static void test_equal(void)
     expect_true("equal enum differs no", !same);
 
     /* Pointer targets compare deeply, whatever their addresses. */
-    point_t pa;
-    point_t pb;
+    point_t pa = {0};
+    point_t pb = {0};
     memset(&pa, 0, sizeof(pa));
     memset(&pb, 0, sizeof(pb));
     pa.x = 1;
     pa.y = 2;
     pb.x = 1;
     pb.y = 2;
-    graph_t ga;
-    graph_t gb;
+    graph_t ga = {0};
+    graph_t gb = {0};
     memset(&ga, 0, sizeof(ga));
     memset(&gb, 0, sizeof(gb));
     ga.home = &pa;
@@ -716,8 +716,8 @@ static void test_equal(void)
     expect_true("equal pointer both null yes", same);
 
     /* Cycles terminate and compare coinductively. */
-    node_t ra;
-    node_t rb;
+    node_t ra = {0};
+    node_t rb = {0};
     memset(&ra, 0, sizeof(ra));
     memset(&rb, 0, sizeof(rb));
     ra.data = 3;
@@ -737,8 +737,8 @@ static void test_equal(void)
     /* Field-level ops override the comparison. */
     int32_t nine_a = 9;
     int32_t nine_b = 9;
-    wrap_t wa;
-    wrap_t wb;
+    wrap_t wa = {0};
+    wrap_t wb = {0};
     memset(&wa, 0, sizeof(wa));
     memset(&wb, 0, sizeof(wb));
     wa.p = &nine_a;
@@ -749,8 +749,8 @@ static void test_equal(void)
     expect_true("equal ops override no", !same);
 
     /* Opaque targets fall back to identity. */
-    refs_t oa;
-    refs_t ob;
+    refs_t oa = {0};
+    refs_t ob = {0};
     memset(&oa, 0, sizeof(oa));
     memset(&ob, 0, sizeof(ob));
     oa.ctx = &pa;
@@ -900,7 +900,7 @@ static void test_dynamic_arrays(void)
     expect_eq_int("dyn dump",
                   shrewd_basic_reflect_dump(&g_dyn_reflect, src, "dyn"),
                   SHREWD_BASIC_ERR_OK);
-    dyn_t empty;
+    dyn_t empty = {0};
     memset(&empty, 0, sizeof(empty));
     expect_eq_int("dyn dump empty",
                   shrewd_basic_reflect_dump(&g_dyn_reflect, &empty, "dyn"),
@@ -1145,7 +1145,7 @@ static void test_logging_policy(void)
 
     const shrewd_basic_reflect_field_t *f =
         find_or_fail("logging", &g_person_reflect, "age");
-    person_t person;
+    person_t person = {0};
     memset(&person, 0, sizeof(person));
     person.age = 7;
     int32_t value = 0;
@@ -1185,7 +1185,7 @@ static void test_dump(void)
         return;
     }
 
-    person_t person;
+    person_t person = {0};
     memset(&person, 0, sizeof(person));
     person.active = true;
     person.grade = 'A';
@@ -1254,7 +1254,7 @@ static void test_dump(void)
     fclose(stream);
 
     /* Phase 2: escapes and the label-free header. */
-    person_t weird;
+    person_t weird = {0};
     memset(&weird, 0, sizeof(weird));
     weird.name = "a\"b\nc";
     stream = tmpfile();
@@ -1283,7 +1283,7 @@ static void test_dump(void)
     expect_eq_int("dump null string",
                   shrewd_basic_reflect_dump(&g_person_reflect, &weird, NULL),
                   SHREWD_BASIC_ERR_OK);
-    char huge[300];
+    char huge[300] = {0};
     memset(huge, 'x', sizeof(huge) - 1);
     huge[sizeof(huge) - 1] = '\0';
     weird.name = huge;
@@ -1297,7 +1297,7 @@ static void test_dump(void)
     fclose(stream);
 
     /* Phase 4: array element cap and error paths. */
-    wide_t wide;
+    wide_t wide = {0};
     memset(&wide, 0, sizeof(wide));
     wide.wide[39] = 9;
     stream = tmpfile();
@@ -1331,7 +1331,7 @@ static void test_dump(void)
 static void test_cross_tu(void)
 {
     /* The foreign translation unit must see the very same descriptor. */
-    point_t point;
+    point_t point = {0};
     memset(&point, 0, sizeof(point));
     expect_eq_int("cross_tu set_x",
                   shrewd_test_reflect_ext_set_x(&point, 17), SHREWD_BASIC_ERR_OK);
@@ -1378,7 +1378,7 @@ static void test_pointer_fields(void)
                             "opaque"));
 
     /* get/set copy the pointer value, never the pointee. */
-    refs_t refs;
+    refs_t refs = {0};
     memset(&refs, 0, sizeof(refs));
     int32_t value = 9;
     int32_t other = 11;
@@ -1408,9 +1408,9 @@ static void test_pointer_fields(void)
                   SHREWD_BASIC_ERR_REFLECT_MISMATCH);
 
     /* Self-referential pointer through the shared descriptor. */
-    node_t tail;
+    node_t tail = {0};
     memset(&tail, 0, sizeof(tail));
-    node_t head;
+    node_t head = {0};
     memset(&head, 0, sizeof(head));
     const shrewd_basic_reflect_field_t *next =
         find_or_fail("pointer", &g_node_reflect, "next");
@@ -1437,11 +1437,11 @@ static void test_dump_pointers(void)
     /* Phase 1: followed pointers of every flavor. */
     const char *text = "hi";
     int32_t counter = 7;
-    point_t point;
+    point_t point = {0};
     memset(&point, 0, sizeof(point));
     point.x = 1;
     point.y = 2;
-    refs_t refs;
+    refs_t refs = {0};
     memset(&refs, 0, sizeof(refs));
     refs.p_str = &text;
     refs.ctx = &counter; /* any address: opaque targets show 0x... */
@@ -1480,10 +1480,10 @@ static void test_dump_pointers(void)
     fclose(stream);
 
     /* Phase 2: self-referential chain terminates via the depth cap. */
-    node_t tail;
+    node_t tail = {0};
     memset(&tail, 0, sizeof(tail));
     tail.data = 2;
-    node_t head;
+    node_t head = {0};
     memset(&head, 0, sizeof(head));
     head.data = 1;
     head.next = &tail;
@@ -1504,7 +1504,7 @@ static void test_dump_pointers(void)
                 && (NULL != strstr(buf, "    next = (null)")));
     fclose(stream);
 
-    node_t loop;
+    node_t loop = {0};
     memset(&loop, 0, sizeof(loop));
     loop.next = &loop;
     stream = tmpfile();
@@ -1522,7 +1522,7 @@ static void test_dump_pointers(void)
     expect_true("dump_ptr cycle no spam", NULL == strstr(buf, "...(max depth)"));
 
     /* A deep but finite chain still hits the depth cap. */
-    node_t chain[20];
+    node_t chain[20] = {0};
     memset(chain, 0, sizeof(chain));
     for (size_t i = 0; i + 1 < 20; ++i) {
         chain[i].data = (int32_t)i;
@@ -1620,7 +1620,7 @@ static void test_paths(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
 
     /* path_get/path_set on value paths. */
-    person_t person;
+    person_t person = {0};
     memset(&person, 0, sizeof(person));
     int32_t value = 21;
     expect_eq_int("path_set home.x",
@@ -1658,9 +1658,9 @@ static void test_paths(void)
                   SHREWD_BASIC_ERR_REFLECT_MISMATCH);
 
     /* Pointer segments are followed for addressing. */
-    node_t tail;
+    node_t tail = {0};
     memset(&tail, 0, sizeof(tail));
-    node_t head;
+    node_t head = {0};
     memset(&head, 0, sizeof(head));
     head.next = &tail;
     value = 7;
@@ -1760,7 +1760,7 @@ static void test_enum(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
 
     /* Field binding plus raw and path access. */
-    config_t config;
+    config_t config = {0};
     memset(&config, 0, sizeof(config));
     config.mode = MODE_ON;
     const shrewd_basic_reflect_field_t *field =
@@ -1844,7 +1844,7 @@ static void test_ops(void)
     expect_true("ops opaque target", &g_type_ops == g_handle_reflect.sb_refl_ops);
 
     /* value_get/set through the type-level ops. */
-    ops_refs_t refs;
+    ops_refs_t refs = {0};
     memset(&refs, 0, sizeof(refs));
     int32_t target = 5;
     refs.type_ops_slot = &target;
@@ -1889,7 +1889,7 @@ static void test_ops(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
     const shrewd_basic_reflect_field_t *plain =
         find_or_fail("ops", &g_person_reflect, "age");
-    person_t person;
+    person_t person = {0};
     memset(&person, 0, sizeof(person));
     if (NULL != plain) {
         expect_eq_int("value_get without ops",
@@ -1903,14 +1903,14 @@ static void test_ops(void)
 
 static void test_graph_ops(void)
 {
-    point_t home;
+    point_t home = {0};
     memset(&home, 0, sizeof(home));
     home.x = 1;
     home.y = 2;
     int32_t counter = 3;
     const char *text = "hi";
     int32_t handle = 4;
-    graph_t graph;
+    graph_t graph = {0};
     memset(&graph, 0, sizeof(graph));
     graph.home = &home;
     graph.counter = &counter;
@@ -1965,7 +1965,7 @@ static void test_graph_ops(void)
     expect_true("destroy left borrowed string", 0 == strcmp(text, "hi"));
 
     /* Opaque targets without ops cannot be cloned. */
-    refs_t refs;
+    refs_t refs = {0};
     memset(&refs, 0, sizeof(refs));
     refs.ctx = &counter;
     void *bad = NULL;
@@ -1976,7 +1976,7 @@ static void test_graph_ops(void)
     /* Cyclic and shared graphs: the clone map and the visited set make
        copy and destroy sound - the clone keeps the cycle, shared sources
        stay shared, and every clone is freed exactly once. */
-    node_t loop;
+    node_t loop = {0};
     memset(&loop, 0, sizeof(loop));
     loop.next = &loop;
     void *loop_clone = NULL;
@@ -1993,8 +1993,8 @@ static void test_graph_ops(void)
                   shrewd_basic_reflect_destroy(loop_clone, &g_node_reflect),
                   SHREWD_BASIC_ERR_OK);
 
-    node_t ring_a;
-    node_t ring_b;
+    node_t ring_a = {0};
+    node_t ring_b = {0};
     memset(&ring_a, 0, sizeof(ring_a));
     memset(&ring_b, 0, sizeof(ring_b));
     ring_a.next = &ring_b;
@@ -2013,10 +2013,10 @@ static void test_graph_ops(void)
                   SHREWD_BASIC_ERR_OK);
 
     /* Diamond: two references to one object stay one shared clone. */
-    point_t shared;
+    point_t shared = {0};
     memset(&shared, 0, sizeof(shared));
     shared.x = 7;
-    refs_t diamond;
+    refs_t diamond = {0};
     memset(&diamond, 0, sizeof(diamond));
     diamond.team[0] = &shared;
     diamond.team[1] = &shared;
@@ -2103,7 +2103,7 @@ static int visit_find(const visit_rec_t *rec,
 
 static void test_visit(void)
 {
-    person_t person;
+    person_t person = {0};
     memset(&person, 0, sizeof(person));
     person.name = "Alice";
     person.tag[0] = 't';
@@ -2115,7 +2115,7 @@ static void test_visit(void)
     person.pair[1].y = 9;
 
     /* Full walk of person_t: every event in order. */
-    visit_rec_t rec;
+    visit_rec_t rec = {0};
     memset(&rec, 0, sizeof(rec));
     expect_eq_int("visit person",
                   shrewd_basic_reflect_visit(&person, &g_person_reflect, visit_collect, &rec),
@@ -2189,11 +2189,11 @@ static void test_visit(void)
                 && (0 == strcmp(rec.entries[1].path, "active")));
 
     /* NULL pointer slots, opaque targets and pointer-to-struct elements. */
-    point_t team_point;
+    point_t team_point = {0};
     int32_t counter = 5;
     const char *text = "hi";
     int32_t handle = 9;
-    refs_t refs;
+    refs_t refs = {0};
     memset(&refs, 0, sizeof(refs));
     memset(&team_point, 0, sizeof(team_point));
     refs.p_str = &text;
@@ -2228,7 +2228,7 @@ static void test_visit(void)
                 (0 <= at) && (0 != rec.entries[at].value_null));
 
     /* Cycles: a self-link reports CYCLE instead of expanding. */
-    node_t loop;
+    node_t loop = {0};
     memset(&loop, 0, sizeof(loop));
     loop.data = 1;
     loop.next = &loop;
@@ -2250,7 +2250,7 @@ static void test_visit(void)
                 (0 <= at) && (0 != rec.entries[at].value_null));
 
     /* Depth cap: a 20-long chain stops with a CYCLE event. */
-    node_t chain[20];
+    node_t chain[20] = {0};
     memset(chain, 0, sizeof(chain));
     for (size_t i = 0; i + 1 < 20; ++i) {
         chain[i].next = &chain[i + 1];
@@ -2271,11 +2271,11 @@ static void test_visit(void)
                 0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, "next.next.next"));
 
     /* Dynamic arrays: ARRAY_ENTER carries the run-time count. */
-    dyn_t dyn;
-    point_t dyn_points[2];
-    point_t *dyn_table[2];
-    int32_t dyn_values[3];
-    char *dyn_argv[3];
+    dyn_t dyn = {0};
+    point_t dyn_points[2] = {0};
+    point_t *dyn_table[2] = {0};
+    int32_t dyn_values[3] = {0};
+    char *dyn_argv[3] = {0};
     memset(&dyn, 0, sizeof(dyn));
     memset(dyn_points, 0, sizeof(dyn_points));
     dyn_table[0] = &dyn_points[0];
@@ -2307,7 +2307,7 @@ static void test_visit(void)
     expect_true("visit sentinel count",
                 (0 <= at) && ((size_t)2 == rec.entries[at].count)
                 && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "argv[1]")));
-    dyn_t dyn_empty;
+    dyn_t dyn_empty = {0};
     memset(&dyn_empty, 0, sizeof(dyn_empty));
     memset(&rec, 0, sizeof(rec));
     expect_eq_int("visit dyn empty",
@@ -2370,9 +2370,9 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE_OPS(g_const_hash_reflect, point_t, g_const_hash
 
 static void test_diff(void)
 {
-    person_t a;
-    person_t b;
-    char path[64];
+    person_t a = {0};
+    person_t b = {0};
+    char path[64] = {0};
     memset(&a, 0, sizeof(a));
     b = a;
 
@@ -2421,9 +2421,9 @@ static void test_diff(void)
     b.name = "Alice";
 
     /* NULL vs non-NULL pointer target. */
-    node_t left;
-    node_t right;
-    node_t target;
+    node_t left = {0};
+    node_t right = {0};
+    node_t target = {0};
     memset(&left, 0, sizeof(left));
     memset(&right, 0, sizeof(right));
     memset(&target, 0, sizeof(target));
@@ -2435,8 +2435,8 @@ static void test_diff(void)
     expect_true("diff null pointer path", 0 == strcmp(path, "next"));
 
     /* Dynamic arrays of different lengths report the field itself. */
-    dyn_t d1;
-    dyn_t d2;
+    dyn_t d1 = {0};
+    dyn_t d2 = {0};
     int32_t v_a[3] = {7, 8, 9};
     int32_t v_b[3] = {7, 80, 9};
     memset(&d1, 0, sizeof(d1));
@@ -2456,8 +2456,8 @@ static void test_diff(void)
     expect_true("diff darray elem path", 0 == strcmp(path, "values[1]"));
 
     /* Root-level ops->equal mismatch reports "(root)". */
-    point_t p1;
-    point_t p2;
+    point_t p1 = {0};
+    point_t p2 = {0};
     memset(&p1, 0, sizeof(p1));
     p2 = p1;
     expect_eq_int("diff root ops",
@@ -2489,8 +2489,8 @@ static void test_diff(void)
 
 static void test_hash(void)
 {
-    person_t a;
-    person_t b;
+    person_t a = {0};
+    person_t b = {0};
     char name[] = "Alice";
     size_t ha = 0;
     size_t hb = 0;
@@ -2533,8 +2533,8 @@ static void test_hash(void)
     expect_true("hash different differs", ha != hb);
 
     /* Deep and dynamic content: equal graphs hash equal. */
-    dyn_t d1;
-    dyn_t d2;
+    dyn_t d1 = {0};
+    dyn_t d2 = {0};
     int32_t vals[3] = {7, 8, 9};
     memset(&d1, 0, sizeof(d1));
     memset(&d2, 0, sizeof(d2));
@@ -2551,8 +2551,8 @@ static void test_hash(void)
     expect_true("hash dyn same", ha == hb);
 
     /* Cyclic graphs hash deterministically (back-edges fold as a marker). */
-    node_t loop_a;
-    node_t loop_b;
+    node_t loop_a = {0};
+    node_t loop_b = {0};
     memset(&loop_a, 0, sizeof(loop_a));
     memset(&loop_b, 0, sizeof(loop_b));
     loop_a.next = &loop_a;
@@ -2566,8 +2566,8 @@ static void test_hash(void)
     expect_true("hash cycle same", ha == hb);
 
     /* ops->hash overrides the metadata-driven fold. */
-    point_t p1;
-    point_t p2;
+    point_t p1 = {0};
+    point_t p2 = {0};
     memset(&p1, 0, sizeof(p1));
     memset(&p2, 0, sizeof(p2));
     p2.x = 999;
@@ -2615,8 +2615,8 @@ static void test_stringbuf(void)
                                | SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)
                     == field->sb_refl_flags));
 
-    text_t a;
-    text_t b;
+    text_t a = {0};
+    text_t b = {0};
     memset(&a, 0, sizeof(a));
     memset(&b, 0, sizeof(b));
     memcpy(a.title, "hi", 3);
@@ -2674,7 +2674,7 @@ static void test_stringbuf(void)
                   shrewd_basic_reflect_equal(&a, &b, &g_text_reflect, &same),
                   SHREWD_BASIC_ERR_OK);
     expect_true("stringbuf equal yes", same);
-    char path[64];
+    char path[64] = {0};
     expect_eq_int("stringbuf diff",
                   shrewd_basic_reflect_diff(&a, &b, &g_text_reflect, path, sizeof(path)),
                   SHREWD_BASIC_ERR_OK);
@@ -2701,7 +2701,7 @@ static void test_stringbuf(void)
     /* visit reports one LEAF, not an element list. */
     memset(&a, 0, sizeof(a));
     memcpy(a.title, "hi", 3);
-    visit_rec_t rec;
+    visit_rec_t rec = {0};
     memset(&rec, 0, sizeof(rec));
     expect_eq_int("stringbuf visit",
                   shrewd_basic_reflect_visit(&a, &g_text_reflect, visit_collect, &rec),
@@ -2712,7 +2712,7 @@ static void test_stringbuf(void)
                 && (0 > visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "title")));
 
     /* Storage is still bytes: get/set move them raw, paths index chars. */
-    char raw[8];
+    char raw[8] = {0};
     memcpy(a.title, "abcdef", 7);
     expect_eq_int("stringbuf field_get",
                   shrewd_basic_reflect_field_get(&a, field, raw, sizeof(raw)),
@@ -3074,7 +3074,7 @@ static void test_bits(void)
 
     /* Extract: unused unit bits are invisible to get. Garbage lives in
        bits 4-7 and 24-31 (the groups cover bits 0 and 1-3 and 8-23). */
-    reg_t reg;
+    reg_t reg = {0};
     memset(&reg, 0, sizeof(reg));
     reg.cfg = (1u << 0) | (5u << 1) | (100u << 8) | 0xf0u | 0xab000000u;
     reg.value = 7;
@@ -3127,7 +3127,7 @@ static void test_bits(void)
     expect_true("bits path wrote", 0u == (reg.cfg & 1u));
 
     /* equal/hash use the groups only: garbage in unused bits is equal. */
-    reg_t other;
+    reg_t other = {0};
     memset(&other, 0, sizeof(other));
     other.cfg = (0u << 0) | (3u << 1) | (100u << 8) | 0x30u | 0x07000000u;
     other.value = 7;
@@ -3148,7 +3148,7 @@ static void test_bits(void)
 
     /* A group difference is a first-class difference. */
     other.cfg |= (1u << 8); /* divider 100 -> 101 */
-    char path[64];
+    char path[64] = {0};
     expect_eq_int("bits diff",
                   shrewd_basic_reflect_diff(&reg, &other, &g_reg_reflect,
                                             path, sizeof(path)),
@@ -3181,7 +3181,7 @@ static void test_bits(void)
     fclose(stream);
 
     /* visit reports each group as one LEAF. */
-    visit_rec_t rec;
+    visit_rec_t rec = {0};
     memset(&rec, 0, sizeof(rec));
     expect_eq_int("bits visit",
                   shrewd_basic_reflect_visit(&reg, &g_reg_reflect, visit_collect, &rec),
@@ -3252,7 +3252,7 @@ static void test_multidim(void)
                 0 == strcmp(shrewd_basic_reflect_kind_name(
                                     g_row3_reflect.sb_refl_kind), "array"));
 
-    matrix_t mx;
+    matrix_t mx = {0};
     memset(&mx, 0, sizeof(mx));
     for (size_t r = 0; r < 2; ++r) {
         for (size_t c = 0; c < 3; ++c) {
@@ -3306,7 +3306,7 @@ static void test_multidim(void)
                 && (sizeof(int32_t) == size));
 
     /* equal/diff/hash. */
-    matrix_t twin;
+    matrix_t twin = {0};
     twin = mx;
     bool same = false;
     expect_eq_int("multidim equal",
@@ -3323,7 +3323,7 @@ static void test_multidim(void)
                   SHREWD_BASIC_ERR_OK);
     expect_true("multidim hash same", ha == hb);
     twin.m[1][0] = 99;
-    char path[64];
+    char path[64] = {0};
     expect_eq_int("multidim diff",
                   shrewd_basic_reflect_diff(&mx, &twin, &g_matrix_reflect,
                                             path, sizeof(path)),
@@ -3354,7 +3354,7 @@ static void test_multidim(void)
     fclose(stream);
 
     /* 3D: rows nest. */
-    cube_t cube;
+    cube_t cube = {0};
     memset(&cube, 0, sizeof(cube));
     cube.cube[1][0][1] = 42;
     at = 0;
@@ -3381,7 +3381,7 @@ static void test_multidim(void)
     fclose(stream);
 
     /* Struct rows: inline blocks per element. */
-    grid_t grid;
+    grid_t grid = {0};
     memset(&grid, 0, sizeof(grid));
     grid.grid[1][0].x = 3;
     grid.grid[1][0].y = 4;
@@ -3402,7 +3402,7 @@ static void test_multidim(void)
                                     " [ { x = 3, y = 4 }, { x = 0, y = 0 } ] ]"));
     shrewd_basic_log_module_set_stream(module, stderr);
     fclose(stream);
-    grid_t grid_twin;
+    grid_t grid_twin = {0};
     grid_twin = grid;
     grid_twin.grid[1][0].y = 40;
     expect_eq_int("multidim grid diff",
@@ -3412,7 +3412,7 @@ static void test_multidim(void)
     expect_true("multidim grid diff path", 0 == strcmp(path, "grid[1][0].y"));
 
     /* visit: nested ARRAY_ENTER per row level. */
-    visit_rec_t rec;
+    visit_rec_t rec = {0};
     memset(&rec, 0, sizeof(rec));
     expect_eq_int("multidim visit",
                   shrewd_basic_reflect_visit(&mx, &g_matrix_reflect, visit_collect, &rec),
@@ -3529,7 +3529,7 @@ static void test_union(void)
                     && (sizeof(payload_kind_t) == field->sb_refl_limit_size));
     }
 
-    message_t msg;
+    message_t msg = {0};
     memset(&msg, 0, sizeof(msg));
 
     /* dump: the active variant renders as a tagged block. */
@@ -3578,7 +3578,7 @@ static void test_union(void)
     fclose(stream);
 
     /* equal/diff/hash follow the active variant. */
-    message_t twin;
+    message_t twin = {0};
     memset(&twin, 0, sizeof(twin));
     msg.kind = PAYLOAD_POINT;
     msg.payload.point.x = 1;
@@ -3599,7 +3599,7 @@ static void test_union(void)
                   SHREWD_BASIC_ERR_OK);
     expect_true("union hash same", ha == hb);
     twin.payload.point.y = 3;
-    char path[64];
+    char path[64] = {0};
     expect_eq_int("union diff inner",
                   shrewd_basic_reflect_diff(&msg, &twin, &g_message_reflect,
                                             path, sizeof(path)),
@@ -3671,7 +3671,7 @@ static void test_union(void)
     /* visit expands the active variant (LEAF for unknown tags). */
     msg.kind = PAYLOAD_INT;
     msg.payload.number = 42;
-    visit_rec_t rec;
+    visit_rec_t rec = {0};
     memset(&rec, 0, sizeof(rec));
     expect_eq_int("union visit",
                   shrewd_basic_reflect_visit(&msg, &g_message_reflect, visit_collect, &rec),
@@ -3698,7 +3698,7 @@ static void test_union(void)
     point_t *heap_point = block;
     heap_point->x = 5;
     heap_point->y = 6;
-    mixed_msg_t src;
+    mixed_msg_t src = {0};
     memset(&src, 0, sizeof(src));
     src.tag = 2;
     src.mixed.number = 5;
@@ -3811,9 +3811,9 @@ static void test_lookup_list(void)
         test_reg_insert, test_reg_find_type, test_reg_find_name };
     static const shrewd_basic_reflect_list_ops_t broken = {
         test_reg_insert_no_slot, NULL, NULL };
-    test_reg_t reg;
-    shrewd_basic_reflect_list_t list;
-    shrewd_basic_reflect_lookup_t look;
+    test_reg_t reg = {0};
+    shrewd_basic_reflect_list_t list = {0};
+    shrewd_basic_reflect_lookup_t look = {0};
     const shrewd_basic_reflect_field_t *field = NULL;
     const shrewd_basic_reflect_field_t *legacy_field = NULL;
     const shrewd_basic_reflect_type_t *found = NULL;
@@ -3944,7 +3944,7 @@ static void test_lookup_list(void)
                                                      &wrote, sizeof(wrote)),
                   SHREWD_BASIC_ERR_OK);
     {
-        person_t probe;
+        person_t probe = {0};
         memset(&probe, 0, sizeof(probe));
         wrote = 42;
         expect_eq_int("path_set_list probe",
@@ -3996,7 +3996,7 @@ static void test_lookup_list(void)
                                                      "person"),
                   SHREWD_BASIC_ERR_OK);
     {
-        person_t probe;
+        person_t probe = {0};
         memset(&probe, 0, sizeof(probe));
         wrote = 5;
         expect_eq_int("mixed path_set_list",
@@ -4012,7 +4012,7 @@ static void test_lookup_list(void)
 static void test_registry(void)
 {
     SHREWD_BASIC_REFLECT_REGISTRY_DEFINE(reg, 4);
-    shrewd_basic_reflect_list_t list;
+    shrewd_basic_reflect_list_t list = {0};
     const shrewd_basic_reflect_type_t *found = NULL;
     const shrewd_basic_reflect_field_t *field = NULL;
 
@@ -4165,7 +4165,7 @@ static void test_describe_type(void)
 {
     shrewd_basic_log_module_t *module = NULL;
     FILE *stream = tmpfile();
-    char buf[4096];
+    char buf[4096] = {0};
     size_t n = 0;
 
     expect_true("describe tmpfile", NULL != stream);
@@ -4243,7 +4243,7 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_anon_reflect, anon_t,
 static void test_anonymous(void)
 {
     const shrewd_basic_reflect_field_t *field = NULL;
-    anon_t obj;
+    anon_t obj = {0};
     int32_t value = 0;
 
     memset(&obj, 0, sizeof(obj));
@@ -4315,7 +4315,7 @@ static int layout_collect(void *ctx,
 
 static void test_layout(void)
 {
-    layout_cap_t cap;
+    layout_cap_t cap = {0};
     size_t total = 0;
 
     memset(&cap, 0, sizeof(cap));
@@ -4402,9 +4402,9 @@ static int diff_cap_has(const diff_cap_t *cap, const char *path, int kind)
 
 static void test_diff_all(void)
 {
-    diff_cap_t cap;
-    person_t a;
-    person_t b;
+    diff_cap_t cap = {0};
+    person_t a = {0};
+    person_t b = {0};
 
     memset(&cap, 0, sizeof(cap));
     memset(&a, 0, sizeof(a));
@@ -4444,9 +4444,9 @@ static void test_diff_all(void)
 
     /* Pointer NULL-ness is a shape difference. */
     {
-        node_t n1;
-        node_t n2;
-        node_t tail;
+        node_t n1 = {0};
+        node_t n2 = {0};
+        node_t tail = {0};
         memset(&n1, 0, sizeof(n1));
         memset(&n2, 0, sizeof(n2));
         memset(&tail, 0, sizeof(tail));
@@ -4502,10 +4502,10 @@ static void tally_free(void *ctx, void *ptr)
 
 static void test_allocator(void)
 {
-    tally_t tally;
-    shrewd_basic_reflect_allocator_t alloc;
-    node_t tail;
-    node_t head;
+    tally_t tally = {0};
+    shrewd_basic_reflect_allocator_t alloc = {0};
+    node_t tail = {0};
+    node_t head = {0};
     node_t *clone = NULL;
 
     alloc.alloc = tally_alloc;
@@ -4550,13 +4550,13 @@ static void test_allocator(void)
 
 static void test_hash_cycles(void)
 {
-    node_t self;
-    node_t a2;
-    node_t b2;
-    node_t a3;
-    node_t b3;
-    node_t c3;
-    node_t other;
+    node_t self = {0};
+    node_t a2 = {0};
+    node_t b2 = {0};
+    node_t a3 = {0};
+    node_t b3 = {0};
+    node_t c3 = {0};
+    node_t other = {0};
     size_t h_self = 0;
     size_t h_two = 0;
     size_t h_three = 0;

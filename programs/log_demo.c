@@ -79,7 +79,7 @@ int main(void)
     print_status("set_level(ALL)", status);
 
     banner("3. hex dump: colored prefix, plain msg and dump");
-    unsigned char data[36];
+    unsigned char data[36] = {0};
     for (size_t i = 0; i < sizeof(data); ++i) {
         data[i] = (unsigned char)(i + 1);
     }
@@ -101,7 +101,7 @@ int main(void)
         if (NULL == file) {
             printf("  (cannot reopen %s)\n", DEMO_FILE);
         } else {
-            char line[256];
+            char line[256] = {0};
             while (NULL != fgets(line, sizeof(line), file)) {
                 printf("  | %s", line);
             }
@@ -188,7 +188,7 @@ int main(void)
         if (NULL == file) {
             printf("  (cannot reopen %s)\n", DEMO_GLOBAL_FILE);
         } else {
-            char line[256];
+            char line[256] = {0};
             while (NULL != fgets(line, sizeof(line), file)) {
                 printf("  | %s", line);
             }

@@ -129,7 +129,7 @@ static void json_map_member(json_map_ctx_t *ctx, const char *name)
 
 static void json_map_index(json_map_ctx_t *ctx, size_t index)
 {
-    char text[24];
+    char text[24] = {0};
     (void)snprintf(text, sizeof(text), "[%zu]", index);
     json_map_append(ctx, text);
 }
@@ -160,7 +160,7 @@ static int json_encode_node(json_map_ctx_t *ctx,
     *out = NULL;
     if ((NULL != ops) && (NULL != ops->render)) {
         /* Custom rendering (opaque targets and friends). */
-        char text[256];
+        char text[256] = {0};
         if (SHREWD_BASIC_ERR_OK != ops->render(value, text, sizeof(text))) {
             return json_map_fail(ctx, SHREWD_BASIC_ERR_JSON_UNSUPPORTED,
                                  "ops->render failed");
@@ -428,7 +428,7 @@ static int json_encode_fields(json_map_ctx_t *ctx,
 {
     for (size_t i = 0; i < count; ++i) {
         const shrewd_basic_reflect_field_t *field = &fields[i];
-        shrewd_basic_json_key_info_t view;
+        shrewd_basic_json_key_info_t view = {0};
         shrewd_basic_json_value_t *item = NULL;
         size_t mark = json_map_mark(ctx);
         int status = 0;
@@ -568,7 +568,7 @@ int shrewd_basic_json_encode_value(const void *object,
                                    shrewd_basic_json_error_t *error)
 {
     static const shrewd_basic_json_options_t plain = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    json_map_ctx_t ctx;
+    json_map_ctx_t ctx = {0};
     int status = 0;
     if ((NULL == object) || (NULL == type) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_json_log,

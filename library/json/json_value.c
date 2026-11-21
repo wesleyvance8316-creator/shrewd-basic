@@ -209,21 +209,21 @@ int json_value_new_number(const char *raw, size_t n,
 
 int shrewd_basic_json_new_i64(int64_t value, shrewd_basic_json_value_t **out)
 {
-    char raw[32];
+    char raw[32] = {0};
     int length = snprintf(raw, sizeof(raw), "%lld", (long long)value);
     return json_value_new_number(raw, (size_t)((0 < length) ? length : 0), out);
 }
 
 int shrewd_basic_json_new_u64(uint64_t value, shrewd_basic_json_value_t **out)
 {
-    char raw[32];
+    char raw[32] = {0};
     int length = snprintf(raw, sizeof(raw), "%llu", (unsigned long long)value);
     return json_value_new_number(raw, (size_t)((0 < length) ? length : 0), out);
 }
 
 int shrewd_basic_json_new_f64(double value, shrewd_basic_json_value_t **out)
 {
-    char raw[40];
+    char raw[40] = {0};
     static const char *const forms[] = {"%g", "%.15g", "%.16g", "%.17g"};
     if ((value != value) || (value > DBL_MAX) || (value < -DBL_MAX)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_json_log,

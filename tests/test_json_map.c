@@ -207,7 +207,7 @@ static void expect_encode(const char *name, const void *object,
 static void *decode_new(const char *name, const char *text,
                         const shrewd_basic_reflect_type_t *type, size_t size)
 {
-    shrewd_basic_json_error_t error;
+    shrewd_basic_json_error_t error = {0};
     void *block = NULL;
     int status = 0;
     if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_calloc(&block, 1, size)) {
@@ -245,7 +245,7 @@ static int map_sink_write(void *ctx, const char *data, size_t length)
 
 static void test_encode_person(void)
 {
-    person_t person;
+    person_t person = {0};
     memset(&person, 0, sizeof(person));
     person.active = true;
     person.grade = 'A';
@@ -264,7 +264,7 @@ static void test_encode_person(void)
 
     {
         /* encode_to streams the same bytes through a writer sink. */
-        char streamed[1024];
+        char streamed[1024] = {0};
         char *cursor = streamed;
         expect_eq_int("encode person to sink",
                       shrewd_basic_json_encode_to(&person, &person_reflect, NULL,
@@ -359,8 +359,8 @@ static void test_decode_rules(void)
 
     /* Errors carry the JSON path. */
     {
-        shrewd_basic_json_error_t error;
-        person_t target;
+        shrewd_basic_json_error_t error = {0};
+        person_t target = {0};
         memset(&target, 0, sizeof(target));
         expect_eq_int("decode mismatch",
                       shrewd_basic_json_decode("{\"home\":{\"x\":\"bad\"}}", strlen("{\"home\":{\"x\":\"bad\"}}"),
@@ -373,8 +373,8 @@ static void test_decode_rules(void)
                       SHREWD_BASIC_ERR_OK);
     }
     {
-        shrewd_basic_json_error_t error;
-        person_t target;
+        shrewd_basic_json_error_t error = {0};
+        person_t target = {0};
         memset(&target, 0, sizeof(target));
         expect_eq_int("decode long array",
                       shrewd_basic_json_decode("{\"scores\":[1,2,3,4]}", strlen("{\"scores\":[1,2,3,4]}"),
@@ -399,8 +399,8 @@ static void test_decode_rules(void)
         }
     }
     {
-        shrewd_basic_json_error_t error;
-        person_t target;
+        shrewd_basic_json_error_t error = {0};
+        person_t target = {0};
         memset(&target, 0, sizeof(target));
         expect_eq_int("decode long buffer",
                       shrewd_basic_json_decode(
@@ -414,8 +414,8 @@ static void test_decode_rules(void)
                       SHREWD_BASIC_ERR_OK);
     }
     {
-        shrewd_basic_json_error_t error;
-        person_t target;
+        shrewd_basic_json_error_t error = {0};
+        person_t target = {0};
         memset(&target, 0, sizeof(target));
         expect_eq_int("decode bad enum",
                       shrewd_basic_json_decode("{\"mode\":\"NOPE\"}", strlen("{\"mode\":\"NOPE\"}"), &target,
@@ -427,7 +427,7 @@ static void test_decode_rules(void)
 
 static void test_union(void)
 {
-    message_t message;
+    message_t message = {0};
     memset(&message, 0, sizeof(message));
     message.kind = PAYLOAD_POINT;
     message.payload.point.x = 1;
@@ -481,7 +481,7 @@ static void test_union(void)
     /* Unknown tag: error by default, null body on request. */
     message.kind = (payload_kind_t)9;
     {
-        shrewd_basic_json_error_t error;
+        shrewd_basic_json_error_t error = {0};
         char *text = NULL;
         expect_eq_int("union unknown tag",
                       shrewd_basic_json_encode(&message, &message_reflect, NULL, &text,
@@ -489,7 +489,7 @@ static void test_union(void)
                       SHREWD_BASIC_ERR_JSON_UNSUPPORTED);
         expect_streq("union unknown tag path", error.path, "payload");
         {
-            shrewd_basic_json_options_t options;
+            shrewd_basic_json_options_t options = {0};
             memset(&options, 0, sizeof(options));
             options.allow_unknown_union = 1;
             expect_eq_int("union unknown allowed",
@@ -537,7 +537,7 @@ static void test_arrays_and_bits(void)
 
     /* Bit groups: numbers in, extracted numbers out. */
     {
-        reg_t reg;
+        reg_t reg = {0};
         reg_t *clone = NULL;
         memset(&reg, 0, sizeof(reg));
         reg.cfg = (1u << 0) | (5u << 1) | 0xf0u;
@@ -558,7 +558,7 @@ static void test_arrays_and_bits(void)
 
     /* Multi-dimension rows nest. */
     {
-        matrix_t matrix;
+        matrix_t matrix = {0};
         matrix_t *clone = NULL;
         memset(&matrix, 0, sizeof(matrix));
         for (size_t r = 0; r < 2; ++r) {
@@ -617,7 +617,7 @@ static void test_pointers(void)
 
     /* Flexible tail: the caller sizes the allocation from the JSON. */
     {
-        shrewd_basic_json_error_t error;
+        shrewd_basic_json_error_t error = {0};
         void *block = NULL;
         if (SHREWD_BASIC_ERR_OK
                 == shrewd_basic_platform_calloc(
@@ -657,8 +657,8 @@ static void test_pointers(void)
 
     /* Cycles cannot be encoded. */
     {
-        shrewd_basic_json_error_t error;
-        node_t loop;
+        shrewd_basic_json_error_t error = {0};
+        node_t loop = {0};
         char *text = NULL;
         memset(&loop, 0, sizeof(loop));
         loop.next = &loop;
@@ -672,9 +672,9 @@ static void test_pointers(void)
 
 static void test_encode_options(void)
 {
-    person_t person;
+    person_t person = {0};
     char *text = NULL;
-    shrewd_basic_json_options_t options;
+    shrewd_basic_json_options_t options = {0};
     memset(&person, 0, sizeof(person));
     {
         uint64_t bits = UINT64_C(0x7ff8000000000000); /* NaN */

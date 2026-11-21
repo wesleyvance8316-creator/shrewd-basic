@@ -62,7 +62,7 @@ static shrewd_basic_json_value_t *parse_ok(const char *name, const char *text)
 static void parse_fails(const char *name, const char *text, int status)
 {
     shrewd_basic_json_value_t *value = NULL;
-    shrewd_basic_json_error_t error;
+    shrewd_basic_json_error_t error = {0};
     int actual = shrewd_basic_json_parse(text, strlen(text), &value, NULL, &error);
     if ((actual != status) || (NULL != value)) {
         fprintf(stderr, "FAIL %s: got %d, want %d\n", name, actual, status);
@@ -233,7 +233,7 @@ static void test_parse_strict(void)
 
 static void test_parse_options(void)
 {
-    shrewd_basic_json_options_t options;
+    shrewd_basic_json_options_t options = {0};
     shrewd_basic_json_value_t *v = NULL;
     memset(&options, 0, sizeof(options));
     options.allow_comments = 1;
@@ -256,7 +256,7 @@ static void test_parse_options(void)
                   SHREWD_BASIC_ERR_OK);
     shrewd_basic_json_value_free(v);
     {
-        shrewd_basic_json_error_t error;
+        shrewd_basic_json_error_t error = {0};
         v = NULL;
         expect_eq_int("options depth over",
                       shrewd_basic_json_parse("[[[[1]]]]", 9, &v, &options,
@@ -268,7 +268,7 @@ static void test_parse_options(void)
     /* Default depth (32) is enforced too. */
     {
         char deep[82]; /* 40 x '[', one value, 40 x ']' */
-        shrewd_basic_json_error_t error;
+        shrewd_basic_json_error_t error = {0};
         size_t n = 0;
         memset(deep, 0, sizeof(deep));
         for (size_t i = 0; i < 40; ++i) {
@@ -286,7 +286,7 @@ static void test_parse_options(void)
 
     /* Error detail points at the fault. */
     {
-        shrewd_basic_json_error_t error;
+        shrewd_basic_json_error_t error = {0};
         v = NULL;
         expect_eq_int("error detail status",
                       shrewd_basic_json_parse("[1, 02]", 7, &v, NULL, &error),
@@ -369,7 +369,7 @@ static void test_serialize(void)
 
     /* Pretty output. */
     {
-        shrewd_basic_json_options_t options;
+        shrewd_basic_json_options_t options = {0};
         memset(&options, 0, sizeof(options));
         options.pretty = 1;
         expect_eq_int("serialize pretty",
@@ -485,9 +485,9 @@ static int collect_write(void *ctx, const char *data, size_t length)
 static void test_sinks_and_text(void)
 {
     shrewd_basic_json_value_t *v = NULL;
-    collect_sink_t sink;
+    collect_sink_t sink = {0};
     char *text = NULL;
-    shrewd_basic_json_options_t options;
+    shrewd_basic_json_options_t options = {0};
 
     memset(&sink, 0, sizeof(sink));
     v = parse_ok("sink src", "{\"a\":[1,2],\"b\":\"x\"}");
@@ -549,7 +549,7 @@ static void test_sinks_and_text(void)
                   SHREWD_BASIC_ERR_OK);
     shrewd_basic_json_value_free(v);
     {
-        shrewd_basic_json_error_t error;
+        shrewd_basic_json_error_t error = {0};
         v = NULL;
         expect_eq_int("utf8 invalid",
                       shrewd_basic_json_parse("\"\xc3\x28\"", 4, &v, &options,
@@ -729,7 +729,7 @@ static int chunk_read(void *ctx, char *buf, size_t capacity, size_t *out_read)
 static void test_pull(void)
 {
     shrewd_basic_json_pull_t *pull = NULL;
-    shrewd_basic_json_token_t token;
+    shrewd_basic_json_token_t token = {0};
     shrewd_basic_json_value_t *item = NULL;
     static const char *doc = "{\"a\":[1,\"x\"],\"b\":null}";
     static const int expect[] = {
@@ -787,7 +787,7 @@ static void test_pull(void)
 
     /* Reader source fed in three-byte chunks equals the buffer parse. */
     {
-        chunk_reader_t src;
+        chunk_reader_t src = {0};
         char *from_reader = NULL;
         char *from_buffer = NULL;
         shrewd_basic_json_value_t *tree = NULL;

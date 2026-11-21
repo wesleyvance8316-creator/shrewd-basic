@@ -83,7 +83,7 @@ static void diff_path_member(diff_path_t *diff, const char *name)
 
 static void diff_path_index(diff_path_t *diff, size_t index)
 {
-    char text[24];
+    char text[24] = {0};
     if (NULL == diff) {
         return;
     }
@@ -330,7 +330,7 @@ int shrewd_basic_reflect_equal(const void *a, const void *b,
                          "field", "equal: a, b, type or out_equal is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
-    equal_pair_t path[EQUAL_MAX_DEPTH];
+    equal_pair_t path[EQUAL_MAX_DEPTH] = {0};
     bool same = true;
     /* Zeroed pairs: walks may skip levels (union variants). */
     memset(path, 0, sizeof(path));
@@ -356,7 +356,7 @@ int shrewd_basic_reflect_diff(const void *a, const void *b,
                          "diff", "diff: a, b or type is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
-    diff_path_t report;
+    diff_path_t report = {0};
     diff_path_t *trace = NULL;
     report.buf = path_out;
     report.cap = path_out_size;
@@ -365,7 +365,7 @@ int shrewd_basic_reflect_diff(const void *a, const void *b,
         path_out[0] = '\0';
         trace = &report;
     }
-    equal_pair_t path[EQUAL_MAX_DEPTH];
+    equal_pair_t path[EQUAL_MAX_DEPTH] = {0};
     bool same = true;
     /* Zeroed pairs: walks may skip levels (union variants). */
     memset(path, 0, sizeof(path));
@@ -655,10 +655,10 @@ int shrewd_basic_reflect_diff_all(const void *a, const void *b,
                                   const shrewd_basic_reflect_type_t *type,
                                   shrewd_basic_reflect_diff_fn fn, void *ctx)
 {
-    equal_pair_t pair_path[EQUAL_MAX_DEPTH];
-    char path_buf[256];
-    diff_path_t diff;
-    diff_all_ctx_t all;
+    equal_pair_t pair_path[EQUAL_MAX_DEPTH] = {0};
+    char path_buf[256] = {0};
+    diff_path_t diff = {0};
+    diff_all_ctx_t all = {0};
     if ((NULL == a) || (NULL == b) || (NULL == type) || (NULL == fn)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
                          "diff", "diff_all: a, b, type or fn is NULL\n");

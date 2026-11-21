@@ -1231,7 +1231,7 @@ static int reflect_visited_check(shrewd_basic_rbtree_t *visited,
 static int reflect_map_lookup(shrewd_basic_rbtree_t *map, const void *src,
                               void **out_dst, int *out_found)
 {
-    reflect_pair_t probe;
+    reflect_pair_t probe = {0};
     void *found = NULL;
     probe.src = src;
     probe.dst = NULL;

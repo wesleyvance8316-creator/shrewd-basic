@@ -90,7 +90,7 @@ int shrewd_basic_json_keys(const shrewd_basic_reflect_type_t *type,
         type = info->type;
     }
     for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
-        shrewd_basic_json_key_info_t view;
+        shrewd_basic_json_key_info_t view = {0};
         json_policy_view(info, &type->sb_refl_fields[i], &view);
         if (0 != fn(ctx, &view)) {
             return SHREWD_BASIC_ERR_OK;

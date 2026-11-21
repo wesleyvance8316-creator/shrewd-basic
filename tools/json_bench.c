@@ -33,7 +33,7 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(record_reflect, record_t,
 
 static double now_ns(void)
 {
-    struct timespec ts;
+    struct timespec ts = {0};
     timespec_get(&ts, TIME_UTC);
     return ((double)ts.tv_sec * 1e9) + (double)ts.tv_nsec;
 }
@@ -48,7 +48,7 @@ int main(void)
 {
     /* Document: N objects, each with two numbers and a short string. */
     enum { N = 2000, DOC_MAX = 262144 };
-    static char doc[DOC_MAX];
+    static char doc[DOC_MAX] = {0};
     size_t len = 0;
     shrewd_basic_json_value_t *tree = NULL;
     shrewd_basic_log_module_t *quiet = NULL;
@@ -90,7 +90,7 @@ int main(void)
     /* Small-container document: 1-member objects (the inline case). */
     {
         enum { M = 4000, SMALL_MAX = 131072 };
-        static char small[SMALL_MAX];
+        static char small[SMALL_MAX] = {0};
         size_t small_len = 0;
         shrewd_basic_json_value_t *tiny = NULL;
         small_len = (size_t)snprintf(small, sizeof(small), "[");
@@ -143,7 +143,7 @@ int main(void)
 
     /* struct mapping round trip */
     {
-        record_t record;
+        record_t record = {0};
         long iters = 50000;
         double start = 0.0;
         memset(&record, 0, sizeof(record));
@@ -167,7 +167,7 @@ int main(void)
             size_t wire_len = strlen(wire);
             start = now_ns();
             for (long i = 0; i < iters; ++i) {
-                record_t target;
+                record_t target = {0};
                 memset(&target, 0, sizeof(target));
                 (void)shrewd_basic_json_decode(wire, wire_len, &target,
                                                &record_reflect, NULL, NULL,

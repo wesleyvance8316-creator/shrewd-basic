@@ -83,7 +83,7 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(hub_type, hub_t,
 
 static double now_ns(void)
 {
-    struct timespec ts;
+    struct timespec ts = {0};
     timespec_get(&ts, TIME_UTC);
     return ((double)ts.tv_sec * 1e9) + (double)ts.tv_nsec;
 }
@@ -136,7 +136,7 @@ int main(void)
      * the ds rbtree which logs its own TRACE per operation). The tiny
      * warm-up copy registers the ds module before it is looked up.
      */
-    hub_t seed;
+    hub_t seed = {0};
     hub_t *probe = NULL;
     memset(&seed, 0, sizeof(seed));
     (void)shrewd_basic_reflect_copy((void **)&probe, &seed, &hub_type);
@@ -152,7 +152,7 @@ int main(void)
         (void)shrewd_basic_log_module_set_level(quiet_ds, SHREWD_BASIC_LOG_LEVEL_NONE);
     }
 
-    wide_t wide;
+    wide_t wide = {0};
     memset(&wide, 0, sizeof(wide));
     wide.f31 = 7;
     hub_t *hub = hub_build(1000, 5000);

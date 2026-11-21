@@ -17,7 +17,7 @@ int shrewd_basic_json_parse(const char *text, size_t length,
                             shrewd_basic_json_error_t *error)
 {
     shrewd_basic_json_pull_t *pull = NULL;
-    shrewd_basic_json_token_t token;
+    shrewd_basic_json_token_t token = {0};
     int status = 0;
     if ((NULL == text) || (NULL == out)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_json_log,

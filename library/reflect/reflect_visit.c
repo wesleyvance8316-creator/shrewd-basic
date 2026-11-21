@@ -57,7 +57,7 @@ static void visit_path_member(visit_ctx_t *ctx, const char *name)
 /* Append one index segment: "[7]". */
 static void visit_path_index(visit_ctx_t *ctx, size_t index)
 {
-    char text[24];
+    char text[24] = {0};
     (void)snprintf(text, sizeof(text), "[%zu]", index);
     visit_path_append(ctx, text);
 }
@@ -84,8 +84,8 @@ static shrewd_basic_reflect_visit_action_t visit_emit(
         const shrewd_basic_reflect_field_t *field, const void *value,
         const shrewd_basic_reflect_type_t *type, size_t count)
 {
-    shrewd_basic_reflect_visit_node_t node;
-    shrewd_basic_reflect_visit_action_t action;
+    shrewd_basic_reflect_visit_node_t node = {0};
+    shrewd_basic_reflect_visit_action_t action = {0};
     if (0 != ctx->stopped) {
         return SHREWD_BASIC_REFLECT_VISIT_STOP;
     }
@@ -297,7 +297,7 @@ int shrewd_basic_reflect_visit(const void *object,
                                const shrewd_basic_reflect_type_t *type,
                                shrewd_basic_reflect_visit_fn visit, void *ctx)
 {
-    visit_ctx_t walk;
+    visit_ctx_t walk = {0};
     if ((NULL == object) || (NULL == type) || (NULL == visit)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
                          "visit", "visit: object, type or visit is NULL\n");

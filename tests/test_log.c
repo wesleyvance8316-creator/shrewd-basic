@@ -112,7 +112,7 @@ static void test_level_mask(void)
 
 static void test_hex(void)
 {
-    unsigned char data[20];
+    unsigned char data[20] = {0};
     for (size_t i = 0; i < sizeof(data); ++i) {
         data[i] = (unsigned char)(i + 1);
     }

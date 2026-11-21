@@ -704,7 +704,7 @@ static int json_capture_token(shrewd_basic_json_pull_t *pull,
         shrewd_basic_json_value_t *object = NULL;
         status = shrewd_basic_json_new(SHREWD_BASIC_JSON_OBJECT, &object);
         while (SHREWD_BASIC_ERR_OK == status) {
-            shrewd_basic_json_token_t step;
+            shrewd_basic_json_token_t step = {0};
             shrewd_basic_json_value_t *item = NULL;
             status = shrewd_basic_json_pull_next(pull, &step);
             if (SHREWD_BASIC_ERR_OK != status) {
@@ -752,7 +752,7 @@ static int json_capture_token(shrewd_basic_json_pull_t *pull,
         shrewd_basic_json_value_t *array = NULL;
         status = shrewd_basic_json_new(SHREWD_BASIC_JSON_ARRAY, &array);
         while (SHREWD_BASIC_ERR_OK == status) {
-            shrewd_basic_json_token_t step;
+            shrewd_basic_json_token_t step = {0};
             shrewd_basic_json_value_t *item = NULL;
             status = shrewd_basic_json_pull_next(pull, &step);
             if (SHREWD_BASIC_ERR_OK != status) {
@@ -782,7 +782,7 @@ static int json_capture_token(shrewd_basic_json_pull_t *pull,
 int shrewd_basic_json_pull_capture(shrewd_basic_json_pull_t *pull,
                                    shrewd_basic_json_value_t **out)
 {
-    shrewd_basic_json_token_t token;
+    shrewd_basic_json_token_t token = {0};
     int status = 0;
     if ((NULL == pull) || (NULL == out)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;

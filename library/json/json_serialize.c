@@ -33,7 +33,7 @@ static int json_out_str(shrewd_basic_json_write_fn write, void *ctx,
 static int json_out_u_escape(shrewd_basic_json_write_fn write, void *ctx,
                              unsigned code)
 {
-    char text[16];
+    char text[16] = {0};
     if (0x10000u > code) {
         (void)snprintf(text, sizeof(text), "\\u%04x", code);
         return json_out_str(write, ctx, text);
@@ -74,7 +74,7 @@ static int json_write_string(shrewd_basic_json_write_fn write, void *ctx,
             break;
         default:
             if (0x20 > *p) {
-                char escape[8];
+                char escape[8] = {0};
                 (void)snprintf(escape, sizeof(escape), "\\u%04x",
                                (unsigned int)*p);
                 status = json_out_str(write, ctx, escape);
@@ -87,7 +87,7 @@ static int json_write_string(shrewd_basic_json_write_fn write, void *ctx,
                     p += used - 1;
                 } else {
                     /* Invalid sequence: escape the raw byte. */
-                    char escape[8];
+                    char escape[8] = {0};
                     (void)snprintf(escape, sizeof(escape), "\\u%04x",
                                    (unsigned int)*p);
                     status = json_out_str(write, ctx, escape);
@@ -213,7 +213,7 @@ int shrewd_basic_json_serialize(const shrewd_basic_json_value_t *value,
                                 const shrewd_basic_json_options_t *options,
                                 shrewd_basic_json_error_t *error)
 {
-    json_buf_t buf;
+    json_buf_t buf = {0};
     int status = 0;
     if ((NULL == value) || (NULL == out_text)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_json_log,
