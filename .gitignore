@@ -1,1 +1,25 @@
+# IDE settings
 .idea/
+cmake-build-*/
+
+# Build directories and products
+build/
+build-*/
+compile_commands.json
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.out
+
+# Documentation output
+doxygen/html/
+doxygen/latex/
+
+# Test litter (created next to the test run)
+shrewd-basic-log-*.txt
