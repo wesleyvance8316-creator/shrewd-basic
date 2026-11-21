@@ -20,7 +20,7 @@ shrewd_basic_reflect_type_find_field(type, name, out)),便于 Doxygen
 
 | 类型 | 作用 | 关键成员 |
 |---|---|---|
-| `shrewd_basic_reflect_type_t` | 类型描述符(全 const,可放 flash) | `sb_refl_kind`、`sb_refl_name`、`sb_refl_size`、`sb_refl_fields`/`sb_refl_field_count`、`sb_refl_enum`、`sb_refl_ops`、`sb_refl_elem`(ARRAY 行)、`sb_refl_variants`(UNION) |
+| `shrewd_basic_reflect_type_t` | 类型描述符(全 const,可放 flash) | `sb_refl_kind`、`sb_refl_name`、`sb_refl_size`、`sb_refl_align`(C 类型对齐,0=未知)、`sb_refl_abi`(作者头文件的 `SHREWD_BASIC_REFLECT_ABI` 版本)、`sb_refl_fields`/`sb_refl_field_count`、`sb_refl_enum`、`sb_refl_ops`、`sb_refl_elem`(ARRAY 行)、`sb_refl_variants`(UNION) |
 | `shrewd_basic_reflect_field_t` | 字段描述符 | `sb_refl_name`、`sb_refl_type`、`sb_refl_offset`、`sb_refl_size`、`sb_refl_count`、`sb_refl_stride`、`sb_refl_flags`、`sb_refl_ops`、`sb_refl_limit_offset`/`sb_refl_limit_size`、`sb_refl_bit_offset`/`sb_refl_bit_width` |
 | `shrewd_basic_reflect_variant_t` | union 变体 | `sb_refl_tag`、`sb_refl_name`、变体字段表 |
 | `shrewd_basic_reflect_enum_entry_t` | 枚举常量 | `sb_refl_name`、`sb_refl_value` |
@@ -77,6 +77,7 @@ shrewd_basic_reflect_type_find_field(type, name, out)),便于 Doxygen
 | `SHREWD_BASIC_REFLECT_UNION_VARIANT(tag_value, ...)` | union 变体条目 |
 | `SHREWD_BASIC_REFLECT_FIELD_UNION(struct_type, member, union_var, tag_member)` | 标签化 union 字段 |
 | `*_OPS` 变体(如 `SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE_OPS(struct_type, member, ops_ref)` 等) | 同名形态 + 字段级 ops |
+| `SHREWD_BASIC_REFLECT_REGISTRY_DEFINE(var, capacity)` | 声明一个内置条目数组的注册表(文件域,见第 6 节) |
 
 ## 2. 元数据查询
 
@@ -187,6 +188,35 @@ shrewd_basic_reflect_type_find_field() 按名扁平查字段(单层)。经
 - **返回**:`SHREWD_BASIC_ERR_OK`;`SHREWD_BASIC_ERR_KEY_NOTFOUND` 无匹配;
   `SHREWD_BASIC_ERR_ARG_INVALID` 参数 NULL。
 
+### shrewd_basic_reflect_field_align(field)
+
+```c
+size_t shrewd_basic_reflect_field_align(
+        const shrewd_basic_reflect_field_t *field);
+```
+
+shrewd_basic_reflect_field_align() 给出字段存储的有效对齐:指针形态
+(`F_PTR`、`F_DARRAY` 表槽)为 `alignof(void *)`,其余取字段类型的
+`sb_refl_align`。
+
+- **传参**:`field` — 字段描述符。
+- **返回**:`size_t` 对齐;未知或参数 NULL 返回 0。不返回错误码。
+
+### shrewd_basic_reflect_check_type(type)
+
+```c
+int shrewd_basic_reflect_check_type(const shrewd_basic_reflect_type_t *type);
+```
+
+shrewd_basic_reflect_check_type() 校验描述符合法性(一层深):ABI 版本
+(`SHREWD_BASIC_REFLECT_ABI`)、kind 合法、字段表自洽(名字/类型引用/偏移
+与尺寸不越界/stride 非零)、位组不越单元、枚举/数组/union 引用形态。
+用于测试与启动期,抓过期或手改坏的描述符。
+
+- **传参**:`type` — 类型描述符。
+- **返回**:`SHREWD_BASIC_ERR_OK`;`SHREWD_BASIC_ERR_REFLECT_MISMATCH`
+  不变量破坏(违规名记入日志);`SHREWD_BASIC_ERR_ARG_INVALID` 参数 NULL。
+
 ## 3. 值读写(原始字节)
 
 ### shrewd_basic_reflect_field_get(object, field, out_value, value_size)
@@ -246,6 +276,22 @@ shrewd_basic_reflect_value_set() 经 `ops->set` 写目标的规范值。传参�
 返回同 shrewd_basic_reflect_value_get()。
 
 ## 4. 打印
+
+### shrewd_basic_reflect_describe(type)
+
+```c
+int shrewd_basic_reflect_describe(const shrewd_basic_reflect_type_t *type);
+```
+
+shrewd_basic_reflect_describe() 打印**描述符本身**(不是对象)的自述,
+走 "reflect" log 模块单条 INFO 记录:头行(名/kind/尺寸/对齐)+ 每字段
+一行(名、形态标记如 `*point_t`/`int32[3]`/`*T[]`、偏移、尺寸、对齐、
+标志注记 owned/stringbuf/bits/union/flex);枚举列常量、数组行示元素形态、
+union 按变体分组。注册调试与文档素材用。
+
+- **传参**:`type` — 类型描述符。
+- **返回**:`SHREWD_BASIC_ERR_OK`;`SHREWD_BASIC_ERR_MEM_NOMEM`;
+  `SHREWD_BASIC_ERR_ARG_INVALID`。
 
 ### shrewd_basic_reflect_dump(type, object, label) 宏 / shrewd_basic_reflect_dump_write(type, object, label, file, line, func)
 
@@ -331,7 +377,36 @@ shrewd_basic_reflect_path_get();寻址时解引用但绝不分配/释放,中途 
 - `shrewd_basic_reflect_list_ops_t` — 容器回调:`insert(ctx, name, type,
   out_slot)` 两段式插入、`find_by_type(ctx, type)`、`find_by_name(ctx, name)`;
 - `shrewd_basic_reflect_list_t` — `sb_refl_ops` 回调表 + `sb_refl_ctx`
-  容器句柄。
+  容器句柄;
+- `shrewd_basic_reflect_registry_t` — 开箱即用的默认容器(条目数组 +
+  容量 + 计数),由 `SHREWD_BASIC_REFLECT_REGISTRY_DEFINE(var, capacity)`
+  在文件域声明(内联条目存储,零堆分配)。
+
+### shrewd_basic_reflect_registry_bind(registry, out_list)
+
+```c
+int shrewd_basic_reflect_registry_bind(
+        shrewd_basic_reflect_registry_t *registry,
+        shrewd_basic_reflect_list_t *out_list);
+```
+
+shrewd_basic_reflect_registry_bind() 把内置数组 ops 挂到 `out_list`,
+此后 shrewd_basic_reflect_list_register() 与全部 `_list` 查询原样可用
+(注册名有序存放、二分查找;重名 `KEY_EXISTS`;满容 `MEM_NOMEM`;
+条目指针在下次注册前有效)。
+
+- **传参**:`registry` — `SHREWD_BASIC_REFLECT_REGISTRY_DEFINE` 声明的
+  注册表;`out_list` — 出参,list 视图。
+- **返回**:`SHREWD_BASIC_ERR_OK`;`SHREWD_BASIC_ERR_ARG_INVALID`。
+
+### shrewd_basic_reflect_registry_ops()
+
+```c
+const shrewd_basic_reflect_list_ops_t *shrewd_basic_reflect_registry_ops(void);
+```
+
+shrewd_basic_reflect_registry_ops() 返回内置数组 ops(手工组合自定义
+容器形状时用)。无参数;不返回错误码。
 
 ### shrewd_basic_reflect_lookup_init(look, type, name)
 

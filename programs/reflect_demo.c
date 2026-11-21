@@ -948,6 +948,27 @@ int main(void)
                                                                "z", &by_field));
     }
 
+    banner("20. registry container and describe: name -> type out of the box");
+    {
+        SHREWD_BASIC_REFLECT_REGISTRY_DEFINE(demo_registry, 4);
+        shrewd_basic_reflect_list_t reg_list;
+        const shrewd_basic_reflect_type_t *by_name = NULL;
+
+        print_status("registry_bind(&registry, &list)",
+                     shrewd_basic_reflect_registry_bind(&demo_registry,
+                                                        &reg_list));
+        print_status("list_register(point_type, \"vec\")",
+                     shrewd_basic_reflect_list_register(&reg_list, &point_type,
+                                                        "vec"));
+        print_status("type_find_list(\"vec\")",
+                     shrewd_basic_reflect_type_find_list(&reg_list, "vec",
+                                                         &by_name));
+        printf("  \"vec\" -> %s\n", by_name->sb_refl_name);
+        printf("  describe(point_type):\n");
+        print_status("describe(point_type)",
+                     shrewd_basic_reflect_describe(&point_type));
+    }
+
     printf("\nDemo done. See docs/reflect.md for the full reference.\n");
     return 0;
 }

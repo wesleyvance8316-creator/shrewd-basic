@@ -203,7 +203,7 @@ encode/decode 的 `info` 参数携带策略(NULL = 纯元数据,行为不变)。
 |---|---|
 | `KEY(field, 规键, 别名...)` | encode 永远输出**规键**(第 1 个);decode 接受任意别名,**成员名本身始终可接受** |
 | `REQUIRED` | decode 时键必须出现(别名任一命中即可),缺失 → `KEY_NOTFOUND` 带路径;`use_defaults` 下**默认值物化也可满足** |
-| `DEFAULT(field, v)` / `DEFAULT_STR(field, "s")` | 缺失键的默认值(`use_defaults` 下由 decode 物化:数值含整数/枚举/bool/char/浮点,字符串为拷贝分配;一期不含 struct/数组/ops 字段) |
+| `DEFAULT(field, v)` / `DEFAULT_STR(field, "s")` / `DEFAULT_JSON(field, text)` | 缺失键的默认值(`use_defaults` 下由 decode 物化):数值含整数/枚举/bool/char/浮点,字符串为拷贝分配;`DEFAULT_JSON` 收一段 JSON 文本,**任意形状**(struct/数组/嵌套/ops 字段),内部走正常解码通路,产物与解码值同源同销(FAM 字段除外——根分配按现存 JSON 定尺寸) |
 | `BORROWED(field)` | 指针字段归应用:decode 不写、`json_free` 不碰(decode 后赋值,任意来源、任意生命周期) |
 | `HIDDEN` | 双向跳过 |
 | `OMIT_EMPTY` | encode 省略零值(false/0/""/NULL/空容器,按 **C 值**判断,不受 ops 变换影响) |

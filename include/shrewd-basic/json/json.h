@@ -536,9 +536,9 @@ struct shrewd_basic_json_info {
 /**
  * Default value materialized when the key is missing and the decode
  * runs with use_defaults (integers, bools, chars, enums and floats via
- * one numeric slot; signed values keep their bit pattern). Phase one
- * covers scalar fields without ops hooks only - struct/array defaults
- * are ignored. A materialized default satisfies REQUIRED.
+ * one numeric slot; signed values keep their bit pattern). Scalars
+ * only - struct/array defaults use SHREWD_BASIC_JSON_DEFAULT_JSON().
+ * A materialized default satisfies REQUIRED.
  */
 #define SHREWD_BASIC_JSON_DEFAULT(member, value)                                \
     {                                                                          \

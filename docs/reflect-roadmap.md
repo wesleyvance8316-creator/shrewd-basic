@@ -19,6 +19,9 @@
 
 ### A1. 类型注册表(名字→类型)
 
+> 状态:**已完成**(2026-11-21,见提交 c536558/8ada219/ea8fc8f/
+> 66a8aeb/d014507/84b7ab2 与验证脚本)
+
 **现状**:只有"描述符指针→字段"方向;`shrewd_basic_reflect_type_find_list`
 需要调用方自己建容器并实现三个 ops 回调,库里没有开箱即用的按名找类型。
 
@@ -53,6 +56,9 @@ shrewd_basic_reflect_type_find_list(&list, "point", &found);
 
 ### A2. JSON 默认值二期(struct/数组 DEFAULT)
 
+> 状态:**已完成**(2026-11-21,见提交 c536558/8ada219/ea8fc8f/
+> 66a8aeb/d014507/84b7ab2 与验证脚本)
+
 **归属**:json 模块([json reference](json.md)),此处记录以免遗漏。
 
 **现状**:`DEFAULT`/`DEFAULT_STR` 一期只覆盖标量/枚举/bool/char/浮点/字符串;
@@ -74,6 +80,8 @@ default 物化引入一次解析;也可收"原始字节镜像"但表达力差、
 **优先级:P0**(一期明确留下的尾巴)。
 
 ### A3. MSVC/ILP32 平台验证
+
+> 状态:**已完成**(2026-11-21,提交 ea8fc8f)
 
 **现状**:`tools/verify_platforms.sh` 已就位,但缺工具链时跳过;`_Thread_local`
 在 MSVC C11 模式的行为尚未实测。
@@ -151,6 +159,8 @@ copy/equal/hash/dump 按码元序列语义;JSON 映射侧转 UTF-8。
 
 ### B5. 描述符携带对齐信息
 
+> 状态:**已完成**(2026-11-21,提交 66a8aeb)
+
 **现状**:字段有 size/stride,没有 `alignof`;二进制布局用途(见 F1)需要
 手查 `alignof`。
 
@@ -159,6 +169,8 @@ copy/equal/hash/dump 按码元序列语义;JSON 映射侧转 UTF-8。
 **兼容**:纯追加成员,源兼容。**优先级:P1**(小而有用,给 F1 铺路)。
 
 ### B6. 描述符 ABI 版本与自检
+
+> 状态:**已完成**(2026-11-21,提交 66a8aeb)
 
 **动机**:描述符跨 DSO/插件共享时,两侧头文件版本错配是无声的 UB(偏移
 对不上)。
@@ -175,6 +187,8 @@ copy/equal/hash/dump 按码元序列语义;JSON 映射侧转 UTF-8。
 ## C. 查询与遍历增强
 
 ### C1. describe:类型自述打印
+
+> 状态:**已完成**(2026-11-21,提交 d014507)
 
 **现状**:dump 打印**对象**;打印**描述符本身**(类型长什么样)只能自己读
 字段表。
@@ -268,6 +282,8 @@ int shrewd_basic_reflect_diff_all(const void *a, const void *b,
 见 A1。附带文档配方:"全局注册表 = 应用 static 一个 registry"。
 
 ### E2. 查找缓存的构建期配置
+
+> 状态:**已完成**(2026-11-21,提交 84b7ab2)
 
 **现状**:`REFLECT_LOOKUP_SLOTS 8` / `REFLECT_LOOKUP_FIELDS 64` 是库内常量。
 

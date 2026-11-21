@@ -78,17 +78,20 @@ typedef struct {
     int32_t level;
     const char *label;
     const char *unit; /* BORROWED: application-owned */
+    int32_t scores[3];
 } dfl_t;
 
 SHREWD_BASIC_REFLECT_TYPE_DEFINE(dfl_reflect, dfl_t,
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, level),
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, label),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, unit));
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dfl_t, unit),
+    SHREWD_BASIC_REFLECT_FIELD_ARRAY(dfl_t, scores, shrewd_basic_reflect_int32));
 
 SHREWD_BASIC_JSON_DEFINE(dfl_json, dfl_reflect,
     SHREWD_BASIC_JSON_DEFAULT(level, 7),
     SHREWD_BASIC_JSON_DEFAULT_STR(label, "guest"),
-    SHREWD_BASIC_JSON_BORROWED(unit));
+    SHREWD_BASIC_JSON_BORROWED(unit),
+    SHREWD_BASIC_JSON_DEFAULT_JSON(scores, "[7,8,9]"));
 
 static void print_status(const char *what, int status)
 {
@@ -217,8 +220,9 @@ int main(void)
         print_status("decode(\"{}\", use_defaults)",
                      shrewd_basic_json_decode("{}", 2, &cfg, &dfl_reflect,
                                               &dfl_json, &options, NULL));
-        printf("  level=%d label=\"%s\" (materialized by decode)\n",
-               cfg.level, cfg.label);
+        printf("  level=%d label=\"%s\" scores=[%d,%d,%d] (materialized)\n",
+               cfg.level, cfg.label, cfg.scores[0], cfg.scores[1],
+               cfg.scores[2]);
         cfg.unit = "kg"; /* borrowed: installed after decode */
         print_status("json_free",
                      shrewd_basic_json_free(&cfg, &dfl_reflect, &dfl_json));
