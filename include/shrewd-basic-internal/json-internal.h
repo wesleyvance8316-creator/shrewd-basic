@@ -15,7 +15,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "shrewd-basic/json.h"
+#include "shrewd-basic/formats/json.h"
 
 typedef struct shrewd_basic_json_entry {
     char *key;
