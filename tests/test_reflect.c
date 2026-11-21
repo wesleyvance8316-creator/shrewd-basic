@@ -1403,7 +1403,8 @@ static void test_pointer_fields(void)
                   SHREWD_BASIC_ERR_OK);
     expect_true("pointer re-point lands", &other == refs.counter);
     expect_eq_int("pointer size mismatch",
-                  shrewd_basic_reflect_field_set(&refs, counter, &link, (size_t)4),
+                  shrewd_basic_reflect_field_set(&refs, counter, &link,
+                                                 sizeof(link) + 1u),
                   SHREWD_BASIC_ERR_REFLECT_MISMATCH);
 
     /* Self-referential pointer through the shared descriptor. */
@@ -4008,12 +4009,87 @@ static void test_lookup_list(void)
     }
 }
 
+static void test_registry(void)
+{
+    SHREWD_BASIC_REFLECT_REGISTRY_DEFINE(reg, 4);
+    shrewd_basic_reflect_list_t list;
+    const shrewd_basic_reflect_type_t *found = NULL;
+    const shrewd_basic_reflect_field_t *field = NULL;
+
+    expect_eq_int("registry bind",
+                  shrewd_basic_reflect_registry_bind(&reg, &list),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("registry bind NULL",
+                  shrewd_basic_reflect_registry_bind(NULL, &list),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_true("registry ops exposed",
+                NULL != shrewd_basic_reflect_registry_ops());
+
+    /* Register out of name order; the array sorts, lookups binary-search. */
+    expect_eq_int("registry add point",
+                  shrewd_basic_reflect_list_register(&list, &g_point_reflect,
+                                                     "point"),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("registry add person",
+                  shrewd_basic_reflect_list_register(&list, &g_person_reflect,
+                                                     "person"),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("registry add wide",
+                  shrewd_basic_reflect_list_register(&list, &g_wide_reflect,
+                                                     "wide"),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("registry add alias",
+                  shrewd_basic_reflect_list_register(&list, &g_point_reflect,
+                                                     "vec2"),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("registry rejects duplicate",
+                  shrewd_basic_reflect_list_register(&list, &g_point_reflect,
+                                                     "point"),
+                  SHREWD_BASIC_ERR_KEY_EXISTS);
+    expect_eq_int("registry rejects full",
+                  shrewd_basic_reflect_list_register(&list, &g_huge_reflect,
+                                                     "huge"),
+                  SHREWD_BASIC_ERR_MEM_NOMEM);
+
+    /* Binary search hits the first, middle and last names. */
+    expect_eq_int("registry find person",
+                  shrewd_basic_reflect_type_find_list(&list, "person", &found),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("registry find person type", &g_person_reflect == found);
+    expect_eq_int("registry find vec2",
+                  shrewd_basic_reflect_type_find_list(&list, "vec2", &found),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("registry find vec2 type", &g_point_reflect == found);
+    expect_eq_int("registry find wide",
+                  shrewd_basic_reflect_type_find_list(&list, "wide", &found),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("registry find wide type", &g_wide_reflect == found);
+    expect_eq_int("registry find miss",
+                  shrewd_basic_reflect_type_find_list(&list, "nobody", &found),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+
+    /* Field lookup through the registry index, and linear fallback. */
+    expect_eq_int("registry find_field hit",
+                  shrewd_basic_reflect_type_find_field_list(&list,
+                                                            &g_person_reflect,
+                                                            "age", &field),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("registry find_field offset",
+                field->sb_refl_offset == offsetof(person_t, age));
+    expect_eq_int("registry find_field fallback",
+                  shrewd_basic_reflect_type_find_field_list(&list,
+                                                            &g_node_reflect,
+                                                            "data", &field),
+                  SHREWD_BASIC_ERR_OK);
+}
+
 int main(void)
 {
     test_describe();
     test_find_field();
     test_lookup_index();
     test_lookup_list();
+    test_registry();
     test_get_set_scalars();
     test_get_set_string();
     test_nested();

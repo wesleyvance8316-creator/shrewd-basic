@@ -1172,6 +1172,39 @@ int shrewd_basic_reflect_path_set_list(const shrewd_basic_reflect_list_t *list,
                                        size_t value_size);
 
 /*
+ * Ready-made registry container: a fixed-capacity array of lookup
+ * entries implementing the three list ops (names kept sorted for
+ * binary search, duplicate names rejected with KEY_EXISTS). It is the
+ * "type registry by name" sugar over the *_list family - storage stays
+ * with the caller (a static array behind the macro), no global state,
+ * same threading contract (register single-threaded, query freely).
+ * Entry pointers returned by the ops stay valid until the next
+ * registration (insertion keeps the array sorted).
+ */
+typedef struct shrewd_basic_reflect_registry {
+    shrewd_basic_reflect_lookup_t *sb_refl_entries; /**< Caller-owned slots. */
+    size_t sb_refl_capacity;                        /**< Slots available. */
+    size_t sb_refl_count;                           /**< Registered entries. */
+} shrewd_basic_reflect_registry_t;
+
+/** Declare a registry with inline entry storage (file scope). */
+#define SHREWD_BASIC_REFLECT_REGISTRY_DEFINE(var, capacity)                    \
+    static shrewd_basic_reflect_lookup_t var##_entries[(capacity)];            \
+    static shrewd_basic_reflect_registry_t var = {                             \
+        var##_entries, (size_t)(capacity), 0 }
+
+/**
+ * Point @p out_list at @p registry through the built-in array ops, so
+ * shrewd_basic_reflect_list_register() and the *_list queries work
+ * unchanged. Returns SHREWD_BASIC_ERR_ARG_INVALID for NULL arguments.
+ */
+int shrewd_basic_reflect_registry_bind(shrewd_basic_reflect_registry_t *registry,
+                                       shrewd_basic_reflect_list_t *out_list);
+
+/** The ops behind shrewd_basic_reflect_registry_bind() (for manual composition). */
+const shrewd_basic_reflect_list_ops_t *shrewd_basic_reflect_registry_ops(void);
+
+/*
  * Operations: the effective vtable of a field is field->sb_refl_ops when set,
  * else field->sb_refl_type->sb_refl_ops. get/set/check run for values and pointees
  * alike; copy/destroy handle objects (pointer targets and the root of
