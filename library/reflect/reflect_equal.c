@@ -387,3 +387,290 @@ int shrewd_basic_reflect_diff(const void *a, const void *b,
                      (NULL != trace) ? path_out : "(unreported)", type->sb_refl_name);
     return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
 }
+
+/* --- diff_all: report every difference ------------------------------- */
+
+/*
+ * Like reflect_diff() but keeps walking: every mismatch is reported
+ * through the callback with the same path syntax, leaf/shape semantics
+ * mirror the equal walk (bit groups compare their bits, string buffers
+ * their text, unions their active variant and tag, cyclic pairs are
+ * visited once). The callback returns SHREWD_BASIC_ERR_OK to continue
+ * and any other code to abort the walk.
+ */
+typedef struct diff_all_ctx {
+    shrewd_basic_reflect_diff_fn fn;
+    void *ctx;
+} diff_all_ctx_t;
+
+static int diff_all_report(const diff_all_ctx_t *all, const diff_path_t *diff,
+                           shrewd_basic_reflect_diff_kind_t kind)
+{
+    const char *path = (0 != diff->len) ? diff->buf : "(root)";
+    return all->fn(all->ctx, path, kind);
+}
+
+static int diff_all_value(const shrewd_basic_reflect_type_t *type,
+                          const unsigned char *a, const unsigned char *b,
+                          size_t nbytes,
+                          const shrewd_basic_reflect_ops_t *ops,
+                          equal_pair_t *pair_path, size_t depth,
+                          diff_path_t *diff, const diff_all_ctx_t *all);
+
+static int diff_all_fields(const shrewd_basic_reflect_field_t *fields,
+                           size_t count,
+                           const unsigned char *a, const unsigned char *b,
+                           equal_pair_t *pair_path, size_t depth,
+                           diff_path_t *diff, const diff_all_ctx_t *all)
+{
+    for (size_t i = 0; i < count; ++i) {
+        const shrewd_basic_reflect_field_t *field = &fields[i];
+        const shrewd_basic_reflect_ops_t *field_ops = reflect_field_ops(field);
+        reflect_array_view_t view_a = reflect_array_view(a, field);
+        reflect_array_view_t view_b = reflect_array_view(b, field);
+        size_t mark = diff_path_mark(diff);
+        size_t shared = (view_a.count < view_b.count) ? view_a.count
+                                                      : view_b.count;
+        int indexed = (0u != (field->sb_refl_flags
+                              & (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY
+                                 | SHREWD_BASIC_REFLECT_FIELD_F_DARRAY)));
+        int status;
+        diff_path_member(diff, field->sb_refl_name);
+        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_UNION)) {
+            const unsigned char *ua = a + field->sb_refl_offset;
+            const unsigned char *ub = b + field->sb_refl_offset;
+            int64_t tag_a = reflect_load_i64(a + field->sb_refl_limit_offset,
+                                             field->sb_refl_limit_size);
+            int64_t tag_b = reflect_load_i64(b + field->sb_refl_limit_offset,
+                                             field->sb_refl_limit_size);
+            const shrewd_basic_reflect_variant_t *variant = NULL;
+            if (tag_a != tag_b) {
+                status = diff_all_report(all, diff,
+                                         SHREWD_BASIC_REFLECT_DIFF_SHAPE);
+                if (SHREWD_BASIC_ERR_OK != status) {
+                    return status;
+                }
+                diff_path_restore(diff, mark);
+                continue;
+            }
+            variant = reflect_union_variant(field, ua);
+            if (NULL == variant) {
+                if (0 != memcmp(ua, ub, field->sb_refl_stride)) {
+                    status = diff_all_report(all, diff,
+                                             SHREWD_BASIC_REFLECT_DIFF_VALUE);
+                    if (SHREWD_BASIC_ERR_OK != status) {
+                        return status;
+                    }
+                }
+            } else {
+                status = diff_all_fields(variant->sb_refl_fields,
+                                         variant->sb_refl_field_count,
+                                         ua, ub, pair_path, depth + 1, diff,
+                                         all);
+                if (SHREWD_BASIC_ERR_OK != status) {
+                    return status;
+                }
+            }
+            diff_path_restore(diff, mark);
+            continue;
+        }
+        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
+            const char *text_a = (const char *)(a + field->sb_refl_offset);
+            const char *text_b = (const char *)(b + field->sb_refl_offset);
+            size_t len_a = reflect_strn_len(text_a, field->sb_refl_count);
+            size_t len_b = reflect_strn_len(text_b, field->sb_refl_count);
+            if ((len_a != len_b) || (0 != memcmp(text_a, text_b, len_a))) {
+                status = diff_all_report(all, diff,
+                                         SHREWD_BASIC_REFLECT_DIFF_VALUE);
+                if (SHREWD_BASIC_ERR_OK != status) {
+                    return status;
+                }
+            }
+            diff_path_restore(diff, mark);
+            continue;
+        }
+        if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_BITS)) {
+            uint64_t unit_a = reflect_load_u64(a + field->sb_refl_offset,
+                                               field->sb_refl_size);
+            uint64_t unit_b = reflect_load_u64(b + field->sb_refl_offset,
+                                               field->sb_refl_size);
+            if (reflect_bits_extract(unit_a, field->sb_refl_bit_offset,
+                                     field->sb_refl_bit_width)
+                    != reflect_bits_extract(unit_b, field->sb_refl_bit_offset,
+                                            field->sb_refl_bit_width)) {
+                status = diff_all_report(all, diff,
+                                         SHREWD_BASIC_REFLECT_DIFF_VALUE);
+                if (SHREWD_BASIC_ERR_OK != status) {
+                    return status;
+                }
+            }
+            diff_path_restore(diff, mark);
+            continue;
+        }
+        if (view_a.count != view_b.count) {
+            status = diff_all_report(all, diff,
+                                     SHREWD_BASIC_REFLECT_DIFF_SHAPE);
+            if (SHREWD_BASIC_ERR_OK != status) {
+                return status;
+            }
+        }
+        for (size_t j = 0; j < shared; ++j) {
+            const unsigned char *elem_a = view_a.base + (j * view_a.stride);
+            const unsigned char *elem_b = view_b.base + (j * view_b.stride);
+            size_t mark_j = diff_path_mark(diff);
+            if (0 != indexed) {
+                diff_path_index(diff, j);
+            }
+            if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
+                const void *target_a = reflect_load_ptr(elem_a);
+                const void *target_b = reflect_load_ptr(elem_b);
+                if ((NULL == target_a) && (NULL == target_b)) {
+                    diff_path_restore(diff, mark_j);
+                    continue;
+                }
+                if ((NULL == target_a) || (NULL == target_b)) {
+                    status = diff_all_report(all, diff,
+                                             SHREWD_BASIC_REFLECT_DIFF_SHAPE);
+                    if (SHREWD_BASIC_ERR_OK != status) {
+                        return status;
+                    }
+                    diff_path_restore(diff, mark_j);
+                    continue;
+                }
+                if (0 != equal_pair_seen(pair_path, depth, target_a, target_b)) {
+                    diff_path_restore(diff, mark_j);
+                    continue;
+                }
+                pair_path[depth].a = target_a;
+                pair_path[depth].b = target_b;
+                status = diff_all_value(field->sb_refl_type,
+                                        (const unsigned char *)target_a,
+                                        (const unsigned char *)target_b,
+                                        field->sb_refl_type->sb_refl_size,
+                                        field_ops, pair_path, depth + 1, diff,
+                                        all);
+            } else {
+                status = diff_all_value(field->sb_refl_type, elem_a, elem_b,
+                                        view_a.stride, field_ops, pair_path,
+                                        depth + 1, diff, all);
+            }
+            if (SHREWD_BASIC_ERR_OK != status) {
+                return status;
+            }
+            diff_path_restore(diff, mark_j);
+        }
+        diff_path_restore(diff, mark);
+    }
+    return SHREWD_BASIC_ERR_OK;
+}
+
+static int diff_all_value(const shrewd_basic_reflect_type_t *type,
+                          const unsigned char *a, const unsigned char *b,
+                          size_t nbytes,
+                          const shrewd_basic_reflect_ops_t *ops,
+                          equal_pair_t *pair_path, size_t depth,
+                          diff_path_t *diff, const diff_all_ctx_t *all)
+{
+    int status;
+    if (EQUAL_MAX_DEPTH <= depth) {
+        return SHREWD_BASIC_ERR_OK;
+    }
+    if ((NULL != ops) && (NULL != ops->equal)) {
+        bool same = true;
+        status = ops->equal(a, b, &same);
+        if (SHREWD_BASIC_ERR_OK != status) {
+            return status;
+        }
+        return same ? SHREWD_BASIC_ERR_OK
+                    : diff_all_report(all, diff,
+                                      SHREWD_BASIC_REFLECT_DIFF_VALUE);
+    }
+    switch (type->sb_refl_kind) {
+    case SHREWD_BASIC_REFLECT_KIND_BOOL:
+        return ((0 != reflect_load_u64(a, nbytes))
+                == (0 != reflect_load_u64(b, nbytes)))
+                ? SHREWD_BASIC_ERR_OK
+                : diff_all_report(all, diff, SHREWD_BASIC_REFLECT_DIFF_VALUE);
+    case SHREWD_BASIC_REFLECT_KIND_INT8:
+    case SHREWD_BASIC_REFLECT_KIND_INT16:
+    case SHREWD_BASIC_REFLECT_KIND_INT32:
+    case SHREWD_BASIC_REFLECT_KIND_INT64:
+        return (reflect_load_i64(a, nbytes) == reflect_load_i64(b, nbytes))
+                ? SHREWD_BASIC_ERR_OK
+                : diff_all_report(all, diff, SHREWD_BASIC_REFLECT_DIFF_VALUE);
+    case SHREWD_BASIC_REFLECT_KIND_UINT8:
+    case SHREWD_BASIC_REFLECT_KIND_UINT16:
+    case SHREWD_BASIC_REFLECT_KIND_UINT32:
+    case SHREWD_BASIC_REFLECT_KIND_UINT64:
+    case SHREWD_BASIC_REFLECT_KIND_ENUM:
+        return (reflect_load_u64(a, nbytes) == reflect_load_u64(b, nbytes))
+                ? SHREWD_BASIC_ERR_OK
+                : diff_all_report(all, diff, SHREWD_BASIC_REFLECT_DIFF_VALUE);
+    case SHREWD_BASIC_REFLECT_KIND_FLOAT:
+    case SHREWD_BASIC_REFLECT_KIND_DOUBLE:
+        return (reflect_load_f64(a, nbytes) == reflect_load_f64(b, nbytes))
+                ? SHREWD_BASIC_ERR_OK
+                : diff_all_report(all, diff, SHREWD_BASIC_REFLECT_DIFF_VALUE);
+    case SHREWD_BASIC_REFLECT_KIND_STRING: {
+        const char *left = reflect_load_str(a);
+        const char *right = reflect_load_str(b);
+        int same = (NULL == left) ? (left == right)
+                                  : ((NULL != right) && (0 == strcmp(left, right)));
+        return same ? SHREWD_BASIC_ERR_OK
+                    : diff_all_report(all, diff, SHREWD_BASIC_REFLECT_DIFF_VALUE);
+    }
+    case SHREWD_BASIC_REFLECT_KIND_OPAQUE:
+        return (a == b) ? SHREWD_BASIC_ERR_OK
+                        : diff_all_report(all, diff, SHREWD_BASIC_REFLECT_DIFF_VALUE);
+    default:
+        break;
+    }
+    if (SHREWD_BASIC_REFLECT_KIND_ARRAY == type->sb_refl_kind) {
+        for (size_t i = 0; i < type->sb_refl_elem_count; ++i) {
+            size_t mark_j = diff_path_mark(diff);
+            diff_path_index(diff, i);
+            status = diff_all_value(type->sb_refl_elem,
+                                    a + (i * type->sb_refl_elem_stride),
+                                    b + (i * type->sb_refl_elem_stride),
+                                    type->sb_refl_elem_stride,
+                                    type->sb_refl_elem->sb_refl_ops,
+                                    pair_path, depth + 1, diff, all);
+            if (SHREWD_BASIC_ERR_OK != status) {
+                return status;
+            }
+            diff_path_restore(diff, mark_j);
+        }
+        return SHREWD_BASIC_ERR_OK;
+    }
+    if (SHREWD_BASIC_REFLECT_KIND_STRUCT != type->sb_refl_kind) {
+        return (0 == memcmp(a, b, nbytes))
+                ? SHREWD_BASIC_ERR_OK
+                : diff_all_report(all, diff, SHREWD_BASIC_REFLECT_DIFF_VALUE);
+    }
+    return diff_all_fields(type->sb_refl_fields, type->sb_refl_field_count,
+                           a, b, pair_path, depth, diff, all);
+}
+
+int shrewd_basic_reflect_diff_all(const void *a, const void *b,
+                                  const shrewd_basic_reflect_type_t *type,
+                                  shrewd_basic_reflect_diff_fn fn, void *ctx)
+{
+    equal_pair_t pair_path[EQUAL_MAX_DEPTH];
+    char path_buf[256];
+    diff_path_t diff;
+    diff_all_ctx_t all;
+    if ((NULL == a) || (NULL == b) || (NULL == type) || (NULL == fn)) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "diff", "diff_all: a, b, type or fn is NULL\n");
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    memset(pair_path, 0, sizeof(pair_path));
+    diff.buf = path_buf;
+    diff.cap = sizeof(path_buf);
+    diff.len = 0;
+    all.fn = fn;
+    all.ctx = ctx;
+    return diff_all_value(type, (const unsigned char *)a,
+                          (const unsigned char *)b, type->sb_refl_size,
+                          type->sb_refl_ops, pair_path, 0, &diff, &all);
+}

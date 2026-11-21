@@ -1369,6 +1369,36 @@ int shrewd_basic_reflect_diff(const void *a, const void *b,
                               const shrewd_basic_reflect_type_t *type,
                               char *path_out, size_t path_out_size);
 
+/** Difference categories reported by shrewd_basic_reflect_diff_all(). */
+typedef enum shrewd_basic_reflect_diff_kind {
+    SHREWD_BASIC_REFLECT_DIFF_VALUE = 0, /**< A leaf (or ops->equal) mismatch. */
+    SHREWD_BASIC_REFLECT_DIFF_SHAPE = 1  /**< NULL-ness, array length or union tag. */
+} shrewd_basic_reflect_diff_kind_t;
+
+/**
+ * diff_all callback. Return SHREWD_BASIC_ERR_OK to keep walking; any
+ * other code aborts the walk and is returned by
+ * shrewd_basic_reflect_diff_all().
+ */
+typedef int (*shrewd_basic_reflect_diff_fn)(
+        void *ctx, const char *path,
+        shrewd_basic_reflect_diff_kind_t kind);
+
+/**
+ * Compare like shrewd_basic_reflect_diff() but report EVERY difference:
+ * each mismatch is delivered to @p fn with the same path syntax
+ * ("(root)", "home.y", "pair[2].x"). Semantics mirror the equal walk -
+ * bit groups compare their bits, string buffers their text, unions the
+ * tag and the active variant, cyclic object pairs are visited once -
+ * and the walk continues past each reported difference. Returns
+ * SHREWD_BASIC_ERR_OK when the walk completes (equal graphs report
+ * nothing), @p fn's abort code, or SHREWD_BASIC_ERR_ARG_INVALID for
+ * NULL arguments.
+ */
+int shrewd_basic_reflect_diff_all(const void *a, const void *b,
+                                  const shrewd_basic_reflect_type_t *type,
+                                  shrewd_basic_reflect_diff_fn fn, void *ctx);
+
 /**
  * Hash a value graph consistently with shrewd_basic_reflect_equal():
  * equal objects always hash equal (see the caveat below). Leaves fold

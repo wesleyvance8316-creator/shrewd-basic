@@ -4370,6 +4370,111 @@ static void test_layout(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
+typedef struct {
+    char paths[16][64];
+    int kinds[16];
+    size_t count;
+    int abort_status;
+} diff_cap_t;
+
+static int diff_collect(void *ctx, const char *path,
+                        shrewd_basic_reflect_diff_kind_t kind)
+{
+    diff_cap_t *cap = (diff_cap_t *)ctx;
+    if (cap->count < (sizeof(cap->paths) / sizeof(cap->paths[0]))) {
+        (void)snprintf(cap->paths[cap->count], sizeof(cap->paths[0]), "%s",
+                       path);
+        cap->kinds[cap->count] = (int)kind;
+        ++cap->count;
+    }
+    return (0 != cap->abort_status) ? cap->abort_status : SHREWD_BASIC_ERR_OK;
+}
+
+static int diff_cap_has(const diff_cap_t *cap, const char *path, int kind)
+{
+    for (size_t i = 0; i < cap->count; ++i) {
+        if ((0 == strcmp(cap->paths[i], path)) && (cap->kinds[i] == kind)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void test_diff_all(void)
+{
+    diff_cap_t cap;
+    person_t a;
+    person_t b;
+
+    memset(&cap, 0, sizeof(cap));
+    memset(&a, 0, sizeof(a));
+    memset(&b, 0, sizeof(b));
+
+    /* Four independent differences, all reported with indexed paths. */
+    a.age = 1;
+    b.age = 2;
+    a.name = "aa";
+    b.name = "bb";
+    a.scores[2] = 9;
+    b.scores[2] = 7;
+    a.pair[1].y = 5;
+    b.pair[1].y = 6;
+    expect_eq_int("diff_all many",
+                  shrewd_basic_reflect_diff_all(&a, &b, &g_person_reflect,
+                                                diff_collect, &cap),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("diff_all count", 4 == cap.count);
+    expect_true("diff_all age",
+                diff_cap_has(&cap, "age", SHREWD_BASIC_REFLECT_DIFF_VALUE));
+    expect_true("diff_all name",
+                diff_cap_has(&cap, "name", SHREWD_BASIC_REFLECT_DIFF_VALUE));
+    expect_true("diff_all scores",
+                diff_cap_has(&cap, "scores[2]", SHREWD_BASIC_REFLECT_DIFF_VALUE));
+    expect_true("diff_all pair",
+                diff_cap_has(&cap, "pair[1].y",
+                             SHREWD_BASIC_REFLECT_DIFF_VALUE));
+
+    /* Equal graphs report nothing. */
+    memset(&cap, 0, sizeof(cap));
+    expect_eq_int("diff_all equal",
+                  shrewd_basic_reflect_diff_all(&a, &a, &g_person_reflect,
+                                                diff_collect, &cap),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("diff_all equal silent", 0 == cap.count);
+
+    /* Pointer NULL-ness is a shape difference. */
+    {
+        node_t n1;
+        node_t n2;
+        node_t tail;
+        memset(&n1, 0, sizeof(n1));
+        memset(&n2, 0, sizeof(n2));
+        memset(&tail, 0, sizeof(tail));
+        n1.data = 1;
+        n2.data = 1;
+        n2.next = &tail;
+        memset(&cap, 0, sizeof(cap));
+        expect_eq_int("diff_all shape",
+                      shrewd_basic_reflect_diff_all(&n1, &n2, &g_node_reflect,
+                                                    diff_collect, &cap),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("diff_all next shape",
+                    diff_cap_has(&cap, "next",
+                                 SHREWD_BASIC_REFLECT_DIFF_SHAPE));
+    }
+
+    /* Callback aborts propagate; NULL arguments are rejected. */
+    cap.abort_status = SHREWD_BASIC_ERR_KEY_NOTFOUND;
+    expect_eq_int("diff_all abort",
+                  shrewd_basic_reflect_diff_all(&a, &b, &g_person_reflect,
+                                                diff_collect, &cap),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("diff_all NULL",
+                  shrewd_basic_reflect_diff_all(NULL, &b, &g_person_reflect,
+                                                diff_collect, &cap),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+}
+
 int main(void)
 {
     test_describe();
@@ -4381,6 +4486,7 @@ int main(void)
     test_describe_type();
     test_anonymous();
     test_layout();
+    test_diff_all();
     test_get_set_scalars();
     test_get_set_string();
     test_nested();
