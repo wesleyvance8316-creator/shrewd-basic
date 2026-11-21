@@ -73,6 +73,7 @@ shrewd_basic_reflect_type_find_field(type, name, out)),便于 Doxygen
 | `SHREWD_BASIC_REFLECT_FIELD_STRING_BUFFER(struct_type, member)` | `char[N]` 文本缓冲 |
 | `SHREWD_BASIC_REFLECT_FIELD_STRING_OWNED(struct_type, member)` | 自有字符串指针 |
 | `SHREWD_BASIC_REFLECT_FIELD_BITS(struct_type, unit, name, bit_offset, bit_width)` | 位组(`name` 为标签) |
+| `SHREWD_BASIC_REFLECT_FIELD_BITS_UNIT(struct_type, name, unit_ref, unit_offset, unit_size, bit_offset, bit_width)` | 位组(显式单元放置;C 位域用,`unit_ref` 不带 `&`) |
 | `SHREWD_BASIC_REFLECT_UNION_DEFINE(var, union_type, ...)` | union 描述符(变体表) |
 | `SHREWD_BASIC_REFLECT_UNION_VARIANT(tag_value, ...)` | union 变体条目 |
 | `SHREWD_BASIC_REFLECT_FIELD_UNION(struct_type, member, union_var, tag_member)` | 标签化 union 字段 |

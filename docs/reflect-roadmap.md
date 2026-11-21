@@ -17,21 +17,23 @@
 
 ---
 
-## 进展综述(2026-11-21)
+## 进展综述(2026-11-22)
 
 | 批次 | 状态 | 覆盖 |
 |---|---|---|
 | P0 已排队 | ✅ 全部完成 | A1 注册表、A3 MSVC/ILP32 验证 |
 | P1 建议做 | ✅ 全部完成 | B5 对齐、B6 ABI+自检、C1 describe、E2 缓存配置 |
 | P2 直接可实现 | ✅ 全部完成 | B2 匿名成员、C2 布局报告、C3 diff_all、D1 环哈希、D2 分配器注入 |
-| P2 依赖工具/需求 | ⏳ 待启动 | B1 位域(依赖 G1)、B4 宽字符 |
-| P3 条件性 | ⏳ 跟踪 | B3 宽标量、C4/C5、G2、H1 |
+| P2 工具线 | ✅ 全部完成 | G1 DWARF 后端、B1 位域、G2 轻量版(--layout) |
+| P2 需求驱动 | ⏳ 待启动 | B4 宽字符 |
+| P3 条件性 | ⏳ 跟踪 | B3 宽标量、C4/C5、H1 |
 
 **验证矩阵**:native / clang / ILP32(ELF 32-bit)/ MSVC(真 cl.exe +
-wine)四平台各 7 套件全绿,`tools/verify_platforms.sh` 一键复现。
-**剩余决策点**:G1 工具方案三问(DWARF 读取后端、生成物形态、G2 轻/重
-形态,见 G 节)、B4 是否按需启动。应用层(json 已实现;二进制序列化等
-候选)见 [reflect-apps](reflect-apps.md)。
+wine)四平台各 7 套件全绿,`tools/verify_platforms.sh` 一键复现;
+`tools/reflect_gen_check.sh` 覆盖生成器双后端(lex/dwarf)、位域双向
+对账与 --layout 报告。
+**剩余决策点**:B4 是否按需启动。应用层(json/bin 已实现;render/scan
+等候选)见 [reflect-apps](reflect-apps.md)。
 
 ---
 
@@ -94,28 +96,25 @@ shrewd_basic_reflect_type_find_list(&list, "point", &found);
 
 ### B1. C 位域(bit-field)支持——经生成器 + 编译器 ABI
 
+> 状态:**已完成**(2026-11-22,提交 2abacef + 0adb727)
+
 **现状**:C 位域成员**布局实现定义**(位序、跨单元、对齐均无标准),宏无法
-内省,故编译期直接拒绝;`FIELD_BITS` 覆盖"真实单元+作者给定位段"(寄存器/
-协议头)。
+内省;`FIELD_BITS` 覆盖"真实单元+作者给定位段"(寄存器/协议头),但 offsetof
+碰不了位域的匿名存储单元。
 
-**拟议形态**:承认"纯宏不可行",走**离线生成**路线——`reflect_gen` 的
-增强版读编译器 AST(GCC `-fdump-ada-spec` 或 clang libtooling)或 DWARF,
-按**本编译器的实际布局**产出 `FIELD_BITS` 风格描述符:
+**落地形态**:
+- 新宏 `SHREWD_BASIC_REFLECT_FIELD_BITS_UNIT(struct_type, name, unit_ref,
+  unit_offset, unit_size, bit_offset, bit_width)`:显式给出存储单元的
+  描述符引用/偏移/宽度,值语义与 `FIELD_BITS` 完全一致(运行期零改动);
+- `reflect_gen --backend dwarf` 读编译器实际布局(`DW_AT_data_bit_offset`
+  + `DW_AT_bit_size`)产出该宏:单元窗口优先取声明类型的槽位,放不下则
+  收缩到能覆盖位段的 1/2/4/8 字节窗口(重叠窗口的 RMW 互不干扰);
+- 生成物绑定编译器/目标 ABI(输出头写明探针命令/编译器/三元组,并以
+  `_Static_assert(sizeof/offsetof)` 对账防陈旧)——换工具链编译期即报错。
 
-```c
-/* 生成器产出:unit 成员 + 每个位域一个 FIELD_BITS 条目 */
-SHREWD_BASIC_REFLECT_FIELD_BITS(flags_t, raw, ok, 0, 1),
-SHREWD_BASIC_REFLECT_FIELD_BITS(flags_t, raw, level, 1, 3),
-```
-
-**设计要点**:
-- 描述符本身**不需要新机制**——`FIELD_BITS` + `bit_offset/bit_width` 已是
-  载体;缺的只是"从 C 源拿到位段布局"的工具;
-- 生成产物绑定编译器/目标 ABI(生成器输出顶部写明来源与指纹),换编译器
-  重新生成——这正是"实现定义"应有的处理方式;
-- 运行期 get/set/dump/equal 走现有 F_BITS 语义,零改动。
-**依赖**:生成器升级(B1 与 G2 联动)。**规模**:工具 约 400 行。**优先级:P2**
-(等真实位域结构体需求;嵌入式寄存器场景已有 FIELD_BITS)。
+**测试**:test_cbit(真实 C 位域宏手写用例)+ reflect_gen_bits_smoke
+(生成器产出与 C 位域双向对账:C 写→描述符读、描述符写→C 读、
+RMW 保邻组、混合单元宽度)。
 
 ### B2. 匿名 struct/union 成员平铺
 
@@ -318,22 +317,28 @@ int shrewd_basic_reflect_diff_all(const void *a, const void *b,
 
 ### G1. 生成器增强:读 DWARF / 编译器 AST
 
-**现状**:`tools/reflect_gen.py` 解析 C 源的 typedef(词法级),产出宏注解。
+> 状态:**已完成**(2026-11-22,提交 0adb727)
 
-**拟议形态**两条升级路线:
-- **DWARF 路线**:离线读 `gcc -g` 产物的 `.debug_info`,按 DIE 树产出描述符
-  (优点:布局 100% 真实,含 B1 位域;缺点:要带 DWARF 解析器,或调
-  `objdump --dwarf`/`llvm-dwarfdump` 做后端);
-- **AST 路线**:clang libtooling 精确解析(优点:语义全;缺点:重依赖)。
+**现状**:`tools/reflect_gen.py` 双后端——`--backend lex`(词法级,零
+依赖)与 `--backend dwarf`(编译探针 TU,pyelftools 读 `.debug_info`,
+布局 100% 真实,含 B1 位域)。选择 pyelftools 而非 objdump 文本解析
+(格式随版本漂移)或 clang libtooling(重依赖)。
+
+**指纹防陈旧**:dwarf 生成物顶部写明探针命令/编译器/目标三元组,正文
+以 `_Static_assert(sizeof/offsetof)` 对账——换工具链编译期即报错。
 
 **定位**:DWARF 是"生成反射元数据的好原料",运行时依旧只带描述符
 (运行时读 DWARF 的五大障碍见 reflect 模块讨论,不做)。
-**优先级:P2**(与 B1 联动)。
+**遗留**:AST 路线(clang libtooling)不采;`reflect_gen_check.sh`
+四轮自检(lex/dwarf/位域/layout)已固化。
 
 ### G2. pahole 式布局工具
 
-C2 的 CLI 化:`reflect_layout --type point_t demo` 输出填充报告;可基于
-生成器(G1)或 describe(C1)。**优先级:P3**。
+> 状态:**已完成(轻量版)**(2026-11-22,随 G1 交付:`--layout`)
+
+`reflect_gen.py INPUT --backend dwarf --layout` 输出 pahole-lite 报告:
+逐字段 offset/size/align/类型拼写、位组的位区间与单元、填充区间、
+packed 字节数(区间并集)。重形态(独立多二进制/diff CLI)按需求再议。
 
 ---
 
@@ -372,16 +377,16 @@ ISO C 反射研究(编译期反射 TS)在推进;C23 已确定 `_Generic`/`typeof
 | B6 | ABI 版本 + check_type 自检 | P1 | 约 150 行 | ✅ 66a8aeb |
 | C1 | describe 类型自述 | P1 | 约 150 行 | ✅ d014507 |
 | E2 | 查找缓存构建期配置 | P1 | 极小 | ✅ 84b7ab2 |
-| B1 | 位域(生成器+ABI) | P2 | 工具 约 400 行 | ⏳ 依赖 G1 |
+| B1 | 位域(生成器+ABI) | P2 | 工具 约 400 行 | ✅ 2abacef+0adb727 |
 | B2 | 匿名成员平铺 | P2 | 约 150 行 | ✅ e8abee7 |
 | B4 | 宽字符字符串 | P2 | 中 | ⏳ 需求驱动 |
 | C2 | 布局报告 | P2 | 约 150 行 | ✅ 4687408 |
 | C3 | diff_all | P2 | 约 250 行 | ✅ 4d4a2d7 |
 | D1 | 环哈希规范化 | P2 | 约 200 行 | ✅ aa932b6 |
 | D2 | 分配器注入 | P2 | 小 | ✅ 2ab9dad |
-| G1 | 生成器读 DWARF/AST | P2 | 工具 | ⏳ 工具 |
+| G1 | 生成器读 DWARF | P2 | 工具 | ✅ 0adb727 |
 | B3 | long double/_Complex/_BitInt | P3 | 中 | ⏳ P3 |
 | C4 | 路径通配/范围 | P3 | 大 | ⏳ P3 |
 | C5 | struct merge/patch | P3 | 中 | ⏳ P3 |
-| G2 | pahole 工具 | P3 | 小 | ⏳ P3 |
+| G2 | pahole 工具(轻量版) | P3 | 小 | ✅ 0adb727(--layout) |
 | H1 | C 标准反射互操作 | P3 | 跟踪 | ⏳ 跟踪 |
