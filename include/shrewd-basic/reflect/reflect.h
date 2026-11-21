@@ -200,11 +200,22 @@ typedef struct shrewd_basic_reflect_variant {
     const shrewd_basic_reflect_field_t *sb_refl_fields;
 } shrewd_basic_reflect_variant_t;
 
+/**
+ * Descriptor ABI version. Every descriptor carries the version of the
+ * headers it was authored against; shrewd_basic_reflect_check_type()
+ * flags mismatches, which catch stale descriptors compiled against an
+ * older shrewd-basic (e.g. before the align/abi members existed).
+ * Bump when the descriptor structs change shape or semantics.
+ */
+#define SHREWD_BASIC_REFLECT_ABI ((size_t)1)
+
 /** A described type: a struct layout, a primitive/string kind, or an enum. */
 struct shrewd_basic_reflect_type {
     shrewd_basic_reflect_kind_t sb_refl_kind;             /**< STRUCT for aggregates. */
     const char *sb_refl_name;                             /**< "person_t" or "int32". */
     size_t sb_refl_size;                                  /**< Informational width. */
+    size_t sb_refl_align;                                 /**< _Alignof of the C type (0 = unknown). */
+    size_t sb_refl_abi;                                   /**< SHREWD_BASIC_REFLECT_ABI of the headers used. */
     size_t sb_refl_field_count;                           /**< 0 for primitives. */
     const shrewd_basic_reflect_field_t *sb_refl_fields;    /**< NULL for primitives. */
     const shrewd_basic_reflect_enum_entry_t *sb_refl_enum; /**< NULL unless ENUM. */
@@ -410,6 +421,8 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
         .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_STRUCT,                              \
         .sb_refl_name = #struct_type,                                                  \
         .sb_refl_size = sizeof(struct_type),                                           \
+        .sb_refl_align = _Alignof(struct_type),                                        \
+        .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,                                       \
         .sb_refl_field_count = sizeof(var##_fields) / sizeof(var##_fields[0]),         \
         .sb_refl_fields = var##_fields                                                 \
     }
@@ -438,6 +451,8 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
         .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_ARRAY,                              \
         .sb_refl_name = #elem_type "[" #count "]",                                     \
         .sb_refl_size = sizeof(elem_type) * (size_t)(count),                           \
+        .sb_refl_align = _Alignof(elem_type),                                          \
+        .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,                                       \
         .sb_refl_field_count = 0,                                                      \
         .sb_refl_fields = NULL,                                                        \
         .sb_refl_elem = &(elem_ref),                                                   \
@@ -457,6 +472,8 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
         .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_STRUCT,                              \
         .sb_refl_name = #struct_type,                                                  \
         .sb_refl_size = sizeof(struct_type),                                           \
+        .sb_refl_align = _Alignof(struct_type),                                        \
+        .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,                                       \
         .sb_refl_field_count = sizeof(var##_fields) / sizeof(var##_fields[0]),         \
         .sb_refl_fields = var##_fields,                                                \
         .sb_refl_ops = &(ops_ref)                                                      \
@@ -473,6 +490,8 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
         .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_OPAQUE,                              \
         .sb_refl_name = (type_name),                                                   \
         .sb_refl_size = 0,                                                             \
+        .sb_refl_align = 0,                                                            \
+        .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,                                       \
         .sb_refl_field_count = 0,                                                      \
         .sb_refl_fields = NULL,                                                        \
         .sb_refl_ops = &(ops_ref)                                                      \
@@ -502,6 +521,8 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
         .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_ENUM,                        \
         .sb_refl_name = #enum_type,                                            \
         .sb_refl_size = sizeof(enum_type),                                     \
+        .sb_refl_align = _Alignof(enum_type),                                  \
+        .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,                               \
         .sb_refl_field_count = 0,                                              \
         .sb_refl_fields = NULL,                                                \
         .sb_refl_enum = var##_entries,                                         \
@@ -748,6 +769,8 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
         .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_UNION,                               \
         .sb_refl_name = #union_type,                                                   \
         .sb_refl_size = sizeof(union_type),                                            \
+        .sb_refl_align = _Alignof(union_type),                                         \
+        .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,                                       \
         .sb_refl_field_count = 0,                                                      \
         .sb_refl_fields = NULL,                                                        \
         .sb_refl_variants = var##_variants,                                            \
@@ -949,6 +972,27 @@ int shrewd_basic_reflect_enum_find_value(const shrewd_basic_reflect_type_t *type
 int shrewd_basic_reflect_type_find_field(const shrewd_basic_reflect_type_t *type,
                                          const char *name,
                                          const shrewd_basic_reflect_field_t **out);
+
+/**
+ * Effective alignment of a field's storage: alignof(void *) for
+ * pointer-shaped fields (F_PTR and F_DARRAY tables), otherwise the
+ * shrewd_basic_reflect_type_t.sb_refl_align of the field's type (0 when
+ * unknown). NULL argument returns 0.
+ */
+size_t shrewd_basic_reflect_field_align(const shrewd_basic_reflect_field_t *field);
+
+/**
+ * Validate a descriptor's invariants before trusting it: ABI version
+ * (SHREWD_BASIC_REFLECT_ABI), kind bounds, field table consistency
+ * (names, references, offsets and sizes inside the type, stride
+ * nonzero), F_BITS ranges inside their unit, union/enum/array reference
+ * shapes. Use it in tests and at startup to catch stale or hand-edited
+ * descriptors; it walks the type one level deep only. Returns
+ * SHREWD_BASIC_ERR_OK, SHREWD_BASIC_ERR_REFLECT_MISMATCH when an
+ * invariant is broken (the offending name is logged), or
+ * SHREWD_BASIC_ERR_ARG_INVALID for NULL.
+ */
+int shrewd_basic_reflect_check_type(const shrewd_basic_reflect_type_t *type);
 
 /**
  * Copy the field's raw bytes out of @p object into @p out_value.

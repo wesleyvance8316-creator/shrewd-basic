@@ -4083,6 +4083,84 @@ static void test_registry(void)
                   SHREWD_BASIC_ERR_OK);
 }
 
+static void test_descriptor_meta(void)
+{
+    const shrewd_basic_reflect_field_t *field = NULL;
+
+    /* ABI and alignment propagate from the authoring macros. */
+    expect_true("abi person",
+                SHREWD_BASIC_REFLECT_ABI == g_person_reflect.sb_refl_abi);
+    expect_true("align person",
+                _Alignof(person_t) == g_person_reflect.sb_refl_align);
+    expect_true("align prim",
+                _Alignof(int32_t) == shrewd_basic_reflect_int32.sb_refl_align);
+    expect_true("align string",
+                _Alignof(const char *)
+                        == shrewd_basic_reflect_string.sb_refl_align);
+    expect_true("align enum",
+                _Alignof(mode_t) == g_mode_reflect.sb_refl_align);
+    expect_true("align row",
+                _Alignof(int32_t) == g_row3_reflect.sb_refl_align);
+    expect_true("align union",
+                _Alignof(payload_t) == g_payload_reflect.sb_refl_align);
+    expect_true("align opaque unknown", 0 == g_handle_reflect.sb_refl_align);
+
+    /* field_align: value fields follow their type, pointer slots do not. */
+    expect_eq_int("field_align find age",
+                  shrewd_basic_reflect_type_find_field(&g_person_reflect, "age",
+                                                       &field),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("field_align value",
+                _Alignof(int32_t) == shrewd_basic_reflect_field_align(field));
+    expect_eq_int("field_align find name",
+                  shrewd_basic_reflect_type_find_field(&g_person_reflect, "name",
+                                                       &field),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("field_align pointer",
+                _Alignof(void *) == shrewd_basic_reflect_field_align(field));
+    expect_true("field_align NULL", 0 == shrewd_basic_reflect_field_align(NULL));
+
+    /* check_type accepts every fixture shape. */
+    expect_eq_int("check person",
+                  shrewd_basic_reflect_check_type(&g_person_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("check node",
+                  shrewd_basic_reflect_check_type(&g_node_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("check enum",
+                  shrewd_basic_reflect_check_type(&g_mode_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("check array",
+                  shrewd_basic_reflect_check_type(&g_row3_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("check union",
+                  shrewd_basic_reflect_check_type(&g_payload_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("check opaque",
+                  shrewd_basic_reflect_check_type(&g_handle_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("check primitive",
+                  shrewd_basic_reflect_check_type(&shrewd_basic_reflect_int32),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("check NULL",
+                  shrewd_basic_reflect_check_type(NULL),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+
+    /* Hand-corrupted copies are flagged. */
+    {
+        shrewd_basic_reflect_type_t bad = g_person_reflect;
+        bad.sb_refl_abi = SHREWD_BASIC_REFLECT_ABI + 1;
+        expect_eq_int("check bad abi",
+                      shrewd_basic_reflect_check_type(&bad),
+                      SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+        bad = g_person_reflect;
+        bad.sb_refl_size = 1; /* fields now exceed the type */
+        expect_eq_int("check bad size",
+                      shrewd_basic_reflect_check_type(&bad),
+                      SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    }
+}
+
 int main(void)
 {
     test_describe();
@@ -4090,6 +4168,7 @@ int main(void)
     test_lookup_index();
     test_lookup_list();
     test_registry();
+    test_descriptor_meta();
     test_get_set_scalars();
     test_get_set_string();
     test_nested();

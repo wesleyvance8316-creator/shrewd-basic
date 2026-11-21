@@ -23,46 +23,87 @@ SHREWD_BASIC_LOG_MODULE_DEFINE(shrewd_basic_reflect_log, "reflect",
 /* Primitive descriptors: canonical widths; type->sb_refl_size is informational. */
 const shrewd_basic_reflect_type_t shrewd_basic_reflect_bool = {
     .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_BOOL, .sb_refl_name = "bool",
-    .sb_refl_size = sizeof(_Bool), .sb_refl_field_count = 0, .sb_refl_fields = NULL };
+    .sb_refl_size = sizeof(_Bool),
+    .sb_refl_align = _Alignof(_Bool),
+    .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
+    .sb_refl_field_count = 0, .sb_refl_fields = NULL };
 const shrewd_basic_reflect_type_t shrewd_basic_reflect_char = {
     .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_CHAR, .sb_refl_name = "char",
-    .sb_refl_size = sizeof(char), .sb_refl_field_count = 0, .sb_refl_fields = NULL };
+    .sb_refl_size = sizeof(char),
+    .sb_refl_align = _Alignof(char),
+    .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
+    .sb_refl_field_count = 0, .sb_refl_fields = NULL };
 const shrewd_basic_reflect_type_t shrewd_basic_reflect_int8 = {
     .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_INT8, .sb_refl_name = "int8",
-    .sb_refl_size = sizeof(int8_t), .sb_refl_field_count = 0, .sb_refl_fields = NULL };
+    .sb_refl_size = sizeof(int8_t),
+    .sb_refl_align = _Alignof(int8_t),
+    .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
+    .sb_refl_field_count = 0, .sb_refl_fields = NULL };
 const shrewd_basic_reflect_type_t shrewd_basic_reflect_uint8 = {
     .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_UINT8, .sb_refl_name = "uint8",
-    .sb_refl_size = sizeof(uint8_t), .sb_refl_field_count = 0, .sb_refl_fields = NULL };
+    .sb_refl_size = sizeof(uint8_t),
+    .sb_refl_align = _Alignof(uint8_t),
+    .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
+    .sb_refl_field_count = 0, .sb_refl_fields = NULL };
 const shrewd_basic_reflect_type_t shrewd_basic_reflect_int16 = {
     .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_INT16, .sb_refl_name = "int16",
-    .sb_refl_size = sizeof(int16_t), .sb_refl_field_count = 0, .sb_refl_fields = NULL };
+    .sb_refl_size = sizeof(int16_t),
+    .sb_refl_align = _Alignof(int16_t),
+    .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
+    .sb_refl_field_count = 0, .sb_refl_fields = NULL };
 const shrewd_basic_reflect_type_t shrewd_basic_reflect_uint16 = {
     .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_UINT16, .sb_refl_name = "uint16",
-    .sb_refl_size = sizeof(uint16_t), .sb_refl_field_count = 0, .sb_refl_fields = NULL };
+    .sb_refl_size = sizeof(uint16_t),
+    .sb_refl_align = _Alignof(uint16_t),
+    .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
+    .sb_refl_field_count = 0, .sb_refl_fields = NULL };
 const shrewd_basic_reflect_type_t shrewd_basic_reflect_int32 = {
     .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_INT32, .sb_refl_name = "int32",
-    .sb_refl_size = sizeof(int32_t), .sb_refl_field_count = 0, .sb_refl_fields = NULL };
+    .sb_refl_size = sizeof(int32_t),
+    .sb_refl_align = _Alignof(int32_t),
+    .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
+    .sb_refl_field_count = 0, .sb_refl_fields = NULL };
 const shrewd_basic_reflect_type_t shrewd_basic_reflect_uint32 = {
     .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_UINT32, .sb_refl_name = "uint32",
-    .sb_refl_size = sizeof(uint32_t), .sb_refl_field_count = 0, .sb_refl_fields = NULL };
+    .sb_refl_size = sizeof(uint32_t),
+    .sb_refl_align = _Alignof(uint32_t),
+    .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
+    .sb_refl_field_count = 0, .sb_refl_fields = NULL };
 const shrewd_basic_reflect_type_t shrewd_basic_reflect_int64 = {
     .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_INT64, .sb_refl_name = "int64",
-    .sb_refl_size = sizeof(int64_t), .sb_refl_field_count = 0, .sb_refl_fields = NULL };
+    .sb_refl_size = sizeof(int64_t),
+    .sb_refl_align = _Alignof(int64_t),
+    .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
+    .sb_refl_field_count = 0, .sb_refl_fields = NULL };
 const shrewd_basic_reflect_type_t shrewd_basic_reflect_uint64 = {
     .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_UINT64, .sb_refl_name = "uint64",
-    .sb_refl_size = sizeof(uint64_t), .sb_refl_field_count = 0, .sb_refl_fields = NULL };
+    .sb_refl_size = sizeof(uint64_t),
+    .sb_refl_align = _Alignof(uint64_t),
+    .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
+    .sb_refl_field_count = 0, .sb_refl_fields = NULL };
 const shrewd_basic_reflect_type_t shrewd_basic_reflect_float = {
     .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_FLOAT, .sb_refl_name = "float",
-    .sb_refl_size = sizeof(float), .sb_refl_field_count = 0, .sb_refl_fields = NULL };
+    .sb_refl_size = sizeof(float),
+    .sb_refl_align = _Alignof(float),
+    .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
+    .sb_refl_field_count = 0, .sb_refl_fields = NULL };
 const shrewd_basic_reflect_type_t shrewd_basic_reflect_double = {
     .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_DOUBLE, .sb_refl_name = "double",
-    .sb_refl_size = sizeof(double), .sb_refl_field_count = 0, .sb_refl_fields = NULL };
+    .sb_refl_size = sizeof(double),
+    .sb_refl_align = _Alignof(double),
+    .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
+    .sb_refl_field_count = 0, .sb_refl_fields = NULL };
 const shrewd_basic_reflect_type_t shrewd_basic_reflect_string = {
     .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_STRING, .sb_refl_name = "string",
-    .sb_refl_size = sizeof(const char *), .sb_refl_field_count = 0, .sb_refl_fields = NULL };
+    .sb_refl_size = sizeof(const char *),
+    .sb_refl_align = _Alignof(const char *),
+    .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
+    .sb_refl_field_count = 0, .sb_refl_fields = NULL };
 const shrewd_basic_reflect_type_t shrewd_basic_reflect_void = {
     .sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_OPAQUE, .sb_refl_name = "void",
-    .sb_refl_size = 0, .sb_refl_field_count = 0, .sb_refl_fields = NULL };
+    .sb_refl_size = 0, .sb_refl_align = 0,
+    .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
+    .sb_refl_field_count = 0, .sb_refl_fields = NULL };
 
 const char *shrewd_basic_reflect_kind_name(shrewd_basic_reflect_kind_t kind)
 {
@@ -372,6 +413,109 @@ int shrewd_basic_reflect_type_find_field(const shrewd_basic_reflect_type_t *type
     shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_TRACE, shrewd_basic_reflect_log,
                      "field", "find_field: no field \"%s\"\n", name);
     return SHREWD_BASIC_ERR_KEY_NOTFOUND;
+}
+
+size_t shrewd_basic_reflect_field_align(const shrewd_basic_reflect_field_t *field)
+{
+    if (NULL == field) {
+        return 0;
+    }
+    if (0u != (field->sb_refl_flags
+               & (SHREWD_BASIC_REFLECT_FIELD_F_PTR
+                  | SHREWD_BASIC_REFLECT_FIELD_F_DARRAY))) {
+        return _Alignof(void *);
+    }
+    return (NULL != field->sb_refl_type) ? field->sb_refl_type->sb_refl_align : 0;
+}
+
+int shrewd_basic_reflect_check_type(const shrewd_basic_reflect_type_t *type)
+{
+    if (NULL == type) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    if (SHREWD_BASIC_REFLECT_ABI != type->sb_refl_abi) {
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                         "check", "check_type: \"%s\" has abi %zu, want %zu\n",
+                         (NULL != type->sb_refl_name) ? type->sb_refl_name : "?",
+                         type->sb_refl_abi, SHREWD_BASIC_REFLECT_ABI);
+        return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
+    }
+    switch (type->sb_refl_kind) {
+    case SHREWD_BASIC_REFLECT_KIND_STRUCT: {
+        if ((0 == type->sb_refl_field_count)
+                != (NULL == type->sb_refl_fields)) {
+            goto broken;
+        }
+        for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
+            const shrewd_basic_reflect_field_t *field = &type->sb_refl_fields[i];
+            if ((NULL == field->sb_refl_name) || (NULL == field->sb_refl_type)
+                    || (0 == field->sb_refl_stride)) {
+                goto broken;
+            }
+            if ((field->sb_refl_offset + field->sb_refl_size)
+                    > type->sb_refl_size) {
+                goto broken;
+            }
+            if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_BITS)) {
+                if ((field->sb_refl_bit_offset + field->sb_refl_bit_width)
+                        > (field->sb_refl_size * 8u)) {
+                    goto broken;
+                }
+            }
+        }
+        break;
+    }
+    case SHREWD_BASIC_REFLECT_KIND_ENUM:
+        if ((0 != type->sb_refl_enum_count) && (NULL == type->sb_refl_enum)) {
+            goto broken;
+        }
+        break;
+    case SHREWD_BASIC_REFLECT_KIND_ARRAY:
+        if ((NULL == type->sb_refl_elem) || (0 == type->sb_refl_elem_count)
+                || (0 == type->sb_refl_elem_stride)) {
+            goto broken;
+        }
+        break;
+    case SHREWD_BASIC_REFLECT_KIND_UNION:
+        if ((0 != type->sb_refl_variant_count)
+                && (NULL == type->sb_refl_variants)) {
+            goto broken;
+        }
+        for (size_t i = 0; i < type->sb_refl_variant_count; ++i) {
+            const shrewd_basic_reflect_variant_t *variant =
+                    &type->sb_refl_variants[i];
+            if ((NULL == variant->sb_refl_name)
+                    || (0 == variant->sb_refl_field_count)
+                    || (NULL == variant->sb_refl_fields)) {
+                goto broken;
+            }
+        }
+        break;
+    case SHREWD_BASIC_REFLECT_KIND_BOOL:
+    case SHREWD_BASIC_REFLECT_KIND_CHAR:
+    case SHREWD_BASIC_REFLECT_KIND_INT8:
+    case SHREWD_BASIC_REFLECT_KIND_INT16:
+    case SHREWD_BASIC_REFLECT_KIND_INT32:
+    case SHREWD_BASIC_REFLECT_KIND_INT64:
+    case SHREWD_BASIC_REFLECT_KIND_UINT8:
+    case SHREWD_BASIC_REFLECT_KIND_UINT16:
+    case SHREWD_BASIC_REFLECT_KIND_UINT32:
+    case SHREWD_BASIC_REFLECT_KIND_UINT64:
+    case SHREWD_BASIC_REFLECT_KIND_FLOAT:
+    case SHREWD_BASIC_REFLECT_KIND_DOUBLE:
+    case SHREWD_BASIC_REFLECT_KIND_STRING:
+    case SHREWD_BASIC_REFLECT_KIND_OPAQUE:
+        break;
+    default:
+        goto broken;
+    }
+    return SHREWD_BASIC_ERR_OK;
+
+broken:
+    shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_reflect_log,
+                     "check", "check_type: \"%s\" breaks a descriptor invariant\n",
+                     (NULL != type->sb_refl_name) ? type->sb_refl_name : "?");
+    return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
 }
 
 int shrewd_basic_reflect_field_get(const void *object,
