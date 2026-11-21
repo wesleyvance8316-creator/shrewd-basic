@@ -35,8 +35,8 @@ shrewd_basic_reflect_type_find_field(type, name, out)),便于 Doxygen
 | `SHREWD_BASIC_REFLECT_FIELD_F_DARRAY` | 动态数组(计数成员驱动) |
 | `SHREWD_BASIC_REFLECT_FIELD_F_SENTINEL` | NULL 结尾数组 |
 | `SHREWD_BASIC_REFLECT_FIELD_F_FLEX` | 柔性尾部(FAM) |
-| `SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF` | `char[N]` 文本缓冲 |
-| `SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED` | 自有 `char*` |
+| `SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF` | 文本缓冲(`char[N]` 或宽 `char16_t[N]`/`char32_t[N]`,内容到 NUL 码元为止) |
+| `SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED` | 自有字符串指针(char 或宽字符) |
 | `SHREWD_BASIC_REFLECT_FIELD_F_BITS` | 整数单元内的位组 |
 | `SHREWD_BASIC_REFLECT_FIELD_F_UNION` | 标签化 union 字段 |
 
@@ -72,6 +72,13 @@ shrewd_basic_reflect_type_find_field(type, name, out)),便于 Doxygen
 | `SHREWD_BASIC_REFLECT_FIELD_FLEX(struct_type, member, count_member, ref)` | 柔性尾部(FAM) |
 | `SHREWD_BASIC_REFLECT_FIELD_STRING_BUFFER(struct_type, member)` | `char[N]` 文本缓冲 |
 | `SHREWD_BASIC_REFLECT_FIELD_STRING_OWNED(struct_type, member)` | 自有字符串指针 |
+| `SHREWD_BASIC_REFLECT_FIELD_STRING16(struct_type, member)` | `char16_t *` 宽字符串(借用) |
+| `SHREWD_BASIC_REFLECT_FIELD_STRING16_OWNED(struct_type, member)` | `char16_t *` 宽字符串(自有) |
+| `SHREWD_BASIC_REFLECT_FIELD_STRING16_BUFFER(struct_type, member)` | `char16_t[N]` 宽文本缓冲 |
+| `SHREWD_BASIC_REFLECT_FIELD_STRING32(struct_type, member)` | `char32_t *` 宽字符串(借用) |
+| `SHREWD_BASIC_REFLECT_FIELD_STRING32_OWNED(struct_type, member)` | `char32_t *` 宽字符串(自有) |
+| `SHREWD_BASIC_REFLECT_FIELD_STRING32_BUFFER(struct_type, member)` | `char32_t[N]` 宽文本缓冲 |
+| `SHREWD_BASIC_REFLECT_FIELD_WSTRING/_OWNED/_BUFFER(struct_type, member)` | `wchar_t` 形态,单元宽度随 `WCHAR_MAX` 编译期归入 16/32 |
 | `SHREWD_BASIC_REFLECT_FIELD_BITS(struct_type, unit, name, bit_offset, bit_width)` | 位组(`name` 为标签) |
 | `SHREWD_BASIC_REFLECT_FIELD_BITS_UNIT(struct_type, name, unit_ref, unit_offset, unit_size, bit_offset, bit_width)` | 位组(显式单元放置;C 位域用,`unit_ref` 不带 `&`) |
 | `SHREWD_BASIC_REFLECT_UNION_DEFINE(var, union_type, ...)` | union 描述符(变体表) |

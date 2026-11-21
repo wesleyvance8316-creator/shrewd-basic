@@ -25,15 +25,15 @@
 | P1 建议做 | ✅ 全部完成 | B5 对齐、B6 ABI+自检、C1 describe、E2 缓存配置 |
 | P2 直接可实现 | ✅ 全部完成 | B2 匿名成员、C2 布局报告、C3 diff_all、D1 环哈希、D2 分配器注入 |
 | P2 工具线 | ✅ 全部完成 | G1 DWARF 后端、B1 位域、G2 轻量版(--layout) |
-| P2 需求驱动 | ⏳ 待启动 | B4 宽字符 |
+| P2 需求驱动 | ✅ 已完成(reflect 层) | B4 宽字符 |
 | P3 条件性 | ⏳ 跟踪 | B3 宽标量、C4/C5、H1 |
 
 **验证矩阵**:native / clang / ILP32(ELF 32-bit)/ MSVC(真 cl.exe +
 wine)四平台各 7 套件全绿,`tools/verify_platforms.sh` 一键复现;
 `tools/reflect_gen_check.sh` 覆盖生成器双后端(lex/dwarf)、位域双向
 对账与 --layout 报告。
-**剩余决策点**:B4 是否按需启动。应用层(json/bin 已实现;render/scan
-等候选)见 [reflect-apps](reflect-apps.md)。
+**剩余决策点**:全部清零——reflect 本体候选均已落地或按需挂起。应用层
+(json/bin 已实现;render/scan 等候选)见 [reflect-apps](reflect-apps.md)。
 
 ---
 
@@ -148,13 +148,26 @@ dump 缩进不加层。
 
 ### B4. 宽字符字符串
 
-**现状**:STRING kind 语义为 `char *`(NUL 结尾 UTF-8);`wchar_t` /
-`char16_t` / `char32_t` 字符串无类型支持(json 侧有 UTF-8 校验,但源类型
-只有 char)。
+> 状态:**已完成(reflect 层)**(2026-11-22,提交 b2c8fd3;json/bin 的
+> UTF-8 互转按需二期)
 
-**拟议形态**:新 kind `STRING16/STRING32`(或统一 `WSTRING` + 宽度参数),
-copy/equal/hash/dump 按码元序列语义;JSON 映射侧转 UTF-8。
-**规模**:中(跨模块联动)。**优先级:P2**(国际化协议需求出现再做)。
+**现状**:STRING kind 语义为 `char *`(NUL 结尾 UTF-8)之外,新增
+`STRING16`/`STRING32` 两个 kind 与 `shrewd_basic_reflect_string16/32`
+描述符:值是指向(或本身就是)NUL 码元结尾的码元序列,equal/diff/hash
+按码元比较,copy/destroy 克隆/释放 owned 内容,dump 逐码元转义
+(`\uXXXX`/`\UXXXXXXXX`)。
+
+**落地形态**:
+- 显式宏族 `FIELD_STRING16/32`(借用)、`_OWNED`、`_BUFFER`,外加
+  `FIELD_WSTRING` 三形态按 `WCHAR_MAX` 编译期归入 16/32——**刻意不做
+  `_Generic` 自动映射**(char32_t 是 unsigned int 的别名,自动关联会
+  静默吞掉整型指针,违背"不支持即编译报错"原则);
+- json/bin:free 路径识别宽字符串,宽缓冲在 json 编解码处干净报
+  `JSON_UNSUPPORTED`——UTF-8 互转是二期,本期保证不坏。
+
+**测试**:test_wstring(kind/宽度分派、内容语义、NUL 截断、owned 克隆、
+dump 转义、diff 路径);四平台矩阵全绿(MSVC 16 位 / ILP32·Linux 32 位
+wchar_t 两侧分派均实测)。
 
 ### B5. 描述符携带对齐信息
 
@@ -379,7 +392,7 @@ ISO C 反射研究(编译期反射 TS)在推进;C23 已确定 `_Generic`/`typeof
 | E2 | 查找缓存构建期配置 | P1 | 极小 | ✅ 84b7ab2 |
 | B1 | 位域(生成器+ABI) | P2 | 工具 约 400 行 | ✅ 2abacef+0adb727 |
 | B2 | 匿名成员平铺 | P2 | 约 150 行 | ✅ e8abee7 |
-| B4 | 宽字符字符串 | P2 | 中 | ⏳ 需求驱动 |
+| B4 | 宽字符字符串 | P2 | 中 | ✅ b2c8fd3(reflect 层) |
 | C2 | 布局报告 | P2 | 约 150 行 | ✅ 4687408 |
 | C3 | diff_all | P2 | 约 250 行 | ✅ 4d4a2d7 |
 | D1 | 环哈希规范化 | P2 | 约 200 行 | ✅ aa932b6 |
