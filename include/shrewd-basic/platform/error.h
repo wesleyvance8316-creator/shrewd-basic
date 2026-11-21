@@ -39,7 +39,10 @@ typedef enum shrewd_basic_error {
     SHREWD_BASIC_ERR_JSON_SYNTAX = -300,       /**< JSON: malformed text (see the error detail). */
     SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH = -301, /**< JSON: value does not fit the expected shape. */
     SHREWD_BASIC_ERR_JSON_DEPTH = -302,        /**< JSON: nesting deeper than the configured limit. */
-    SHREWD_BASIC_ERR_JSON_UNSUPPORTED = -303   /**< JSON: construct has no JSON representation. */
+    SHREWD_BASIC_ERR_JSON_UNSUPPORTED = -303,  /**< JSON: construct has no JSON representation. */
+
+    SHREWD_BASIC_ERR_BIN_FORMAT = -400,    /**< Binary: malformed, truncated or mismatched stream. */
+    SHREWD_BASIC_ERR_BIN_UNSUPPORTED = -401 /**< Binary: construct has no wire representation. */
 } shrewd_basic_error_t;
 
 /**

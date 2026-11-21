@@ -6,7 +6,6 @@
 #include "shrewd-basic/config/build.h"
 #include "shrewd-basic/config/config.h"
 #include "shrewd-basic/log/log.h"
-#include "shrewd-basic/shrewd-basic.h"
 
 static int g_failures = 0;
 
@@ -49,6 +48,34 @@ int main(void)
                 (NULL != strchr(SHREWD_BASIC_BUILD_ENV, '/'))
                 && (3 < strlen(SHREWD_BASIC_BUILD_ENV)));
 
+    /* Build-info accessors mirror the stamped macros. */
+    expect_true("version_string getter",
+                (NULL != shrewd_basic_version_string())
+                && (0 == strcmp(shrewd_basic_version_string(), version)));
+    {
+        int major = -1;
+        int minor = -1;
+        int patch = -1;
+        expect_eq_int("version_parts status",
+                      shrewd_basic_version_parts(&major, &minor, &patch),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("version_parts major",
+                    SHREWD_BASIC_VERSION_MAJOR == major);
+        expect_true("version_parts minor",
+                    SHREWD_BASIC_VERSION_MINOR == minor);
+        expect_true("version_parts patch",
+                    SHREWD_BASIC_VERSION_PATCH == patch);
+        expect_eq_int("version_parts skips NULLs",
+                      shrewd_basic_version_parts(NULL, NULL, NULL),
+                      SHREWD_BASIC_ERR_OK);
+    }
+    expect_true("build_time getter",
+                shrewd_basic_build_time() == SHREWD_BASIC_BUILD_TIME);
+    expect_true("build_env getter",
+                (NULL != shrewd_basic_build_env())
+                && (0 == strcmp(shrewd_basic_build_env(),
+                                SHREWD_BASIC_BUILD_ENV)));
+
     expect_true("asserts flag is 0 or 1",
                 (0 == SHREWD_BASIC_ENABLE_ASSERTS) || (1 == SHREWD_BASIC_ENABLE_ASSERTS));
     /* Level mask semantics from shrewd-basic/log/log.h: bits 0..5. */
@@ -75,6 +102,12 @@ int main(void)
     expect_true("error name REFLECT_MISMATCH",
                 0 == strcmp(shrewd_basic_error_name(SHREWD_BASIC_ERR_REFLECT_MISMATCH),
                             "SHREWD_BASIC_ERR_REFLECT_MISMATCH"));
+    expect_true("error name BIN_FORMAT",
+                0 == strcmp(shrewd_basic_error_name(SHREWD_BASIC_ERR_BIN_FORMAT),
+                            "SHREWD_BASIC_ERR_BIN_FORMAT"));
+    expect_true("error name BIN_UNSUPPORTED",
+                0 == strcmp(shrewd_basic_error_name(SHREWD_BASIC_ERR_BIN_UNSUPPORTED),
+                            "SHREWD_BASIC_ERR_BIN_UNSUPPORTED"));
 
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

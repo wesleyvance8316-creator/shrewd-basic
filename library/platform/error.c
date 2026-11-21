@@ -27,6 +27,10 @@ const char *shrewd_basic_error_name(int status)
         return "SHREWD_BASIC_ERR_JSON_DEPTH";
     case SHREWD_BASIC_ERR_JSON_UNSUPPORTED:
         return "SHREWD_BASIC_ERR_JSON_UNSUPPORTED";
+    case SHREWD_BASIC_ERR_BIN_FORMAT:
+        return "SHREWD_BASIC_ERR_BIN_FORMAT";
+    case SHREWD_BASIC_ERR_BIN_UNSUPPORTED:
+        return "SHREWD_BASIC_ERR_BIN_UNSUPPORTED";
     default:
         return "SHREWD_BASIC_ERR_UNKNOWN";
     }
