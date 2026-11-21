@@ -16,10 +16,14 @@ compile-time reflection module.
   its full name, exact prototype, parameters and return codes, grouped
   by concern (metadata, values, paths, lookup lists, graph algorithms,
   traversal).
+- [reflect applications](reflect-apps.md) - application layer on top of
+  reflect: the json mapping (implemented - DOM, struct mapping, policy
+  layer, ownership contract) and candidate external needs (binary
+  serialization, text scan/format, CSV/INI/YAML mappings).
 - [reflect roadmap](reflect-roadmap.md) - planned and candidate
-  features with design sketches: type registry, type-system extensions,
-  query/diff upgrades, a binary serialization module, toolchain work
-  and explicit non-goals.
+  features of the reflect core with design sketches: type-system
+  extensions, query/diff upgrades, toolchain work and explicit
+  non-goals.
 - [json reference](json.md) - the json module: layered architecture, the
   value model (DOM), the strict RFC 8259 parser/serializer and the wire
   format contract.

@@ -1,7 +1,9 @@
 # reflect 后续计划支持项
 
-本文档是 reflect 模块(及其直接相关的应用层)的**候选功能清单与设计草案**,
-作为后续迭代的计划底稿。每项含:动机/场景、拟议形态(接口草图)、设计要点
+本文档是 reflect **本体**的候选功能清单与设计草案,作为后续迭代的计划
+底稿。应用层需求(json 映射、二进制序列化等)另见
+[reflect 应用与外部需求](reflect-apps.md)——分界线:改动描述符/查询/
+图算法 = 本体;在既有能力上做值互转/线格式 = 应用。每项含:动机/场景、拟议形态(接口草图)、设计要点
 与难点、依赖、工作量估计与优先级建议。优先级分四档:
 
 - **P0 已排队**:此前明确推迟或遗留,方向已定;
@@ -19,16 +21,17 @@
 
 | 批次 | 状态 | 覆盖 |
 |---|---|---|
-| P0 已排队 | ✅ 全部完成 | A1 注册表、A2 JSON 默认值二期、A3 MSVC/ILP32 验证 |
+| P0 已排队 | ✅ 全部完成 | A1 注册表、A3 MSVC/ILP32 验证 |
 | P1 建议做 | ✅ 全部完成 | B5 对齐、B6 ABI+自检、C1 describe、E2 缓存配置 |
 | P2 直接可实现 | ✅ 全部完成 | B2 匿名成员、C2 布局报告、C3 diff_all、D1 环哈希、D2 分配器注入 |
-| P2 依赖工具/需求 | ⏳ 待启动 | B1 位域(依赖 G1)、B4 宽字符、F1 二进制序列化 |
-| P3 条件性 | ⏳ 跟踪 | B3 宽标量、C4/C5、F2/F3、G2、H1 |
+| P2 依赖工具/需求 | ⏳ 待启动 | B1 位域(依赖 G1)、B4 宽字符 |
+| P3 条件性 | ⏳ 跟踪 | B3 宽标量、C4/C5、G2、H1 |
 
 **验证矩阵**:native / clang / ILP32(ELF 32-bit)/ MSVC(真 cl.exe +
 wine)四平台各 7 套件全绿,`tools/verify_platforms.sh` 一键复现。
 **剩余决策点**:G1 工具方案三问(DWARF 读取后端、生成物形态、G2 轻/重
-形态,见 G 节)、B4/F1 是否按需启动。
+形态,见 G 节)、B4 是否按需启动。应用层(json 已实现;二进制序列化等
+候选)见 [reflect-apps](reflect-apps.md)。
 
 ---
 
@@ -69,33 +72,6 @@ shrewd_basic_reflect_type_find_list(&list, "point", &found);
 
 **依赖/规模**:纯新增文件(`reflect_registry.c`)+ 宏;约 200 行 + 测试。
 **优先级:P0**(已两次推迟,且是 `*_list` 的自然补全)。
-
-### A2. JSON 默认值二期(struct/数组 DEFAULT)
-
-> 状态:**已完成**(2026-11-21,提交 8ada219)
-
-**归属**:json 模块([json reference](json.md)),此处记录以免遗漏。
-
-**现状**:`DEFAULT`/`DEFAULT_STR` 一期只覆盖标量/枚举/bool/char/浮点/字符串;
-struct 字段与数组字段的默认值被跳过(保持零值)。
-
-**拟议形态**:
-- struct 默认:`DEFAULT_JSON(member, text)`,`text` 为 JSON 文本的 C 字符串
-  字面量,如:
-
-  ```json
-  {"x": 0, "y": 0}
-  ```
-
-  缺键时把这段 JSON 解析并物化(decode 期按 JSON 值分配,所有权契约不变);
-- 数组默认:`DEFAULT_ARRAY(member, text)` 或同走 JSON 文本路线。
-
-**设计要点**:JSON 文本路线实现统一(复用 parse+decode 通路),代价是
-default 物化引入一次解析;也可收"原始字节镜像"但表达力差、易错。
-**实现注**:落地时统一为一个宏 `DEFAULT_JSON(member, text)`——任意形状
-(struct/数组/嵌套/ops 字段)皆可,原拟议的 `DEFAULT_ARRAY` 不再需要;
-FAM 字段除外(根分配按现存 JSON 定尺寸)。
-**优先级:P0**(一期明确留下的尾巴)。
 
 ### A3. MSVC/ILP32 平台验证
 
@@ -185,12 +161,13 @@ copy/equal/hash/dump 按码元序列语义;JSON 映射侧转 UTF-8。
 
 > 状态:**已完成**(2026-11-21,提交 66a8aeb)
 
-**现状**:字段有 size/stride,没有 `alignof`;二进制布局用途(见 F1)需要
-手查 `alignof`。
+**现状**:字段有 size/stride,没有 `alignof`;二进制布局用途(见
+[reflect-apps](reflect-apps.md) 的二进制序列化)需要手查 `alignof`。
 
 **拟议形态**:`sb_refl_alignof` 加进 type 与 field 描述符(`_Alignof` 编译期
 可得),宏自动填。**规模**:字段扩充 + 宏改动,约 100 行 + 全量测试重跑。
-**兼容**:纯追加成员,源兼容。**优先级:P1**(小而有用,给 F1 铺路)。
+**兼容**:纯追加成员,源兼容。**优先级:P1**(小而有用,给二进制序列化
+铺路,已随 P1 落地)。
 
 ### B6. 描述符 ABI 版本与自检
 
@@ -332,40 +309,10 @@ int shrewd_basic_reflect_diff_all(const void *a, const void *b,
 
 ---
 
-## F. 应用层扩展(新模块候选,超出 reflect 本体)
+## F. 应用层扩展
 
-### F1. 二进制序列化(struct ↔ bytes)
-
-**动机**:协议编解码、共享内存、持久化快照——JSON 之外的第二大映射需求。
-
-**拟议形态**(独立模块 `shrewd-basic/bin`):
-
-```c
-int shrewd_basic_bin_encode(const void *obj, const type_t *type,
-                            const bin_options_t *opt, buf_t *out);
-int shrewd_basic_bin_decode(const void *bytes, size_t n, void *obj,
-                            const type_t *type, const bin_options_t *opt);
-/* opt: 端序(LE/BE/本机)、对齐(紧凑 vs 自然)、长度前缀宽度、版本号 */
-```
-
-**设计要点**:位组/多维/union(带 tag)/FAM 全部有自然线格式;所有权契约
-沿用 json 的"decode 先清零、free 递归非空"模型(登记表不需要);B5 的
-alignof 与版本号(字段序指纹)是它的前置件。
-**规模**:新模块 约 800 行 + 测试。**优先级:P2**(需求确认即启动,设计可
-直接套 json 的三层经验)。
-
-### F2. 通用文本格式化/解析(render/scan)
-
-**动机**:ops->render 已有雏形(dump 用);反向 scan(文本→字段)没有。
-**拟议形态**:字段级 `scan` ops + `reflect_scan(obj, type, text, fmt)`。
-**优先级:P3**(展示/配置解析需求驱动)。
-
-### F3. 其他映射(CSV/INI/YAML)
-
-与 F1 同理,visit/diff 已把公共递归做好,每种格式只是叶子层编码。
-**优先级:P3**。
-
----
+已迁出:json 映射(已实现)与二进制序列化/文本格式化/其他映射等应用层
+需求,见 [reflect 应用与外部需求](reflect-apps.md)。
 
 ## G. 工具链
 
@@ -420,7 +367,6 @@ ISO C 反射研究(编译期反射 TS)在推进;C23 已确定 `_Generic`/`typeof
 | 项 | 名称 | 优先级 | 规模 | 状态 |
 |---|---|---|---|---|
 | A1 | 类型注册表(默认容器) | P0 | 约 200 行 | ✅ c536558 |
-| A2 | JSON DEFAULT 二期(struct/数组) | P0 | 中 | ✅ 8ada219 |
 | A3 | MSVC/ILP32 验证 | P0 | 一次性 | ✅ ea8fc8f |
 | B5 | 描述符对齐信息 | P1 | 约 100 行 | ✅ 66a8aeb |
 | B6 | ABI 版本 + check_type 自检 | P1 | 约 150 行 | ✅ 66a8aeb |
@@ -433,11 +379,9 @@ ISO C 反射研究(编译期反射 TS)在推进;C23 已确定 `_Generic`/`typeof
 | C3 | diff_all | P2 | 约 250 行 | ✅ 4d4a2d7 |
 | D1 | 环哈希规范化 | P2 | 约 200 行 | ✅ aa932b6 |
 | D2 | 分配器注入 | P2 | 小 | ✅ 2ab9dad |
-| F1 | 二进制序列化模块 | P2 | 约 800 行 | ⏳ 需求驱动 |
 | G1 | 生成器读 DWARF/AST | P2 | 工具 | ⏳ 工具 |
 | B3 | long double/_Complex/_BitInt | P3 | 中 | ⏳ P3 |
 | C4 | 路径通配/范围 | P3 | 大 | ⏳ P3 |
 | C5 | struct merge/patch | P3 | 中 | ⏳ P3 |
-| F2/F3 | 文本格式化、CSV/INI 映射 | P3 | 中 | ⏳ P3 |
 | G2 | pahole 工具 | P3 | 小 | ⏳ P3 |
 | H1 | C 标准反射互操作 | P3 | 跟踪 | ⏳ 跟踪 |
