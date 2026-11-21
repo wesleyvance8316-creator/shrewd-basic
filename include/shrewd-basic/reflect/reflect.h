@@ -857,15 +857,15 @@ size_t shrewd_basic_reflect_type_field_count(const shrewd_basic_reflect_type_t *
  * shrewd_basic_reflect_type_field_count() this iterates a type without
  * touching the descriptor layout.
  */
-const shrewd_basic_reflect_field_t *
-shrewd_basic_reflect_type_field_at(const shrewd_basic_reflect_type_t *type, size_t index);
+const shrewd_basic_reflect_field_t *shrewd_basic_reflect_type_field_at(
+    const shrewd_basic_reflect_type_t *type, size_t index);
 
 /** Number of constants described by an ENUM type (0 otherwise). */
 size_t shrewd_basic_reflect_enum_count(const shrewd_basic_reflect_type_t *type);
 
 /** Enum constant at @p index, or NULL when out of range or not an enum. */
-const shrewd_basic_reflect_enum_entry_t *
-shrewd_basic_reflect_enum_at(const shrewd_basic_reflect_type_t *type, size_t index);
+const shrewd_basic_reflect_enum_entry_t *shrewd_basic_reflect_enum_at(
+    const shrewd_basic_reflect_type_t *type, size_t index);
 
 /**
  * Value of the enum constant @p name in the ENUM descriptor @p type.

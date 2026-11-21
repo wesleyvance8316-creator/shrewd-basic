@@ -325,8 +325,8 @@ static void describe_field(const char *name) {
 }
 
 /* Visit callback: one printed line per traversal event. */
-static shrewd_basic_reflect_visit_action_t
-demo_visit_print(void *ctx, const shrewd_basic_reflect_visit_node_t *node) {
+static shrewd_basic_reflect_visit_action_t demo_visit_print(
+    void *ctx, const shrewd_basic_reflect_visit_node_t *node) {
     static const char *const event_name[]
         = {"ENTER", "ARRAY_ENTER", "LEAF", "CYCLE", "ARRAY_EXIT", "EXIT"};
     (void)ctx;
@@ -364,8 +364,8 @@ static int demo_reg_insert(void *ctx,
     return SHREWD_BASIC_ERR_OK;
 }
 
-static const shrewd_basic_reflect_lookup_t *
-demo_reg_find_type(void *ctx, const shrewd_basic_reflect_type_t *type) {
+static const shrewd_basic_reflect_lookup_t *demo_reg_find_type(
+    void *ctx, const shrewd_basic_reflect_type_t *type) {
     demo_reg_t *reg = (demo_reg_t *)ctx;
     for (size_t i = 0; i < reg->count; ++i) {
         if (reg->entries[i].sb_refl_type == type) {

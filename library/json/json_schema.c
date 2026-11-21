@@ -661,8 +661,9 @@ static double schema_number(const shrewd_basic_json_value_t *node, const char *k
 }
 
 /* Count bound in a schema keyword (0 when absent). */
-static size_t
-schema_count_bound(const shrewd_basic_json_value_t *node, const char *key, int *present) {
+static size_t schema_count_bound(const shrewd_basic_json_value_t *node,
+                                 const char *key,
+                                 int *present) {
     uint64_t value = 0;
     const shrewd_basic_json_value_t *item = shrewd_basic_json_get(node, key);
     *present = (NULL != item) ? 1 : 0;
@@ -766,8 +767,8 @@ static const shrewd_basic_json_value_t *schema_doc_member(const shrewd_basic_jso
 }
 
 /* The property whose canonical key or x-alias matches @p key. */
-static const shrewd_basic_json_value_t *
-schema_find_property(const shrewd_basic_json_value_t *properties, const char *key) {
+static const shrewd_basic_json_value_t *schema_find_property(
+    const shrewd_basic_json_value_t *properties, const char *key) {
     for (size_t p = 0; p < shrewd_basic_json_count(properties); ++p) {
         const shrewd_basic_json_value_t *sub = shrewd_basic_json_at(properties, p);
         const shrewd_basic_json_value_t *aliases = NULL;

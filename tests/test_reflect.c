@@ -2006,8 +2006,8 @@ typedef struct visit_rec {
     size_t stop_after; /* abort the walk after this many events; 0 = never */
 } visit_rec_t;
 
-static shrewd_basic_reflect_visit_action_t
-visit_collect(void *ctx, const shrewd_basic_reflect_visit_node_t *node) {
+static shrewd_basic_reflect_visit_action_t visit_collect(
+    void *ctx, const shrewd_basic_reflect_visit_node_t *node) {
     visit_rec_t *rec = (visit_rec_t *)ctx;
     if (rec->count < VISIT_LOG_MAX) {
         visit_entry_t *entry = &rec->entries[rec->count];
@@ -2033,8 +2033,9 @@ visit_collect(void *ctx, const shrewd_basic_reflect_visit_node_t *node) {
 }
 
 /* Index of the first matching event, or -1. */
-static int
-visit_find(const visit_rec_t *rec, shrewd_basic_reflect_visit_event_t event, const char *path) {
+static int visit_find(const visit_rec_t *rec,
+                      shrewd_basic_reflect_visit_event_t event,
+                      const char *path) {
     for (size_t i = 0; i < rec->count; ++i) {
         if ((event == rec->entries[i].event) && (0 == strcmp(rec->entries[i].path, path))) {
             return (int)i;
@@ -3673,8 +3674,8 @@ static int test_reg_insert_no_slot(void *ctx,
     return SHREWD_BASIC_ERR_OK;
 }
 
-static const shrewd_basic_reflect_lookup_t *
-test_reg_find_type(void *ctx, const shrewd_basic_reflect_type_t *type) {
+static const shrewd_basic_reflect_lookup_t *test_reg_find_type(
+    void *ctx, const shrewd_basic_reflect_type_t *type) {
     test_reg_t *reg = (test_reg_t *)ctx;
     for (size_t i = 0; i < reg->count; ++i) {
         if (reg->entries[i].sb_refl_type == type) {

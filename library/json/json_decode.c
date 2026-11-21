@@ -88,8 +88,9 @@ static void json_map_index(json_map_ctx_t *ctx, size_t index) {
  * Key equivalence: exact by default, or ignoring case and '_' in the
  * loose mode (so name_id / nameID / NameID all match).
  */
-static int
-json_key_equiv(const shrewd_basic_json_options_t *options, const char *a, const char *b) {
+static int json_key_equiv(const shrewd_basic_json_options_t *options,
+                          const char *a,
+                          const char *b) {
     if (SHREWD_BASIC_JSON_KEY_MATCH_LOOSE != options->key_match) {
         return (0 == strcmp(a, b)) ? 1 : 0;
     }
@@ -211,8 +212,9 @@ static int json_map_is_count_member(const shrewd_basic_reflect_field_t *fields,
     return 0;
 }
 
-static void
-json_map_store_count(const shrewd_basic_reflect_field_t *field, unsigned char *object, size_t n) {
+static void json_map_store_count(const shrewd_basic_reflect_field_t *field,
+                                 unsigned char *object,
+                                 size_t n) {
     if (0 != field->sb_refl_limit_size) {
         uint64_t bound = (uint64_t)n;
         memcpy(object + field->sb_refl_limit_offset, &bound, field->sb_refl_limit_size);
@@ -243,7 +245,7 @@ static int json_decode_node(json_map_ctx_t *ctx,
         if (SHREWD_BASIC_ERR_OK != shrewd_basic_json_to_bool(value, &flag)) {
             return json_map_fail(ctx, SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH, "expected a boolean");
         }
-        reflect_store_u64(target, nbytes, flag ? 1u : 0u);
+        reflect_store_u64(target, nbytes, (flag) ? 1u : 0u);
         return SHREWD_BASIC_ERR_OK;
     }
     case SHREWD_BASIC_REFLECT_KIND_INT8:

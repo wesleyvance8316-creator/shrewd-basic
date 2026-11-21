@@ -327,7 +327,7 @@ int shrewd_basic_radix_insert(shrewd_basic_radix_t *tree, const char *key, void 
         size_t suffix_len = edge->len - m;
         k += m;
         int branches = ('\0' != *k);
-        size_t rest = branches ? strlen((const char *)k) : 0;
+        size_t rest = (branches) ? strlen((const char *)k) : 0;
         shrewd_basic_radix_node_t *mid = radix_node_new();
         char *suffix = radix_label_new(edge->label + m, suffix_len);
         char *trimmed = radix_label_new(edge->label, m);

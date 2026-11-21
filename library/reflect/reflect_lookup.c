@@ -147,8 +147,8 @@ static int registry_insert(void *ctx,
     return SHREWD_BASIC_ERR_OK;
 }
 
-static const shrewd_basic_reflect_lookup_t *
-registry_find_type(void *ctx, const shrewd_basic_reflect_type_t *type) {
+static const shrewd_basic_reflect_lookup_t *registry_find_type(
+    void *ctx, const shrewd_basic_reflect_type_t *type) {
     shrewd_basic_reflect_registry_t *reg = (shrewd_basic_reflect_registry_t *)ctx;
     if (NULL == reg) {
         return NULL;

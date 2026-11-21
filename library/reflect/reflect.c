@@ -178,8 +178,8 @@ size_t shrewd_basic_reflect_type_field_count(const shrewd_basic_reflect_type_t *
     return (NULL != type) ? type->sb_refl_field_count : 0;
 }
 
-const shrewd_basic_reflect_field_t *
-shrewd_basic_reflect_type_field_at(const shrewd_basic_reflect_type_t *type, size_t index) {
+const shrewd_basic_reflect_field_t *shrewd_basic_reflect_type_field_at(
+    const shrewd_basic_reflect_type_t *type, size_t index) {
     if ((NULL == type) || (index >= type->sb_refl_field_count)) {
         return NULL;
     }
@@ -193,8 +193,8 @@ size_t shrewd_basic_reflect_enum_count(const shrewd_basic_reflect_type_t *type) 
     return type->sb_refl_enum_count;
 }
 
-const shrewd_basic_reflect_enum_entry_t *
-shrewd_basic_reflect_enum_at(const shrewd_basic_reflect_type_t *type, size_t index) {
+const shrewd_basic_reflect_enum_entry_t *shrewd_basic_reflect_enum_at(
+    const shrewd_basic_reflect_type_t *type, size_t index) {
     if ((NULL == type) || (SHREWD_BASIC_REFLECT_KIND_ENUM != type->sb_refl_kind)
         || (index >= type->sb_refl_enum_count)) {
         return NULL;
@@ -417,11 +417,11 @@ static const shrewd_basic_reflect_field_t *reflect_fields_find(
  * (never touching the per-thread cache); without it the sorted index
  * accelerates the search - built either way so the next lookup is cheap.
  */
-static const shrewd_basic_reflect_field_t *
-reflect_field_find(const shrewd_basic_reflect_list_t *list,
-                   const shrewd_basic_reflect_type_t *type,
-                   const char *name,
-                   size_t name_len) {
+static const shrewd_basic_reflect_field_t *reflect_field_find(
+    const shrewd_basic_reflect_list_t *list,
+    const shrewd_basic_reflect_type_t *type,
+    const char *name,
+    size_t name_len) {
     const shrewd_basic_reflect_field_t *field = NULL;
     if (NULL != list) {
         const shrewd_basic_reflect_lookup_t *look = NULL;
@@ -1323,8 +1323,9 @@ static int reflect_cmp_pair(const void *a, const void *b, void *ctx) {
 }
 
 /* 1 in *out_seen when @p pointer was visited before; records it otherwise. */
-static int
-reflect_visited_check(shrewd_basic_rbtree_t *visited, const void *pointer, int *out_seen) {
+static int reflect_visited_check(shrewd_basic_rbtree_t *visited,
+                                 const void *pointer,
+                                 int *out_seen) {
     void *found = NULL;
     if (SHREWD_BASIC_ERR_OK == shrewd_basic_rbtree_search(visited, pointer, &found)) {
         *out_seen = 1;
@@ -1335,8 +1336,10 @@ reflect_visited_check(shrewd_basic_rbtree_t *visited, const void *pointer, int *
 }
 
 /* 1 in *out_found with *out_dst when @p src already has a clone. */
-static int
-reflect_map_lookup(shrewd_basic_rbtree_t *map, const void *src, void **out_dst, int *out_found) {
+static int reflect_map_lookup(shrewd_basic_rbtree_t *map,
+                              const void *src,
+                              void **out_dst,
+                              int *out_found) {
     reflect_pair_t probe = {0};
     void *found = NULL;
     probe.src = src;
@@ -1365,15 +1368,16 @@ static void reflect_alloc_default_free(void *ctx, void *ptr) {
     (void)shrewd_basic_platform_free(&block);
 }
 
-static const shrewd_basic_reflect_allocator_t *
-reflect_alloc_or_default(const shrewd_basic_reflect_allocator_t *alloc) {
+static const shrewd_basic_reflect_allocator_t *reflect_alloc_or_default(
+    const shrewd_basic_reflect_allocator_t *alloc) {
     static const shrewd_basic_reflect_allocator_t fallback
         = {reflect_alloc_default, reflect_alloc_default_free, NULL};
     return (NULL != alloc) ? alloc : &fallback;
 }
 
-static int
-reflect_alloc_block(const shrewd_basic_reflect_allocator_t *alloc, void **out, size_t size) {
+static int reflect_alloc_block(const shrewd_basic_reflect_allocator_t *alloc,
+                               void **out,
+                               size_t size) {
     *out = NULL;
     return alloc->alloc(alloc->ctx, out, size);
 }
@@ -2026,7 +2030,7 @@ static int reflect_destroy_fields(const shrewd_basic_reflect_field_t *fields,
             table = (unsigned char *)(uintptr_t)view.base;
         }
         for (size_t j = 0; j < view.count; ++j) {
-            unsigned char *elem = table ? (table + (j * view.stride)) : (at + (j * view.stride));
+            unsigned char *elem = (table) ? (table + (j * view.stride)) : (at + (j * view.stride));
             if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
                 void *pointer = NULL;
                 memcpy(&pointer, elem, sizeof(pointer));

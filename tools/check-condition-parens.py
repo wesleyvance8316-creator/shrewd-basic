@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Coding rule: a conditional with two or more sub-conditions wraps EACH
-sub-condition in parentheses, e.g. `if ((a) && (!b))`. Single-clause
-conditions stay bare: `if (0 == x)`. Boolean operators lead wrapped
-lines (enforced by clang-format's BreakBeforeBinaryOperators).
+"""Coding rules for conditions:
+- a conditional with two or more sub-conditions wraps EACH sub-condition
+  in parentheses: if ((a) && (!b)); single-clause conditions stay bare;
+- a ternary condition is parenthesized even when single-clause:
+  (x) ? y : z;
+- wrapped lines keep boolean operators at line start (clang-format's
+  BreakBeforeBinaryOperators).
 
 Heuristic checker for tools/check-style.sh: scans if/while/for
 conditions, splits on top-level && / || and requires every operand of a
@@ -52,6 +55,47 @@ def wrapped(op):
     return True
 
 
+
+def clean(s):
+    s = re.sub(r'/\*.*?\*/', ' ', s, flags=re.S)
+    s = re.sub(r'//[^\n]*', ' ', s)
+    s = re.sub(r"'(?:[^'\\]|\\.)'", '0', s)
+    s = re.sub(r'"(?:[^"\\]|\\.)*"', '""', s)
+    return s
+
+
+def cond_before_q(stmt):
+    """Top-level ternary condition before the first top-level '?', or None."""
+    depth = 0
+    qi = -1
+    for i, c in enumerate(stmt):
+        if c in '([':
+            depth += 1
+        elif c in ')]':
+            depth -= 1
+        elif c == '?' and depth == 0:
+            qi = i
+            break
+    if qi < 0:
+        return None
+    d = 0
+    j = qi - 1
+    while j >= 0:
+        c = stmt[j]
+        if c == ')':
+            d += 1
+        elif c == '(':
+            if d == 0:
+                break
+            d -= 1
+        elif d == 0 and c in '=,;:{':
+            break
+        j -= 1
+    cond = stmt[j + 1:qi].strip()
+    cond = re.sub(r'^(?:return|else)\s+', '', cond)
+    return cond
+
+
 def main():
     violations = 0
     for f in sorted(glob.glob('library/**/*.c', recursive=True)
@@ -92,6 +136,26 @@ def main():
                 print(f"{f}:{i+1}: sub-conditions need parentheses: {s[:64]}")
                 violations += 1
             i = j + 1
+    for f in sorted(glob.glob('library/**/*.c', recursive=True)
+                    + glob.glob('tests/*.c')
+                    + glob.glob('programs/*.c')
+                    + glob.glob('tools/*.c')
+                    + glob.glob('include/**/*.h', recursive=True)):
+        lines = clean(open(f, encoding='utf-8').read()).split('\n')
+        stmt, start = '', 0
+        for i, raw in enumerate(lines):
+            line = raw.rstrip()
+            if not stmt:
+                start = i
+            stmt += ' ' + line
+            if line.endswith(';') or line.endswith('{') or line.endswith('}'):
+                cond = cond_before_q(stmt)
+                if cond and not wrapped(cond):
+                    print(f"{f}:{start + 1}: ternary condition needs "
+                          f"parentheses: {cond[:56]}")
+                    violations += 1
+                stmt = ''
+
     if violations:
         print(f"condition-parens: {violations} violation(s)")
         return 1

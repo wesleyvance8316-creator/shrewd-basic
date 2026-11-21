@@ -631,8 +631,8 @@ static int diff_all_value(const shrewd_basic_reflect_type_t *type,
         if (SHREWD_BASIC_ERR_OK != status) {
             return status;
         }
-        return same ? SHREWD_BASIC_ERR_OK
-                    : diff_all_report(all, diff, SHREWD_BASIC_REFLECT_DIFF_VALUE);
+        return (same) ? SHREWD_BASIC_ERR_OK
+                      : diff_all_report(all, diff, SHREWD_BASIC_REFLECT_DIFF_VALUE);
     }
     switch (type->sb_refl_kind) {
     case SHREWD_BASIC_REFLECT_KIND_BOOL:
@@ -664,8 +664,8 @@ static int diff_all_value(const shrewd_basic_reflect_type_t *type,
         const char *right = reflect_load_str(b);
         int same
             = (NULL == left) ? (left == right) : ((NULL != right) && (0 == strcmp(left, right)));
-        return same ? SHREWD_BASIC_ERR_OK
-                    : diff_all_report(all, diff, SHREWD_BASIC_REFLECT_DIFF_VALUE);
+        return (same) ? SHREWD_BASIC_ERR_OK
+                      : diff_all_report(all, diff, SHREWD_BASIC_REFLECT_DIFF_VALUE);
     }
     case SHREWD_BASIC_REFLECT_KIND_OPAQUE:
         return (a == b) ? SHREWD_BASIC_ERR_OK

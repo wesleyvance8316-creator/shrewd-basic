@@ -45,6 +45,7 @@ PointerAlignment: Right
 BinPackParameters: false
 BinPackArguments: false
 AlwaysBreakAfterReturnType: None
+PenaltyReturnTypeOnItsOwnLine: 10000
 BreakBeforeBinaryOperators: All
 BreakBeforeTernaryOperators: true
 BreakStringLiterals: true

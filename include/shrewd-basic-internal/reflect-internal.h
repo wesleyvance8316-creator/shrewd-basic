@@ -18,8 +18,8 @@
 #include "shrewd-basic/reflect/reflect.h"
 
 /* Effective ops of a field: the field-level override wins over type ops. */
-static inline const shrewd_basic_reflect_ops_t *
-reflect_field_ops(const shrewd_basic_reflect_field_t *field) {
+static inline const shrewd_basic_reflect_ops_t *reflect_field_ops(
+    const shrewd_basic_reflect_field_t *field) {
     return (NULL != field->sb_refl_ops) ? field->sb_refl_ops : field->sb_refl_type->sb_refl_ops;
 }
 
@@ -153,8 +153,10 @@ static inline uint64_t reflect_bits_extract(uint64_t unit, size_t offset, size_t
     return (unit >> offset) & mask;
 }
 
-static inline void
-reflect_bits_insert(uint64_t *unit, size_t offset, size_t width, uint64_t value) {
+static inline void reflect_bits_insert(uint64_t *unit,
+                                       size_t offset,
+                                       size_t width,
+                                       uint64_t value) {
     uint64_t mask = 0;
     if ((0 == width) || (64 < width) || (64 <= offset) || (64 < (offset + width))) {
         return;
@@ -168,8 +170,8 @@ reflect_bits_insert(uint64_t *unit, size_t offset, size_t width, uint64_t value)
  * value itself; the tag member lives in the owner at a fixed
  * displacement from it. NULL means the tag names no known variant.
  */
-static inline const shrewd_basic_reflect_variant_t *
-reflect_union_variant(const shrewd_basic_reflect_field_t *field, const unsigned char *storage) {
+static inline const shrewd_basic_reflect_variant_t *reflect_union_variant(
+    const shrewd_basic_reflect_field_t *field, const unsigned char *storage) {
     int64_t tag = reflect_load_i64(storage - field->sb_refl_offset + field->sb_refl_limit_offset,
                                    field->sb_refl_limit_size);
     const shrewd_basic_reflect_type_t *type = field->sb_refl_type;

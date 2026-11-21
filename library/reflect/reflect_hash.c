@@ -75,8 +75,9 @@ typedef struct hash_ctx {
     int discover; /* 1 = register nodes; 0 = fold with current colors */
 } hash_ctx_t;
 
-static hash_node_t *
-hash_graph_find(hash_graph_t *graph, const void *addr, const shrewd_basic_reflect_type_t *type) {
+static hash_node_t *hash_graph_find(hash_graph_t *graph,
+                                    const void *addr,
+                                    const shrewd_basic_reflect_type_t *type) {
     for (size_t i = 0; i < graph->count; ++i) {
         if ((graph->nodes[i].addr == addr) && (graph->nodes[i].type == type)) {
             return &graph->nodes[i];

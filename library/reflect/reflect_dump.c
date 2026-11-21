@@ -612,8 +612,9 @@ int shrewd_basic_reflect_dump_write(const shrewd_basic_reflect_type_t *type,
 
 /* --- type self-print -------------------------------------------------- */
 
-static void
-describe_field(dump_ctx_t *ctx, const char *indent, const shrewd_basic_reflect_field_t *field) {
+static void describe_field(dump_ctx_t *ctx,
+                           const char *indent,
+                           const shrewd_basic_reflect_field_t *field) {
     char shape[64] = {0};
     const char *base = (NULL != field->sb_refl_type) ? field->sb_refl_type->sb_refl_name : "?";
     const char *ptr = (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) ? "*" : "";
