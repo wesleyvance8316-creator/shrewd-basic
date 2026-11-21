@@ -431,7 +431,7 @@ static int json_encode_fields(json_map_ctx_t *ctx,
         shrewd_basic_json_key_info_t view;
         shrewd_basic_json_value_t *item = NULL;
         size_t mark = json_map_mark(ctx);
-        int status;
+        int status = 0;
         json_policy_view(ctx->info, field, &view);
         if (0 != (view.flags & SHREWD_BASIC_JSON_F_HIDDEN)) {
             continue;

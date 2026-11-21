@@ -372,7 +372,7 @@ static int json_decode_node(json_map_ctx_t *ctx,
         }
         for (size_t i = 0; i < count; ++i) {
             size_t mark = json_map_mark(ctx);
-            int status;
+            int status = 0;
             json_map_index(ctx, i);
             status = json_decode_node(ctx, shrewd_basic_json_at(value, i),
                                       type->sb_refl_elem,
@@ -553,7 +553,7 @@ static int json_decode_field(json_map_ctx_t *ctx,
             unsigned char *slot = at + (i * stride);
             const shrewd_basic_json_value_t *item = shrewd_basic_json_at(value, i);
             size_t mark = json_map_mark(ctx);
-            int status;
+            int status = 0;
             json_map_index(ctx, i);
             if ((NULL != view->ops) && (NULL != view->ops->decode)
                     && (0 != view->elem_ops)) {
@@ -727,7 +727,7 @@ static int json_decode_fields(json_map_ctx_t *ctx,
         shrewd_basic_json_key_info_t view;
         shrewd_basic_json_value_t *member = NULL;
         size_t mark = 0;
-        int status;
+        int status = 0;
         if (NULL == field) {
             if (0 != ctx->options->strict) {
                 (void)json_map_fail(ctx, SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH,
@@ -796,7 +796,7 @@ static int json_decode_fields(json_map_ctx_t *ctx,
         const shrewd_basic_reflect_variant_t *variant = NULL;
         unsigned char *storage = NULL;
         size_t mark = 0;
-        int status;
+        int status = 0;
         if (0u == (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_UNION)) {
             continue;
         }
@@ -906,7 +906,7 @@ static int json_decode_fields(json_map_ctx_t *ctx,
         if ((0 == present)
                 && (0 != (view.flags & SHREWD_BASIC_JSON_F_REQUIRED))) {
             size_t mark = json_map_mark(ctx);
-            int status;
+            int status = 0;
             json_map_member(ctx, fields[i].sb_refl_name);
             status = json_map_fail(ctx, SHREWD_BASIC_ERR_KEY_NOTFOUND,
                                    "required key missing");
@@ -1191,7 +1191,7 @@ int shrewd_basic_json_decode_pointer(const shrewd_basic_json_value_t *value,
                                      shrewd_basic_json_error_t *error)
 {
     const shrewd_basic_json_value_t *sub = NULL;
-    int status;
+    int status = 0;
     if (NULL != error) {
         error->offset = 0;
         (void)snprintf(error->path, sizeof(error->path), "%s",

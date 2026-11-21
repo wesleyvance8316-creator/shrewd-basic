@@ -567,7 +567,7 @@ static void test_array(void)
 /* Read a stream's whole content into buf (NUL-terminated). */
 static void slurp(FILE *stream, char *buf, size_t size)
 {
-    size_t n;
+    size_t n = 0;
     rewind(stream);
     n = fread(buf, 1, size - 1, stream);
     buf[n] = '\0';

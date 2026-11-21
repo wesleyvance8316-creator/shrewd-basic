@@ -492,7 +492,7 @@ static int pull_parse_value_token(shrewd_basic_json_pull_t *pull,
         token->kind = SHREWD_BASIC_JSON_TOKEN_ARRAY_BEGIN;
         return SHREWD_BASIC_ERR_OK;
     case '"': {
-        int status;
+        int status = 0;
         (void)pull_take(pull);
         status = pull_parse_string(pull);
         if (SHREWD_BASIC_ERR_OK != status) {

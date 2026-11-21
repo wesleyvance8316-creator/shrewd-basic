@@ -382,7 +382,7 @@ int shrewd_basic_rbtree_remove(shrewd_basic_rbtree_t *tree, const void *key,
 
     shrewd_basic_rbtree_node_t *y = z;
     shrewd_basic_rbtree_color_t y_color = y->color;
-    shrewd_basic_rbtree_node_t *x;
+    shrewd_basic_rbtree_node_t *x = NULL;
     if (tree->nil == z->left) {
         x = z->right;
         rbtree_transplant(tree, z, z->right);

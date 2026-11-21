@@ -156,7 +156,7 @@ static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
         for (size_t i = 0; i < type->sb_refl_elem_count; ++i) {
             size_t mark_j = diff_path_mark(diff);
             bool same = true;
-            int status;
+            int status = 0;
             diff_path_index(diff, i);
             status = reflect_equal_value(type->sb_refl_elem,
                                          a + (i * type->sb_refl_elem_stride),
@@ -434,7 +434,7 @@ static int diff_all_fields(const shrewd_basic_reflect_field_t *fields,
         int indexed = (0u != (field->sb_refl_flags
                               & (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY
                                  | SHREWD_BASIC_REFLECT_FIELD_F_DARRAY)));
-        int status;
+        int status = 0;
         diff_path_member(diff, field->sb_refl_name);
         if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_UNION)) {
             const unsigned char *ua = a + field->sb_refl_offset;
@@ -571,7 +571,7 @@ static int diff_all_value(const shrewd_basic_reflect_type_t *type,
                           equal_pair_t *pair_path, size_t depth,
                           diff_path_t *diff, const diff_all_ctx_t *all)
 {
-    int status;
+    int status = 0;
     if (EQUAL_MAX_DEPTH <= depth) {
         return SHREWD_BASIC_ERR_OK;
     }

@@ -252,7 +252,7 @@ static int schema_union(schema_ctx_t *ctx,
     shrewd_basic_json_key_info_t view;
     shrewd_basic_json_value_t *wrapper = NULL;
     shrewd_basic_json_value_t *cases = NULL;
-    int status;
+    int status = 0;
     json_policy_view(info, field, &view);
     status = shrewd_basic_json_new(SHREWD_BASIC_JSON_OBJECT, &wrapper);
     if (SHREWD_BASIC_ERR_OK != status) {
@@ -345,7 +345,7 @@ static int schema_value_inner(schema_ctx_t *ctx,
 {
     const shrewd_basic_reflect_type_t *type = field->sb_refl_type;
     shrewd_basic_json_value_t *inner = NULL;
-    int status;
+    int status = 0;
     *out = NULL;
     if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
         shrewd_basic_json_value_t *kind = NULL;
@@ -452,7 +452,7 @@ static int schema_type(schema_ctx_t *ctx, const shrewd_basic_reflect_type_t *typ
         shrewd_basic_json_value_t *schema = NULL;
         shrewd_basic_json_value_t *props = NULL;
         shrewd_basic_json_value_t *required = NULL;
-        int status;
+        int status = 0;
         if (NULL != shrewd_basic_json_get(ctx->defs, type->sb_refl_name)) {
             (void)snprintf(path, sizeof(path), "#/$defs/%s", type->sb_refl_name);
             return shrewd_basic_json_new_string(path, out);
@@ -597,7 +597,7 @@ int shrewd_basic_json_schema(const shrewd_basic_reflect_type_t *type,
     shrewd_basic_json_value_t *uri = NULL;
     shrewd_basic_json_value_t *title = NULL;
     char path[128];
-    int status;
+    int status = 0;
     if ((NULL == type) || (NULL == out_text)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
@@ -842,7 +842,7 @@ static int schema_check_object(schema_check_ctx_t *ctx,
             const shrewd_basic_json_value_t *sub =
                     schema_find_property(properties, key);
             size_t mark = 0;
-            int status;
+            int status = 0;
             if (NULL == sub) {
                 continue; /* unknown keys are ignored, like decode */
             }
@@ -969,7 +969,7 @@ static int schema_check_value(schema_check_ctx_t *ctx,
             for (size_t i = 0; i < shrewd_basic_json_count(doc); ++i) {
                 char step[24];
                 size_t mark = ctx->path_len;
-                int status;
+                int status = 0;
                 (void)snprintf(step, sizeof(step), "/%zu", i);
                 schema_check_push(ctx, step);
                 status = schema_check_value(ctx, shrewd_basic_json_at(doc, i),

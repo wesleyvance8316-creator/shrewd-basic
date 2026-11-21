@@ -324,7 +324,7 @@ static int hash_content_fields(hash_ctx_t *ctx,
             *h = hash_u64(*h, (uint64_t)view.count);
             for (size_t j = 0; j < view.count; ++j) {
                 const unsigned char *elem = view.base + (j * view.stride);
-                int status;
+                int status = 0;
                 if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR)) {
                     void *pointer = reflect_load_ptr(elem);
                     if (NULL == pointer) {
