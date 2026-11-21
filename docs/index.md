@@ -12,6 +12,10 @@ compile-time reflection module.
 - [reflect overview](reflect-overview.md) - a summary of everything the
   reflect module supports today: type system, field shapes, API list,
   semantics and tooling.
+- [reflect API reference](reflect-api.md) - every reflect interface with
+  its full name, exact prototype, parameters and return codes, grouped
+  by concern (metadata, values, paths, lookup lists, graph algorithms,
+  traversal).
 - [json reference](json.md) - the json module: layered architecture, the
   value model (DOM), the strict RFC 8259 parser/serializer and the wire
   format contract.

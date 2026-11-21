@@ -185,6 +185,7 @@ SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                /* 跨 TU 
 ## 5. 接口参考
 
 全部返回 `int` 错误码(`shrewd-basic/platform/error.h`),数据经出参返回。
+逐接口的**全名、精确原型、参数与返回值**见 [reflect API reference](reflect-api.md)。
 
 | 接口 | 语义 | 错误码 |
 |---|---|---|
