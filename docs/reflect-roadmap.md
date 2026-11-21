@@ -121,6 +121,8 @@ SHREWD_BASIC_REFLECT_FIELD_BITS(flags_t, raw, level, 1, 3),
 
 ### B2. 匿名 struct/union 成员平铺
 
+> 状态:**已完成**(2026-11-21;现有宏天然支持,固化为测试+文档)
+
 **现状**:C11 匿名成员(`struct { struct { int x; int y; }; int z; }`)在描述符
 里无法直接注解——匿名成员没有成员名。
 

@@ -77,6 +77,7 @@ shrewd_basic_reflect_type_find_field(type, name, out)),便于 Doxygen
 | `SHREWD_BASIC_REFLECT_UNION_VARIANT(tag_value, ...)` | union 变体条目 |
 | `SHREWD_BASIC_REFLECT_FIELD_UNION(struct_type, member, union_var, tag_member)` | 标签化 union 字段 |
 | `*_OPS` 变体(如 `SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE_OPS(struct_type, member, ops_ref)` 等) | 同名形态 + 字段级 ops |
+| `FIELD_*` 对匿名成员 | C11 无名 struct/union 成员**平铺**描述:子成员名直接作 `member` 传入(如 `FIELD_PRIMITIVE(S, ax)`),offset/size 穿透匿名父级 |
 | `SHREWD_BASIC_REFLECT_REGISTRY_DEFINE(var, capacity)` | 声明一个内置条目数组的注册表(文件域,见第 6 节) |
 
 ## 2. 元数据查询

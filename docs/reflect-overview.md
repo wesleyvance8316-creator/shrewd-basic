@@ -229,6 +229,9 @@ struct shrewd_basic_reflect_ops {
 
 - `_Generic` 只列基本类型(不列 stdint 别名防重复关联),无 `default`:不支持的
   成员类型**编译期报错**是特性;
+- **匿名 struct/union 成员**(C11 无名成员)按**平铺**描述:子成员直接
+  列进外层字段表(`FIELD_PRIMITIVE(S, ax)` 即可,offsetof/sizeof 穿透
+  匿名父级);同址的匿名 union 子成员互为别名,语义由应用自理;
 - 字符缓冲二选一:`FIELD_STRING_BUFFER`(文本语义)或 `FIELD_ARRAY(t, buf,
   shrewd_basic_reflect_char)`(字节精确);裸 `FIELD_PRIMITIVE` 会把数组退化成
   字符串指针;

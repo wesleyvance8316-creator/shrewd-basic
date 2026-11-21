@@ -4218,6 +4218,70 @@ static void test_describe_type(void)
     fclose(stream);
 }
 
+/* Anonymous members (C11 6.7.2.1): described flat - the sub-members
+   are listed directly, their offsetof/sizeof resolve through the
+   anonymous parent. */
+typedef struct {
+    struct {              /* anonymous nested struct */
+        int32_t ax;
+        int32_t ay;
+    };
+    union {               /* anonymous union (n/f alias by design) */
+        int32_t n;
+        float f;
+    };
+    int32_t z;
+} anon_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_anon_reflect, anon_t,
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(anon_t, ax),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(anon_t, ay),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(anon_t, n),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(anon_t, f),
+    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(anon_t, z));
+
+static void test_anonymous(void)
+{
+    const shrewd_basic_reflect_field_t *field = NULL;
+    anon_t obj;
+    int32_t value = 0;
+
+    memset(&obj, 0, sizeof(obj));
+    expect_eq_int("anon check",
+                  shrewd_basic_reflect_check_type(&g_anon_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("anon find ax",
+                  shrewd_basic_reflect_type_find_field(&g_anon_reflect, "ax",
+                                                       &field),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("anon ax offset", field->sb_refl_offset == offsetof(anon_t, ax));
+    expect_eq_int("anon find z",
+                  shrewd_basic_reflect_type_find_field(&g_anon_reflect, "z",
+                                                       &field),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("anon z offset", field->sb_refl_offset == offsetof(anon_t, z));
+
+    /* get/set and paths resolve through the anonymous parent. */
+    value = 5;
+    expect_eq_int("anon set ax",
+                  shrewd_basic_reflect_path_set(&obj, &g_anon_reflect, "ax",
+                                                &value, sizeof(value)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("anon ax landed", 5 == obj.ax);
+    value = 6;
+    expect_eq_int("anon set ay",
+                  shrewd_basic_reflect_path_set(&obj, &g_anon_reflect, "ay",
+                                                &value, sizeof(value)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("anon ay landed", 6 == obj.ay);
+    value = 0;
+    expect_eq_int("anon get ay",
+                  shrewd_basic_reflect_path_get(&obj, &g_anon_reflect, "ay",
+                                                &value, sizeof(value)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("anon ay read", 6 == value);
+}
+
 int main(void)
 {
     test_describe();
@@ -4227,6 +4291,7 @@ int main(void)
     test_registry();
     test_descriptor_meta();
     test_describe_type();
+    test_anonymous();
     test_get_set_scalars();
     test_get_set_string();
     test_nested();
