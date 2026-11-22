@@ -15,72 +15,31 @@
 #include <string.h>
 
 #include "shrewd-basic/formats/msgpack.h"
+#include "shrewd-basic-internal/bin-internal.h"
 #include "shrewd-basic/platform/memory.h"
 #include "shrewd-basic-internal/reflect-internal.h"
 
 #define MP_MAX_DEPTH 64
 
-/* --- writer -------------------------------------------------------------- */
+/* --- writer (shared skeleton: bin-internal.h) --------------------------- */
 
-typedef struct mp_buf {
-    unsigned char *data;
-    size_t len;
-    size_t cap;
-} mp_buf_t;
+typedef binio_buf_t mp_buf_t;
 
 static int mp_buf_reserve(mp_buf_t *b, size_t extra) {
-    size_t want = 0;
-    void *block = NULL;
-    if (extra > (SIZE_MAX - b->len)) {
-        return SHREWD_BASIC_ERR_BIN_UNSUPPORTED;
-    }
-    want = b->len + extra;
-    if (want <= b->cap) {
-        return SHREWD_BASIC_ERR_OK;
-    }
-    while (b->cap < want) {
-        b->cap = (0 == b->cap) ? (size_t)256 : (b->cap * 2);
-    }
-    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_realloc(&block, b->data, b->cap)) {
-        return SHREWD_BASIC_ERR_MEM_NOMEM;
-    }
-    b->data = block;
-    return SHREWD_BASIC_ERR_OK;
+    return binio_reserve(b, extra);
 }
 
 static int mp_w_u8(mp_buf_t *b, uint8_t byte) {
-    int status = mp_buf_reserve(b, 1);
-    if (SHREWD_BASIC_ERR_OK != status) {
-        return status;
-    }
-    b->data[b->len] = byte;
-    b->len += 1;
-    return SHREWD_BASIC_ERR_OK;
+    return binio_w_u8(b, byte);
 }
 
 static int mp_w_bytes(mp_buf_t *b, const void *bytes, size_t n) {
-    int status = mp_buf_reserve(b, n);
-    if (SHREWD_BASIC_ERR_OK != status) {
-        return status;
-    }
-    if (0 < n) {
-        memcpy(b->data + b->len, bytes, n);
-        b->len += n;
-    }
-    return SHREWD_BASIC_ERR_OK;
+    return binio_w_bytes(b, bytes, n);
 }
 
 /* Big-endian multi-byte number (MessagePack wire order). */
 static int mp_w_be(mp_buf_t *b, uint64_t value, size_t width) {
-    int status = mp_buf_reserve(b, width);
-    if (SHREWD_BASIC_ERR_OK != status) {
-        return status;
-    }
-    for (size_t i = 0; i < width; ++i) {
-        b->data[b->len + i] = (uint8_t)((value >> (8u * (width - 1 - i))) & 0xffu);
-    }
-    b->len += width;
-    return SHREWD_BASIC_ERR_OK;
+    return binio_w_be(b, value, width);
 }
 
 static int mp_w_uint(mp_buf_t *b, uint64_t value) {
@@ -190,43 +149,20 @@ static int mp_w_head(mp_buf_t *b, uint8_t fix_base, uint8_t wide16, uint8_t wide
     return SHREWD_BASIC_ERR_BIN_UNSUPPORTED;
 }
 
-/* --- reader -------------------------------------------------------------- */
+/* --- reader (shared skeleton: bin-internal.h) --------------------------- */
 
-typedef struct mp_rd {
-    const unsigned char *data;
-    size_t len;
-    size_t pos;
-} mp_rd_t;
+typedef binio_rd_t mp_rd_t;
 
 static int mp_r_u8(mp_rd_t *r, uint8_t *out) {
-    if ((r->len - r->pos) < 1u) {
-        return SHREWD_BASIC_ERR_BIN_FORMAT;
-    }
-    *out = r->data[r->pos];
-    r->pos += 1;
-    return SHREWD_BASIC_ERR_OK;
+    return binio_r_u8(r, out);
 }
 
 static int mp_r_be(mp_rd_t *r, size_t width, uint64_t *out) {
-    uint64_t value = 0;
-    if ((r->len - r->pos) < width) {
-        return SHREWD_BASIC_ERR_BIN_FORMAT;
-    }
-    for (size_t i = 0; i < width; ++i) {
-        value = (value << 8) | (uint64_t)r->data[r->pos + i];
-    }
-    r->pos += width;
-    *out = value;
-    return SHREWD_BASIC_ERR_OK;
+    return binio_r_be(r, width, out);
 }
 
 static int mp_r_bytes(mp_rd_t *r, size_t n, const unsigned char **out) {
-    if ((r->len - r->pos) < n) {
-        return SHREWD_BASIC_ERR_BIN_FORMAT;
-    }
-    *out = r->data + r->pos;
-    r->pos += n;
-    return SHREWD_BASIC_ERR_OK;
+    return binio_r_bytes(r, n, out);
 }
 
 typedef enum mp_wire {
