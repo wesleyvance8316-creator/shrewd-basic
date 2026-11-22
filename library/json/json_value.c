@@ -301,6 +301,65 @@ void shrewd_basic_json_value_free(shrewd_basic_json_value_t *value) {
     (void)shrewd_basic_platform_free((void **)&value);
 }
 
+int shrewd_basic_json_value_clone(const shrewd_basic_json_value_t *value,
+                                  shrewd_basic_json_value_t **out) {
+    shrewd_basic_json_value_t *copy = NULL;
+    int status = 0;
+    if ((NULL == value) || (NULL == out)) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    *out = NULL;
+    switch (value->kind) {
+    case SHREWD_BASIC_JSON_NULL:
+        return shrewd_basic_json_new(SHREWD_BASIC_JSON_NULL, out);
+    case SHREWD_BASIC_JSON_BOOL:
+        return shrewd_basic_json_new_bool(value->u.boolean, out);
+    case SHREWD_BASIC_JSON_NUMBER:
+        /* Token fidelity: the clone carries the exact source text. */
+        return json_value_new_number(value->u.number.raw,
+                                     (NULL != value->u.number.raw) ? strlen(value->u.number.raw)
+                                                                   : 0,
+                                     out);
+    case SHREWD_BASIC_JSON_STRING:
+        return shrewd_basic_json_new_string(value->u.string, out);
+    default:
+        break;
+    }
+    if (SHREWD_BASIC_JSON_ARRAY == value->kind) {
+        status = shrewd_basic_json_new(SHREWD_BASIC_JSON_ARRAY, &copy);
+        for (size_t i = 0; (SHREWD_BASIC_ERR_OK == status) && (i < value->u.array.count); ++i) {
+            shrewd_basic_json_value_t *child = NULL;
+            status = shrewd_basic_json_value_clone(value->u.array.items[i], &child);
+            if (SHREWD_BASIC_ERR_OK == status) {
+                status = shrewd_basic_json_append(copy, child);
+            }
+            if (SHREWD_BASIC_ERR_OK != status) {
+                shrewd_basic_json_value_free(child);
+            }
+        }
+    } else {
+        status = shrewd_basic_json_new(SHREWD_BASIC_JSON_OBJECT, &copy);
+        for (size_t i = 0; (SHREWD_BASIC_ERR_OK == status) && (i < value->u.object.count); ++i) {
+            shrewd_basic_json_value_t *child = NULL;
+            status = shrewd_basic_json_value_clone(value->u.object.entries[i].value, &child);
+            if (SHREWD_BASIC_ERR_OK == status) {
+                /* json_object_add copies the key and keeps duplicates -
+                   the clone preserves member order exactly. */
+                status = json_object_add(copy, value->u.object.entries[i].key, child);
+            }
+            if (SHREWD_BASIC_ERR_OK != status) {
+                shrewd_basic_json_value_free(child);
+            }
+        }
+    }
+    if (SHREWD_BASIC_ERR_OK != status) {
+        shrewd_basic_json_value_free(copy);
+        return status;
+    }
+    *out = copy;
+    return SHREWD_BASIC_ERR_OK;
+}
+
 /* --- inspection ------------------------------------------------------- */
 
 shrewd_basic_json_kind_t shrewd_basic_json_kind(const shrewd_basic_json_value_t *value) {

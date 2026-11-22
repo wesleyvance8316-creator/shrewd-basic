@@ -314,6 +314,80 @@ static void test_value_model(void) {
     shrewd_basic_json_value_free(object); /* frees the nested array too */
 }
 
+static void test_clone(void) {
+    shrewd_basic_json_value_t *doc = NULL;
+    shrewd_basic_json_value_t *copy = NULL;
+    shrewd_basic_json_error_t error = {0};
+    const char *wire = "{\"a\":1.50,\"a\":[true,null,\"hi\"],\"b\":{\"c\":-7}}";
+
+    /* The clone is text-faithful: token text, order and duplicates. */
+    expect_eq_int("clone parse",
+                  shrewd_basic_json_parse(wire, strlen(wire), &doc, NULL, &error),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("clone", shrewd_basic_json_value_clone(doc, &copy), SHREWD_BASIC_ERR_OK);
+    expect_true("clone shape",
+                (NULL != copy) && (SHREWD_BASIC_JSON_OBJECT == shrewd_basic_json_kind(copy))
+                    && ((size_t)3 == shrewd_basic_json_count(copy)));
+    expect_true("clone duplicate keys",
+                (0 == strcmp(shrewd_basic_json_key_at(copy, 0), "a"))
+                    && (0 == strcmp(shrewd_basic_json_key_at(copy, 1), "a")));
+    expect_true(
+        "clone number token",
+        (NULL != shrewd_basic_json_number_text(shrewd_basic_json_at(copy, 0)))
+            && (0 == strcmp(shrewd_basic_json_number_text(shrewd_basic_json_at(copy, 0)), "1.50")));
+    {
+        char *left = NULL;
+        char *right = NULL;
+        expect_eq_int("clone serialize left",
+                      shrewd_basic_json_serialize(doc, &left, NULL, NULL),
+                      SHREWD_BASIC_ERR_OK);
+        expect_eq_int("clone serialize right",
+                      shrewd_basic_json_serialize(copy, &right, NULL, NULL),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("clone serialize equal",
+                    (NULL != left) && (NULL != right) && (0 == strcmp(left, right)));
+        shrewd_basic_json_text_free(left);
+        shrewd_basic_json_text_free(right);
+    }
+
+    /* Independence: mutating the clone leaves the source untouched. */
+    {
+        shrewd_basic_json_value_t *item = NULL;
+        expect_eq_int(
+            "clone independence set", shrewd_basic_json_new_i64(42, &item), SHREWD_BASIC_ERR_OK);
+        expect_eq_int("clone independence apply",
+                      shrewd_basic_json_set(copy, "b", item),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("clone independence source",
+                    SHREWD_BASIC_JSON_OBJECT
+                        == shrewd_basic_json_kind(shrewd_basic_json_get(doc, "b")));
+        expect_true("clone independence copy",
+                    SHREWD_BASIC_JSON_NUMBER
+                        == shrewd_basic_json_kind(shrewd_basic_json_get(copy, "b")));
+    }
+
+    /* Empty containers and scalars clone too. */
+    {
+        shrewd_basic_json_value_t *empty = NULL;
+        shrewd_basic_json_value_t *empty_copy = NULL;
+        expect_eq_int("clone empty parse",
+                      shrewd_basic_json_parse("[]", 2, &empty, NULL, &error),
+                      SHREWD_BASIC_ERR_OK);
+        expect_eq_int(
+            "clone empty", shrewd_basic_json_value_clone(empty, &empty_copy), SHREWD_BASIC_ERR_OK);
+        expect_true("clone empty shape",
+                    (NULL != empty_copy) && (0 == shrewd_basic_json_count(empty_copy)));
+        shrewd_basic_json_value_free(empty);
+        shrewd_basic_json_value_free(empty_copy);
+    }
+    expect_eq_int(
+        "clone null arg", shrewd_basic_json_value_clone(NULL, &copy), SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int(
+        "clone null out", shrewd_basic_json_value_clone(doc, NULL), SHREWD_BASIC_ERR_ARG_INVALID);
+    shrewd_basic_json_value_free(doc);
+    shrewd_basic_json_value_free(copy);
+}
+
 static void test_serialize(void) {
     shrewd_basic_json_value_t *v = NULL;
     char *text = NULL;
@@ -758,6 +832,7 @@ int main(void) {
     test_parse_strict();
     test_parse_options();
     test_value_model();
+    test_clone();
     test_serialize();
     test_roundtrip();
     test_sinks_and_text();

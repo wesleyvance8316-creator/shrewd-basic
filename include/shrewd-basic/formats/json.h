@@ -125,6 +125,15 @@ int shrewd_basic_json_new_string_n(const char *text, size_t n, shrewd_basic_json
 /** Release a value tree (NULL is accepted). */
 void shrewd_basic_json_value_free(shrewd_basic_json_value_t *value);
 
+/**
+ * Deep copy @p value into a new tree. The clone is text-faithful:
+ * numbers keep their exact token text (no re-canonicalization) and
+ * objects keep member order including duplicate keys. @p out receives
+ * ownership - release with shrewd_basic_json_value_free().
+ */
+int shrewd_basic_json_value_clone(const shrewd_basic_json_value_t *value,
+                                  shrewd_basic_json_value_t **out);
+
 /* --- inspection ------------------------------------------------------- */
 
 /** Kind of @p value (SHREWD_BASIC_JSON_NULL for NULL). */
