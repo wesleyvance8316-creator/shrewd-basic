@@ -208,7 +208,8 @@ static void ini_decode_op(void *arg, long n) {
     map_ctx_t *c = (map_ctx_t *)arg;
     for (long i = 0; i < n; ++i) {
         (void)shrewd_basic_ini_free(c->target, &cfg_reflect);
-        (void)shrewd_basic_ini_decode(c->doc, c->doc_len, c->target, &cfg_reflect, NULL, NULL);
+        (void)shrewd_basic_ini_decode(
+            c->doc, c->doc_len, c->target, &cfg_reflect, NULL, NULL, NULL);
     }
 }
 
@@ -216,7 +217,7 @@ static void ini_encode_op(void *arg, long n) {
     map_ctx_t *c = (map_ctx_t *)arg;
     for (long i = 0; i < n; ++i) {
         char *text = NULL;
-        (void)shrewd_basic_ini_encode(c->src, &cfg_reflect, &text, NULL, NULL);
+        (void)shrewd_basic_ini_encode(c->src, &cfg_reflect, NULL, &text, NULL, NULL);
         shrewd_basic_ini_text_free(text);
     }
 }
@@ -243,7 +244,7 @@ static void csv_decode_op(void *arg, long n) {
     for (long i = 0; i < n; ++i) {
         void *rows = NULL;
         size_t count = 0;
-        (void)shrewd_basic_csv_decode(c->doc, c->doc_len, &rows, &count, &row_reflect, NULL);
+        (void)shrewd_basic_csv_decode(c->doc, c->doc_len, &rows, &count, &row_reflect, NULL, NULL);
         (void)shrewd_basic_csv_rows_free(rows, count, &row_reflect);
     }
 }
@@ -252,7 +253,7 @@ static void csv_encode_op(void *arg, long n) {
     map_ctx_t *c = (map_ctx_t *)arg;
     for (long i = 0; i < n; ++i) {
         char *text = NULL;
-        (void)shrewd_basic_csv_encode(c->src, (size_t)100, &row_reflect, &text, NULL);
+        (void)shrewd_basic_csv_encode(c->src, (size_t)100, &row_reflect, NULL, &text, NULL);
         shrewd_basic_csv_text_free(text);
     }
 }
@@ -409,7 +410,7 @@ int main(void) {
     }
     {
         char *seed = NULL;
-        (void)shrewd_basic_csv_encode(rows, 100, &row_reflect, &seed, NULL);
+        (void)shrewd_basic_csv_encode(rows, 100, &row_reflect, NULL, &seed, NULL);
         mctx.doc = seed;
         mctx.doc_len = (NULL != seed) ? strlen(seed) : 0;
         mctx.src = rows;

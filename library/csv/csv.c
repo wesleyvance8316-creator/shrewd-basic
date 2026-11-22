@@ -18,6 +18,7 @@
 #include "shrewd-basic/formats/csv.h"
 #include "shrewd-basic/log/log.h"
 #include "shrewd-basic/platform/memory.h"
+#include "shrewd-basic/formats/json.h"
 #include "shrewd-basic/reflect/reflect.h"
 #include "shrewd-basic-internal/reflect-internal.h"
 
@@ -80,7 +81,67 @@ typedef struct {
     size_t depth;
     int owned_string;
     char name[CSV_NAME_MAX];
+    size_t prefix_len;                       /* prefix bytes inside name */
+    shrewd_basic_json_field_policy_t policy; /* merged policy aspects */
+    int hidden;                              /* HIDDEN: suppressed both ways */
 } csv_column_t;
+
+/* Merged policy aspects for one member (rows merge per aspect, later
+   rows win - the json policy semantics). */
+static void csv_policy_get(const shrewd_basic_json_info_t *info,
+                           const char *member,
+                           shrewd_basic_json_field_policy_t *out) {
+    memset(out, 0, sizeof(*out));
+    out->field = member;
+    if ((NULL == info) || (NULL == member)) {
+        return;
+    }
+    for (size_t i = 0; i < info->field_count; ++i) {
+        const shrewd_basic_json_field_policy_t *row = &info->fields[i];
+        if (0 != strcmp(row->field, member)) {
+            continue;
+        }
+        if ((NULL != row->keys) && (0 < row->key_count)) {
+            out->keys = row->keys;
+            out->key_count = row->key_count;
+        }
+        out->flags |= row->flags;
+    }
+}
+
+/* Canonical leaf name for the wire: KEY row's first name, else the
+   member name. */
+static const char *csv_leaf_name(const shrewd_basic_json_field_policy_t *policy,
+                                 const char *member) {
+    if ((NULL != policy) && (NULL != policy->keys) && (0 < policy->key_count)) {
+        return policy->keys[0];
+    }
+    return member;
+}
+
+/* A header cell matches the column's canonical name, its member name
+   or any KEY alias (each with the same nesting prefix). */
+static int csv_name_matches(const csv_column_t *column, const char *text, size_t len) {
+    if ((len == strlen(column->name)) && (0 == memcmp(text, column->name, len))) {
+        return 1;
+    }
+    if (0 != column->policy.key_count) {
+        char cand[CSV_NAME_MAX];
+        const shrewd_basic_json_field_policy_t *row = &column->policy;
+        for (size_t k = 0; k <= row->key_count; ++k) {
+            const char *leaf = (0 == k) ? row->field : row->keys[k - 1];
+            size_t leaf_len = strlen(leaf);
+            if ((column->prefix_len + leaf_len) < sizeof(cand)) {
+                memcpy(cand, column->name, column->prefix_len);
+                memcpy(cand + column->prefix_len, leaf, leaf_len + 1);
+                if ((len == (column->prefix_len + leaf_len)) && (0 == memcmp(text, cand, len))) {
+                    return 1;
+                }
+            }
+        }
+    }
+    return 0;
+}
 
 typedef struct {
     csv_column_t *items;
@@ -142,6 +203,7 @@ static unsigned char *csv_column_at(const csv_column_t *column, void *base) {
  * path chain under construction (depth = chain length so far).
  */
 static int csv_collect(const shrewd_basic_reflect_type_t *type,
+                       const shrewd_basic_json_info_t *info,
                        csv_column_t *draft,
                        const char *prefix,
                        csv_columns_t *columns,
@@ -151,7 +213,12 @@ static int csv_collect(const shrewd_basic_reflect_type_t *type,
         const shrewd_basic_reflect_type_t *value_type = field->sb_refl_type;
         uint32_t flags = field->sb_refl_flags;
         int status = 0;
+        shrewd_basic_json_field_policy_t policy;
+        csv_policy_get(info, field->sb_refl_name, &policy);
         draft->path[draft->depth] = field;
+        draft->policy = policy;
+        draft->prefix_len = strlen(prefix);
+        draft->hidden = (0u != (policy.flags & SHREWD_BASIC_JSON_F_HIDDEN)) ? 1 : 0;
         if (0u != (flags & SHREWD_BASIC_REFLECT_FIELD_F_UNION)) {
             return csv_fail(error,
                             0,
@@ -169,8 +236,11 @@ static int csv_collect(const shrewd_basic_reflect_type_t *type,
         if (0u != (flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
             /* Text buffer: the flag carries the shape (the kind may
                read as CHAR through the _Generic decay). */
-            int written
-                = snprintf(draft->name, sizeof(draft->name), "%s%s", prefix, field->sb_refl_name);
+            int written = snprintf(draft->name,
+                                   sizeof(draft->name),
+                                   "%s%s",
+                                   prefix,
+                                   csv_leaf_name(&policy, field->sb_refl_name));
             if ((size_t)written >= sizeof(draft->name)) {
                 return csv_fail(error,
                                 0,
@@ -223,7 +293,7 @@ static int csv_collect(const shrewd_basic_reflect_type_t *type,
                                 NULL);
             }
             draft->depth += 1;
-            status = csv_collect(value_type, draft, prefix_next, columns, error);
+            status = csv_collect(value_type, info, draft, prefix_next, columns, error);
             draft->depth -= 1;
             if (SHREWD_BASIC_ERR_OK != status) {
                 return status;
@@ -232,8 +302,11 @@ static int csv_collect(const shrewd_basic_reflect_type_t *type,
         }
         if (SHREWD_BASIC_REFLECT_KIND_STRING == value_type->sb_refl_kind) {
             if (0u != (flags & SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED)) {
-                int written = snprintf(
-                    draft->name, sizeof(draft->name), "%s%s", prefix, field->sb_refl_name);
+                int written = snprintf(draft->name,
+                                       sizeof(draft->name),
+                                       "%s%s",
+                                       prefix,
+                                       csv_leaf_name(&policy, field->sb_refl_name));
                 if ((size_t)written >= sizeof(draft->name)) {
                     return csv_fail(error,
                                     0,
@@ -278,8 +351,11 @@ static int csv_collect(const shrewd_basic_reflect_type_t *type,
             || (SHREWD_BASIC_REFLECT_KIND_FLOAT == value_type->sb_refl_kind)
             || (SHREWD_BASIC_REFLECT_KIND_DOUBLE == value_type->sb_refl_kind)
             || (SHREWD_BASIC_REFLECT_KIND_LONG_DOUBLE == value_type->sb_refl_kind)) {
-            int written
-                = snprintf(draft->name, sizeof(draft->name), "%s%s", prefix, field->sb_refl_name);
+            int written = snprintf(draft->name,
+                                   sizeof(draft->name),
+                                   "%s%s",
+                                   prefix,
+                                   csv_leaf_name(&policy, field->sb_refl_name));
             if ((size_t)written >= sizeof(draft->name)) {
                 return csv_fail(error,
                                 0,
@@ -306,6 +382,7 @@ static int csv_collect(const shrewd_basic_reflect_type_t *type,
 }
 
 static int csv_columns_build(const shrewd_basic_reflect_type_t *row_type,
+                             const shrewd_basic_json_info_t *info,
                              csv_columns_t *columns,
                              shrewd_basic_csv_error_t *error) {
     csv_column_t draft;
@@ -315,7 +392,7 @@ static int csv_columns_build(const shrewd_basic_reflect_type_t *row_type,
     if (SHREWD_BASIC_REFLECT_KIND_STRUCT != row_type->sb_refl_kind) {
         return csv_fail(error, 0, SHREWD_BASIC_ERR_ARG_INVALID, "row type is not a struct", NULL);
     }
-    status = csv_collect(row_type, &draft, "", columns, error);
+    status = csv_collect(row_type, info, &draft, "", columns, error);
     if (SHREWD_BASIC_ERR_OK != status) {
         csv_columns_release(columns);
     }
@@ -539,10 +616,12 @@ static void csv_cells_release(const char *text, size_t length, csv_span_t *cells
 int shrewd_basic_csv_encode(const void *rows,
                             size_t count,
                             const shrewd_basic_reflect_type_t *row_type,
+                            const shrewd_basic_json_info_t *info,
                             char **out_text,
                             shrewd_basic_csv_error_t *error) {
     csv_columns_t columns;
     csv_buf_t buf;
+    size_t written_cells = 0;
     int status = 0;
     if ((NULL == row_type) || (NULL == out_text)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
@@ -563,23 +642,28 @@ int shrewd_basic_csv_encode(const void *rows,
         error->line = 0;
         error->message[0] = '\0';
     }
-    status = csv_columns_build(row_type, &columns, error);
+    status = csv_columns_build(row_type, info, &columns, error);
     if (SHREWD_BASIC_ERR_OK != status) {
         return status;
     }
     memset(&buf, 0, sizeof(buf));
+    written_cells = 0;
     status = csv_buf_reserve(&buf, 1);
     if (SHREWD_BASIC_ERR_OK == status) {
         buf.data[0] = '\0';
     }
-    /* Header line. */
+    /* Header line (HIDDEN columns never surface). */
     for (size_t i = 0; (SHREWD_BASIC_ERR_OK == status) && (i < columns.count); ++i) {
-        if (0 != i) {
+        if (0 != columns.items[i].hidden) {
+            continue;
+        }
+        if (0 != written_cells) {
             status = csv_buf_putc(&buf, ',');
         }
         if (SHREWD_BASIC_ERR_OK == status) {
             status = csv_write_field(&buf, columns.items[i].name, strlen(columns.items[i].name));
         }
+        written_cells += 1;
     }
     if (SHREWD_BASIC_ERR_OK == status) {
         status = csv_buf_putc(&buf, '\n');
@@ -587,9 +671,13 @@ int shrewd_basic_csv_encode(const void *rows,
     /* Data rows. */
     for (size_t r = 0; (SHREWD_BASIC_ERR_OK == status) && (r < count); ++r) {
         const unsigned char *base = (const unsigned char *)rows + (r * row_type->sb_refl_size);
+        written_cells = 0;
         for (size_t i = 0; (SHREWD_BASIC_ERR_OK == status) && (i < columns.count); ++i) {
             const csv_column_t *column = &columns.items[i];
             const unsigned char *at = csv_column_at(column, (void *)(uintptr_t)base);
+            if (0 != column->hidden) {
+                continue;
+            }
             char stack[256];
             char *cell = stack;
             char *heap = NULL;
@@ -606,9 +694,9 @@ int shrewd_basic_csv_encode(const void *rows,
                 cell = heap;
             }
             if (SHREWD_BASIC_ERR_OK != rendered) {
-                status
-                    = csv_fail(error, r + 2, rendered, "cannot render column '%s'", column->name);
-            } else if (0 != i) {
+                status = csv_fail(
+                    error, r + 2, rendered, "cannot render column '%.90s'", column->name);
+            } else if (0 != written_cells) {
                 status = csv_buf_putc(&buf, ',');
                 if (SHREWD_BASIC_ERR_OK == status) {
                     status = csv_write_field(&buf, cell, need);
@@ -616,6 +704,7 @@ int shrewd_basic_csv_encode(const void *rows,
             } else {
                 status = csv_write_field(&buf, cell, need);
             }
+            written_cells += 1;
             if (NULL != heap) {
                 (void)shrewd_basic_platform_free((void **)&heap);
             }
@@ -649,6 +738,7 @@ int shrewd_basic_csv_decode(const char *text,
                             void **out_rows,
                             size_t *out_count,
                             const shrewd_basic_reflect_type_t *row_type,
+                            const shrewd_basic_json_info_t *info,
                             shrewd_basic_csv_error_t *error) {
     csv_columns_t columns;
     csv_span_t cells[CSV_MAX_COLUMNS + 1];
@@ -673,11 +763,11 @@ int shrewd_basic_csv_decode(const char *text,
         error->line = 0;
         error->message[0] = '\0';
     }
-    status = csv_columns_build(row_type, &columns, error);
+    status = csv_columns_build(row_type, info, &columns, error);
     if (SHREWD_BASIC_ERR_OK != status) {
         return status;
     }
-    /* Header: map each header cell to its column (by name). */
+    /* Header: map each header cell to its column (by name or alias). */
     {
         size_t n = 0;
         status = csv_next_record(text, length, &pos, &line, cells, CSV_MAX_COLUMNS + 1, &n);
@@ -698,12 +788,14 @@ int shrewd_basic_csv_decode(const char *text,
         for (size_t i = 0; i < n; ++i) {
             size_t found = columns.count; /* sentinel: none */
             for (size_t j = 0; j < columns.count; ++j) {
-                const char *name = columns.items[j].name;
-                if ((cells[i].len == strlen(name))
-                    && (0 == memcmp(cells[i].data, name, cells[i].len))) {
+                if (0 != csv_name_matches(&columns.items[j], cells[i].data, cells[i].len)) {
                     found = j;
                     break;
                 }
+            }
+            if ((found < columns.count) && (0 != columns.items[found].hidden)) {
+                map[i] = columns.count; /* HIDDEN: known but never decoded */
+                continue;
             }
             if (found >= columns.count) {
                 char bad[64];
@@ -730,6 +822,29 @@ int shrewd_basic_csv_decode(const char *text,
             map[i] = found;
         }
         csv_cells_release(text, length, cells, n);
+    }
+    /* REQUIRED policy rows demand their column in the header. */
+    for (size_t j = 0; j < columns.count; ++j) {
+        const csv_column_t *column = &columns.items[j];
+        int present = 0;
+        if ((0 != column->hidden)
+            || (0u == (column->policy.flags & SHREWD_BASIC_JSON_F_REQUIRED))) {
+            continue;
+        }
+        for (size_t i = 0; i < header_width; ++i) {
+            if (map[i] == j) {
+                present = 1;
+                break;
+            }
+        }
+        if (0 == present) {
+            csv_columns_release(&columns);
+            return csv_fail(error,
+                            1,
+                            SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH,
+                            "missing required column '%.90s'",
+                            column->name);
+        }
     }
     /* Data records. */
     for (;;) {
@@ -776,14 +891,19 @@ int shrewd_basic_csv_decode(const char *text,
         }
         row = (unsigned char *)rows + (count * row_type->sb_refl_size);
         for (size_t i = 0; i < n; ++i) {
-            const csv_column_t *column = &columns.items[map[i]];
-            unsigned char *at = csv_column_at(column, row);
+            const csv_column_t *column = NULL;
+            unsigned char *at = NULL;
+            if (map[i] >= columns.count) {
+                continue; /* HIDDEN column: known, never decoded */
+            }
+            column = &columns.items[map[i]];
+            at = csv_column_at(column, row);
             status = shrewd_basic_reflect_scan_text(
                 column->path[column->depth - 1], at, cells[i].data, cells[i].len);
             if (SHREWD_BASIC_ERR_OK != status) {
                 csv_cells_release(text, length, cells, n);
                 (void)csv_fail(
-                    error, record_line, status, "bad value for column '%s'", column->name);
+                    error, record_line, status, "bad value for column '%.90s'", column->name);
                 goto fail;
             }
         }
@@ -824,7 +944,7 @@ int shrewd_basic_csv_rows_free(void *rows,
                          "free: rows or row type is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
-    status = csv_columns_build(row_type, &columns, NULL);
+    status = csv_columns_build(row_type, NULL, &columns, NULL);
     if (SHREWD_BASIC_ERR_OK != status) {
         return status;
     }

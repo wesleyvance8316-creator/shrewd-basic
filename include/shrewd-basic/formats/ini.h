@@ -21,6 +21,10 @@
 #include "shrewd-basic/platform/error.h"
 #include "shrewd-basic/reflect/reflect.h"
 
+/* Forward declaration: the per-field policy table (json.h) steers key
+   names (KEY), REQUIRED and HIDDEN rows here. */
+typedef struct shrewd_basic_json_info shrewd_basic_json_info_t;
+
 /** Options for encode/decode. Every zero field means the default. */
 typedef struct shrewd_basic_ini_options {
     int strict; /**< decode: unknown keys error (default: skipped). */
@@ -34,11 +38,15 @@ typedef struct shrewd_basic_ini_error {
 
 /**
  * Encode @p object as INI text (root leaves first, then one section
- * per nested struct). Release @p out_text with
+ * per nested struct; array fields repeat their key per element).
+ * @p info (may be NULL) steers the wire names: KEY rows set the key
+ * name and decode aliases, REQUIRED rows demand the key, HIDDEN rows
+ * suppress it both ways. Release @p out_text with
  * shrewd_basic_ini_text_free().
  */
 int shrewd_basic_ini_encode(const void *object,
                             const shrewd_basic_reflect_type_t *type,
+                            const shrewd_basic_json_info_t *info,
                             char **out_text,
                             const shrewd_basic_ini_options_t *options,
                             shrewd_basic_ini_error_t *error);
@@ -46,11 +54,14 @@ int shrewd_basic_ini_encode(const void *object,
 /**
  * Decode INI text into @p object (zeroed first). Unknown keys skip
  * unless @c strict; duplicate keys/sections and non-leaf targets error.
+ * Repeated keys append into array fields (fixed arrays fill in order,
+ * dynamic arrays grow; overflow is an error).
  */
 int shrewd_basic_ini_decode(const char *text,
                             size_t length,
                             void *object,
                             const shrewd_basic_reflect_type_t *type,
+                            const shrewd_basic_json_info_t *info,
                             const shrewd_basic_ini_options_t *options,
                             shrewd_basic_ini_error_t *error);
 

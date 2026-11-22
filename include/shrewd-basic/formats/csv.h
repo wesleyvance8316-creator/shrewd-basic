@@ -33,6 +33,10 @@
 #include "shrewd-basic/platform/error.h"
 #include "shrewd-basic/reflect/reflect.h"
 
+/* Forward declaration: the per-field policy table (json.h) steers
+   column names (KEY), REQUIRED and HIDDEN rows here. */
+typedef struct shrewd_basic_json_info shrewd_basic_json_info_t;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -46,11 +50,15 @@ typedef struct shrewd_basic_csv_error {
 /**
  * Encode @p count structs at @p rows (each @c row_type->sb_refl_size
  * bytes) as CSV: a header line of column names, then one line per row.
- * @p error may be NULL.
+ * @p info (may be NULL) steers the wire names: KEY rows set the
+ * canonical column name (first listed) and decode aliases, REQUIRED
+ * rows demand the column on decode, HIDDEN rows suppress the column
+ * both ways. @p error may be NULL.
  */
 int shrewd_basic_csv_encode(const void *rows,
                             size_t count,
                             const shrewd_basic_reflect_type_t *row_type,
+                            const shrewd_basic_json_info_t *info,
                             char **out_text,
                             shrewd_basic_csv_error_t *error);
 
@@ -65,6 +73,7 @@ int shrewd_basic_csv_decode(const char *text,
                             void **out_rows,
                             size_t *out_count,
                             const shrewd_basic_reflect_type_t *row_type,
+                            const shrewd_basic_json_info_t *info,
                             shrewd_basic_csv_error_t *error);
 
 /**
