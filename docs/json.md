@@ -262,7 +262,7 @@ encode/decode 的 `info` 参数携带策略(NULL = 纯元数据,行为不变)。
 | `json_schema(type, info, &text)` | 导出 draft-07 子集 Schema:属性/`required`/`minimum`/`maximum`/`enum`/`x-aliases`,嵌套结构体走 `$defs`+`$ref`(自引用安全),union 出 `oneOf` 并按
   `UNION_STYLE` 标注 `x-union-style`(UNWRAP 变体直出裸值) |
 | `json_value_size(value, type, &size)` | FAM 尺寸助手:返回 decode 目标所需字节(头 + JSON 尾长) |
-| `reflect_gen.py` 骨架 | 为每个 struct 产出注释形式的 `SHREWD_BASIC_JSON_DEFINE` 策略模板(解开注释即用) |
+| `reflect_gen.py` 策略桩 | `json:` 命名空间注解 → `<output>_json.{c,h}`(`SHREWD_BASIC_JSON_DEFINE` 真表,非模板),见 §6"注解生成" |
 
 ## 10. 并发说明
 
