@@ -156,6 +156,20 @@ add_test(NAME shrewd-basic.cbor COMMAND shrewd-basic-cbor-tests)
 
 endif()
 
+if(SHREWD_BASIC_DBUS)
+
+# sb_dbus core flow tests (mount/get/peek/set/touch, hooks, notify).
+add_executable(shrewd-basic-dbus-tests test_dbus.c)
+
+target_link_libraries(shrewd-basic-dbus-tests
+        PRIVATE
+            shrewd-basic
+            shrewd-basic-warnings)
+
+add_test(NAME shrewd-basic.dbus COMMAND shrewd-basic-dbus-tests)
+
+endif()
+
 # Test binary returns non-zero on failure, so a plain COMMAND run is enough.
 add_test(NAME shrewd-basic.unit COMMAND shrewd-basic-tests)
 add_test(NAME shrewd-basic.ds COMMAND shrewd-basic-ds-tests)

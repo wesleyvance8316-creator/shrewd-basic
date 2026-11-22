@@ -34,6 +34,12 @@ const char *shrewd_basic_error_name(int status) {
         return "SHREWD_BASIC_ERR_BIN_FORMAT";
     case SHREWD_BASIC_ERR_BIN_UNSUPPORTED:
         return "SHREWD_BASIC_ERR_BIN_UNSUPPORTED";
+    case SHREWD_BASIC_ERR_DBUS_CONFLICT:
+        return "SHREWD_BASIC_ERR_DBUS_CONFLICT";
+    case SHREWD_BASIC_ERR_DBUS_REENTRANT:
+        return "SHREWD_BASIC_ERR_DBUS_REENTRANT";
+    case SHREWD_BASIC_ERR_DBUS_UNADDRESSABLE:
+        return "SHREWD_BASIC_ERR_DBUS_UNADDRESSABLE";
     default:
         return "SHREWD_BASIC_ERR_UNKNOWN";
     }

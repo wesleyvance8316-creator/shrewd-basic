@@ -45,7 +45,12 @@ typedef enum shrewd_basic_error {
     SHREWD_BASIC_ERR_JSON_UNSUPPORTED = -303, /**< JSON: construct has no JSON representation. */
 
     SHREWD_BASIC_ERR_BIN_FORMAT = -400, /**< Binary: malformed, truncated or mismatched stream. */
-    SHREWD_BASIC_ERR_BIN_UNSUPPORTED = -401 /**< Binary: construct has no wire representation. */
+    SHREWD_BASIC_ERR_BIN_UNSUPPORTED = -401, /**< Binary: construct has no wire representation. */
+
+    /* dbus module codes: -500 .. -599. */
+    SHREWD_BASIC_ERR_DBUS_CONFLICT = -500,     /**< dbus: stamp version does not match. */
+    SHREWD_BASIC_ERR_DBUS_REENTRANT = -501,    /**< dbus: set/touch of the node being hooked. */
+    SHREWD_BASIC_ERR_DBUS_UNADDRESSABLE = -502 /**< dbus: peek on a virtual node. */
 } shrewd_basic_error_t;
 
 /**
