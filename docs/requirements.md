@@ -80,5 +80,10 @@ json 持久化、全接口 demo。
 ## 7. 工程配套(持续义务)
 
 风格门(clang-format/clang-tidy/条件括号)、pre-commit/pre-push 钩子、
-ctest 全量、ASan/UBSan 复核、四平台验证矩阵、demo 与测试同交付、
-文档与代码同提交。
+ctest 全量、ASan/UBSan 复核、Linux 验证矩阵(gcc/clang + ILP32)、
+demo 与测试同交付、文档与代码同提交。
+
+**平台政策(2026-11-22)**:**暂停 Windows 生态支持,专注嵌入式
+Linux**——MSVC/wine 验证停跑(WIN32 裁剪守卫保留在构建里但不再
+验证);shm/pthread 等 POSIX 面由此无条件成立。恢复 Windows 时
+须重跑 MSVC 矩阵并复核 WIN32 分支。

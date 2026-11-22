@@ -102,13 +102,14 @@ function(shrewd_basic_setup_library target)
             $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
         PRIVATE
             ${PROJECT_SOURCE_DIR}/include/shrewd-basic-internal)
-    target_link_libraries(${target} PRIVATE shrewd-basic-warnings)
+    target_link_libraries(${target} PRIVATE $<BUILD_INTERFACE:shrewd-basic-warnings>)
     set_target_properties(${target} PROPERTIES
             VERSION ${PROJECT_VERSION}
             SOVERSION ${PROJECT_VERSION_MAJOR}
             WINDOWS_EXPORT_ALL_SYMBOLS ON)
     if(SHREWD_BASIC_INSTALL)
         install(TARGETS ${target}
+                EXPORT shrewd-basic-targets
                 ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
                 LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
                 RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -160,4 +161,25 @@ if(SHREWD_BASIC_INSTALL)
             ${PROJECT_BINARY_DIR}/include/shrewd-basic/config/build.h
             ${PROJECT_BINARY_DIR}/include/shrewd-basic/config/config.h
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/shrewd-basic/config)
+endif()
+
+# Package config: find_package(shrewd-basic) support.
+if(SHREWD_BASIC_INSTALL)
+    include(CMakePackageConfigHelpers)
+    install(EXPORT shrewd-basic-targets
+            FILE shrewd-basic-targets.cmake
+            NAMESPACE shrewd-basic::
+            DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/shrewd-basic)
+    configure_package_config_file(
+            ${PROJECT_SOURCE_DIR}/cmake/shrewd-basic-config.cmake.in
+            ${CMAKE_CURRENT_BINARY_DIR}/shrewd-basic-config.cmake
+            INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/shrewd-basic)
+    write_basic_package_version_file(
+            ${CMAKE_CURRENT_BINARY_DIR}/shrewd-basic-config-version.cmake
+            VERSION ${PROJECT_VERSION}
+            COMPATIBILITY SameMajorVersion)
+    install(FILES
+            ${CMAKE_CURRENT_BINARY_DIR}/shrewd-basic-config.cmake
+            ${CMAKE_CURRENT_BINARY_DIR}/shrewd-basic-config-version.cmake
+            DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/shrewd-basic)
 endif()

@@ -8,8 +8,10 @@ project(shrewd-basic-consumer-cmake LANGUAGES C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# The library itself - adapt to your integration (find_package /
-# FetchContent) once shrewd-basic is installed system-wide.
+# The library itself. Once installed, the canonical integration is:
+#     find_package(shrewd-basic REQUIRED)
+#     target_link_libraries(app PRIVATE shrewd-basic::shrewd-basic)
+# (this demo uses add_subdirectory to stay self-contained).
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../.. shrewd-basic-build
                  EXCLUDE_FROM_ALL)
 
