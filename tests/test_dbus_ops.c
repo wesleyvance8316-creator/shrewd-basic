@@ -217,6 +217,26 @@ int main(void) {
         expect("hidden set denied",
                SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED
                    == shrewd_basic_dbus_set(bus, "/hid.secret", &probe, sizeof(probe), NULL));
+
+        /* Whole-resource semantics: hidden never surfaces on reads and
+           keeps its value across whole writes (docs/dbus-api.md). */
+        shadow2.secret = 0x5ec;
+        shadow2.open = 1;
+        {
+            hide_t whole;
+            memset(&whole, 0, sizeof(whole));
+            expect("whole get",
+                   SHREWD_BASIC_ERR_OK
+                       == shrewd_basic_dbus_get(bus, "/hid", &whole, sizeof(whole), NULL));
+            expect("hidden zeroed in whole get", (0 == whole.secret) && (1 == whole.open));
+            whole.secret = 0xbad;
+            whole.open = 2;
+            expect("whole set",
+                   SHREWD_BASIC_ERR_OK
+                       == shrewd_basic_dbus_set(bus, "/hid", &whole, sizeof(whole), NULL));
+            expect("hidden preserved on whole set",
+                   (0x5ec == shadow2.secret) && (2 == shadow2.open));
+        }
         probe = 5;
         expect("open set",
                SHREWD_BASIC_ERR_OK

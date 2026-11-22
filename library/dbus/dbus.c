@@ -1189,6 +1189,7 @@ int shrewd_basic_dbus_set(shrewd_basic_dbus_t *bus,
     char field[64];
     shrewd_basic_dbus_req_t req;
     const void *payload = in;
+    void *snapshot = NULL;
     size_t payload_size = size;
     uint64_t version = 0;
     int status = 0;
@@ -1223,7 +1224,30 @@ int shrewd_basic_dbus_set(shrewd_basic_dbus_t *bus,
         if (payload_size != want) {
             status = SHREWD_BASIC_ERR_REFLECT_MISMATCH;
         } else if ((NULL != node->ops) && (NULL != node->ops->set)) {
+            /* Virtual commit: version + notify like a storage write;
+               the note snapshot comes from the provider's get (policy
+               wrappers sanitize hidden fields there). */
             status = node->ops->set(node->ops_ctx, &req, payload, payload_size);
+            if (SHREWD_BASIC_ERR_OK == status) {
+                void *tmp = NULL;
+                if ((NULL != node->ops->get) && (0 < want)
+                    && (SHREWD_BASIC_ERR_OK == shrewd_basic_platform_calloc(&tmp, 1, want))) {
+                    size_t got = want;
+                    if ((SHREWD_BASIC_ERR_OK == node->ops->get(node->ops_ctx, &req, tmp, &got))
+                        && (got == want)) {
+                        snapshot = tmp;
+                        tmp = NULL;
+                    }
+                }
+                {
+                    void *old = tmp;
+                    (void)shrewd_basic_platform_free(&old);
+                }
+                dbus_lock(bus);
+                (*node->pver) += 1;
+                version = (*node->pver);
+                dbus_unlock(bus);
+            }
         } else if (NULL != node->data) {
             dbus_lock(bus);
             if ((NULL != stamp) && (0 != stamp->version) && (stamp->version != (*node->pver))) {
@@ -1240,11 +1264,17 @@ int shrewd_basic_dbus_set(shrewd_basic_dbus_t *bus,
         }
     }
     if ((SHREWD_BASIC_ERR_OK == status) && (0 != version)) {
+        const void *note_val = (NULL != snapshot) ? snapshot : ((NULL != node->data) ? at : NULL);
+        size_t note_size = (NULL != note_val) ? want : 0;
         dbus_run_post(bus, node, &req, 0);
-        dbus_enqueue(bus, path, at, want, version, SHREWD_BASIC_DBUS_NOTE_CHANGE);
+        dbus_enqueue(bus, path, note_val, note_size, version, SHREWD_BASIC_DBUS_NOTE_CHANGE);
         if (NULL != bus->arena) {
             bus->arena->commit(bus->arena->ctx, path, at, want, version);
         }
+    }
+    {
+        void *old = snapshot;
+        (void)shrewd_basic_platform_free(&old);
     }
     if ((NULL != stamp) && (SHREWD_BASIC_ERR_OK == status) && (0 != version)) {
         stamp->version = version;
