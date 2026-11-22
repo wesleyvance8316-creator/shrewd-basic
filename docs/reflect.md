@@ -81,7 +81,8 @@ person (person_t) {
 ### 3.1 kind(`shrewd_basic_reflect_kind_t`)
 
 `BOOL, CHAR, INT8, UINT8, INT16, UINT16, INT32, UINT32, INT64, UINT64, ENUM,
-FLOAT, DOUBLE, STRING, STRUCT, ARRAY, OPAQUE, STRING16, STRING32`
+FLOAT, DOUBLE, STRING, STRUCT, ARRAY, OPAQUE, STRING16, STRING32,
+LONG_DOUBLE, COMPLEX, BIT_INT`
 
 - `ENUM`:枚举值(int 兼容,顺序排在整数族之后、浮点之前),`ENUM_DEFINE` 注册名/值表,dump 按常量名渲染,`enum_find_name/enum_find_value` 双向查表;
 - `STRING`:`char *` / `const char *` 成员,指针即值;
@@ -96,6 +97,16 @@ FLOAT, DOUBLE, STRING, STRUCT, ARRAY, OPAQUE, STRING16, STRING32`
 - `UNION`:带标签联合,`UNION_DEFINE` + `UNION_VARIANT` 注册变体表,`FIELD_UNION` 联动
   标签成员;遍历按标签选中**活动变体**(dump/equal/hash/copy/destroy/visit),标签无匹配
   时按原始字节比较、copy 只拷存储、destroy 不触碰(**失效槽位的野指针永不释放**);
+- `LONG_DOUBLE`:`long double` 标量,值语义与 float/double 同款(等值按 `==`、
+  dump 十进制、等值必等哈希);`_Generic` 可自动映射;
+- `COMPLEX`:复数标量,成员视作 `[re, im]` 两个分量(半宽 4/8/16 对应
+  float/double/long double),逐分量值语义,dump 渲染 C 字面量形
+  `1.5+2.5i`;**显式宏** `FIELD_COMPLEX`(MSVC 无 `_Complex`,不做
+  `_Generic`);
+- `BIT_INT`:位精确整数(`_BitInt(N)`/`unsigned _BitInt(N)`),**原宽
+  字节语义**(equal 按 memcmp、hash 折原始字节、dump 打 `0x` 十六进制)——
+  符号性/精度语义在字节之外,需要时走 ops;**显式宏** `FIELD_BITINT`
+  (`_BitInt(N)` 需逐 N 关联,宏本身零编译器依赖);
 - `OPAQUE`:不可描述的目标(`shrewd_basic_reflect_void` 或应用自定义),只能打地址/走 ops;
 - 枚举可扩展(POINTER 等留待未来),所有 switch 都有 `default` 兜底为 `unknown`。
 
@@ -165,6 +176,9 @@ shrewd_basic_reflect_void     /* 不透明目标(OPAQUE),size = 0 */
 | `FIELD_STRING16/32_OWNED(struct_type, member)` | 自有宽字符串:copy 克隆码元内容、destroy 释放 |
 | `FIELD_STRING16/32_BUFFER(struct_type, member)` | `char16_t[N]` / `char32_t[N]` 宽文本缓冲:按码元到 NUL 单元为止 |
 | `FIELD_WSTRING/_OWNED/_BUFFER(struct_type, member)` | `wchar_t` 形态,单元宽度随 `WCHAR_MAX` 编译期归入 16/32 |
+| `FIELD_LONG_DOUBLE(struct_type, member)` | `long double` 标量(也可经 `FIELD_PRIMITIVE` 的 `_Generic` 自动映射) |
+| `FIELD_COMPLEX(struct_type, member)` | 复数成员(`[re, im]` 分量视图,半宽决定分量类型) |
+| `FIELD_BITINT(struct_type, member)` | 位精确整数(`_BitInt(N)`,原宽字节语义) |
 | `FIELD_BITS(struct_type, unit, name, bit_offset, bit_width)` | 真实整数单元内的位组(寄存器位段/协议头):get/set 读改写单元(值零扩展到单元宽度),equal/diff/hash/dump 只看该组的位 |
 | `FIELD_BITS_UNIT(struct_type, name, unit_ref, unit_offset, unit_size, bit_offset, bit_width)` | 显式单元放置的位组(`unit_ref` 不带 `&`):**C 位域成员**用——offsetof 碰不到位域的匿名存储,放置参数取自编译器实际布局(`reflect_gen --backend dwarf` 产出) |
 | `FIELD_UNION(struct_type, member, union_var, tag_member)` | 带标签联合成员:标签在运行时选变体,只有活动变体参与比较/拷贝/释放/渲染 |

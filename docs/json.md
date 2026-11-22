@@ -123,7 +123,10 @@ int shrewd_basic_json_free(object, type);                              /* decode
 | `ENUM` | 常量名字符串(未知值 → number);decode 名称/数字都收 |
 | `STRING` | string(NULL → `null`) |
 | `STRINGBUF` | string(内容到 NUL 为止;decode 至多 count 字符,恰满可不带 NUL) |
-| `STRING16` / `STRING32`(宽字符串) | **暂不支持**:encode/decode 报 `JSON_UNSUPPORTED`(UTF-8 互转是二期);free 路径已识别,不泄漏 |
+| `STRING16` / `STRING32`(宽字符串) | 字符串(UTF-8):encode 严格转出(代理对合成),decode 严格转入(代理对校验);非法码元序列报 `REFLECT_ENCODING`,绝不替换字符;free 路径已识别 |
+| `LONG_DOUBLE` | 数字:JSON 数字模型为 double,**超出 double 精度干净拒绝**(绝不静默取整);NaN/inf 走 `allow_nan` 策略 |
+| `COMPLEX` | `[re, im]` 数组(每个分量按 long double 规则) |
+| `BIT_INT` | **不支持**:encode/decode 报 `JSON_UNSUPPORTED`(JSON 无位精确整数语义,指路 ops);schema 仍描述为 "integer" |
 | `CHAR` | 单字符 string(decode 也接受数字) |
 | `FIELD_BITS` | number(提取值;decode 读改写单元) |
 | 数组族(定长/动态/哨兵/FAM/多维行) | array,多维逐层嵌套 |

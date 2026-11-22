@@ -79,6 +79,9 @@ shrewd_basic_reflect_type_find_field(type, name, out)),便于 Doxygen
 | `SHREWD_BASIC_REFLECT_FIELD_STRING32_OWNED(struct_type, member)` | `char32_t *` 宽字符串(自有) |
 | `SHREWD_BASIC_REFLECT_FIELD_STRING32_BUFFER(struct_type, member)` | `char32_t[N]` 宽文本缓冲 |
 | `SHREWD_BASIC_REFLECT_FIELD_WSTRING/_OWNED/_BUFFER(struct_type, member)` | `wchar_t` 形态,单元宽度随 `WCHAR_MAX` 编译期归入 16/32 |
+| `SHREWD_BASIC_REFLECT_FIELD_LONG_DOUBLE(struct_type, member)` | `long double` 标量(值语义) |
+| `SHREWD_BASIC_REFLECT_FIELD_COMPLEX(struct_type, member)` | 复数成员(`[re, im]` 分量视图) |
+| `SHREWD_BASIC_REFLECT_FIELD_BITINT(struct_type, member)` | 位精确整数(`_BitInt(N)`,原宽字节语义) |
 | `SHREWD_BASIC_REFLECT_FIELD_BITS(struct_type, unit, name, bit_offset, bit_width)` | 位组(`name` 为标签) |
 | `SHREWD_BASIC_REFLECT_FIELD_BITS_UNIT(struct_type, name, unit_ref, unit_offset, unit_size, bit_offset, bit_width)` | 位组(显式单元放置;C 位域用,`unit_ref` 不带 `&`) |
 | `SHREWD_BASIC_REFLECT_UNION_DEFINE(var, union_type, ...)` | union 描述符(变体表) |

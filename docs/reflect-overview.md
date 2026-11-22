@@ -200,6 +200,10 @@ dump 覆盖全部形态:转义字符串、`[ a, b, c ]` 标量数组(32 个封�
 显式宏(`FIELD_STRING16/32` 与 `FIELD_WSTRING` 系列)——刻意不走
 `_Generic` 自动映射,避免 `char32_t`/`unsigned int` 别名吞掉整型指针。
 
+宽标量(`LONG_DOUBLE`/`COMPLEX`/`BIT_INT`)同批补齐:`long double`
+值语义、复数 `[re, im]` 分量语义、位精确整数原宽字节语义(符号性走
+ops);json/bin 侧宽字符串 UTF-8 互转已全支持(严格双向)。
+
 ### 位组
 
 - 值 = 位组**零扩展**到单元宽度;get/set 对单元读改写;

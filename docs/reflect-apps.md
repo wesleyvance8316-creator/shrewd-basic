@@ -100,18 +100,20 @@ visit/diff 全差异已把公共递归做好,每种格式只是叶子层编码:
 
 **状态:⏳ 需求驱动**。与二进制序列化共用"契约式所有权 + 策略行"骨架。
 
-## 5. 宽字符串互转(json/bin 二期)候选
+## 5. 宽字符串互转(json/bin)——已落地
 
-reflect 层的宽字符串(`STRING16`/`STRING32`)已落地([roadmap B4](reflect-roadmap.md));
-json/bin 侧目前对宽字符串干净报 `JSON_UNSUPPORTED`/`BIN_UNSUPPORTED`
-(不静默出错)。待补的互转:
+> 状态:**已完成**(2026-11-22,提交 fca96c4)。reflect 层宽字符串
+> ([roadmap B4](reflect-roadmap.md))与应用层互转全部闭环。
 
-- **json ↔ UTF-8**:encode 转出(代理对合成)、decode 转入(代理对校验);
-- **bin 线格式**:码元序列 + 长度前缀,端序跟随 bin 选项(建议默认小端,
-  文档写死);
-- 自有宽字符串的 free 路径已就绪,互转落地即可闭环。
-
-**状态:⏳ 需求驱动**(UTF-16/32 数据源出现再做)。
+- **json ↔ UTF-8**:encode 转出(代理对合成)、decode 转入(代理对
+  校验),严格双向——非法码元序列报 `REFLECT_ENCODING`,绝不替换字符;
+- **bin 线格式**:码元序列 + 长度前缀(u32 码元数),端序跟随 bin
+  选项;缓冲 = 无 presence 的码元序列,指针 = presence + 码元序列;
+- 共享转换器 `reflect_utf.c`(`reflect_utf8_from_units` /
+  `reflect_units_from_utf8`,strict),自有宽字符串 free 路径闭环;
+- 同批落地的宽标量(json):`LONG_DOUBLE` 数字(double 精度护栏)、
+  `COMPLEX` `[re, im]`、`BIT_INT` 不支持指路 ops;bin 侧三型原宽
+  原始字节。
 
 ---
 
