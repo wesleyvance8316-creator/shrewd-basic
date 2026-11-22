@@ -220,6 +220,9 @@ int shrewd_basic_dbus_attach(const char *name, size_t size,
 - **值语义**:区域内为 reflect 原样布局;`set` = 锁内 memcpy;
   `peek` 直接返回区域地址(零拷贝);OWNED/LINKED 在 shm 下统一为
   "区域持有"(attach 即共享);
+- **进程契约**:每个进程**使用资源前须本进程 `mount`**——挂载注册
+  本地视图与钩子链(钩子进程内语义由此成立),值槽按路径跨进程
+  共享;`attach` 不自动导入他进程的挂载;
 - 进程内钩子链、订阅、CAS、批量全部复用 core(transport 只换
   "值从哪来、往哪写、怎么叫醒")。
 
