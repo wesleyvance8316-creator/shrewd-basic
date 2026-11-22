@@ -10,20 +10,17 @@ data bus.
 - [reflect reference](reflect.md) - the full reflect guide: data model,
   authoring macros, API, dump output, pointer/ops semantics and the
   optional code generator.
-- [reflect overview](reflect-overview.md) - a summary of everything the
-  reflect module supports today: type system, field shapes, API list,
-  semantics and tooling.
 - [reflect API reference](reflect-api.md) - every reflect interface with
   its full name, exact prototype, parameters and return codes, grouped
   by concern (metadata, values, paths, lookup lists, graph algorithms,
   traversal).
-- [reflect applications](reflect-apps.md) - the application layer on
-  reflect: json/bin mappings, the shared text layer, the format family
-  (INI, env/args, CSV, TOML, msgpack, CBOR) and the standing decisions
-  (XML demand-triggered, BSON suspended, YAML via external libs).
-- [formats API reference](formats-api.md) - the text layer and the six
-  format modules: encode/decode round trips, ownership contracts and
-  limits; every interface exercised by programs/formats_demo.c.
+- [requirements](requirements.md) - the consolidated requirements and
+  boundary decisions per module: delivered scope, explicit non-goals
+  and the trigger conditions of demand-driven items.
+- [formats API reference](formats-api.md) - the text layer and the
+  seven format modules (INI, env/args, CSV, TOML, msgpack, CBOR, bin):
+  encode/decode round trips, ownership contracts and limits; every
+  interface exercised by programs/formats_demo.c.
 - [json API reference](json-api.md) - every json interface: options,
   value model, text I/O, struct mapping, policy rows, tools, pull.
 - [annotation guide](annotations.md) - reflect_gen.py annotations per
@@ -33,10 +30,6 @@ data bus.
   data bus: typed namespace with hook chains, inproc and shm data
   planes, batch/coalesce/guard/policy; API overview with usage
   examples, every interface exercised by programs/dbus_demo.c.
-- [reflect roadmap](reflect-roadmap.md) - planned and candidate
-  features of the reflect core with design sketches: type-system
-  extensions, query/diff upgrades, toolchain work and explicit
-  non-goals.
 - [style guide](style.md) - C coding and formatting rules: initializer
   completeness, mandatory braces, per-clause condition parentheses,
   and the clang-format / clang-tidy gate.

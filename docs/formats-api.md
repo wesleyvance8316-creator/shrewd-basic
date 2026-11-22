@@ -1,10 +1,9 @@
 # 格式族 API 总览(文本层 + 六格式)
 
-速查手册:公共文本层与 INI/env/CSV/TOML/msgpack/CBOR 六个格式
-模块的接口与语义。json/bin 各有专册([json-api](json-api.md),
-bin 见 [reflect-apps](reflect-apps.md) §2);分类决策见
-[reflect-apps](reflect-apps.md) §4;演示程序 `programs/formats_demo.c`
-覆盖全部接口。
+速查手册:公共文本层与 INI/env/CSV/TOML/msgpack/CBOR/bin 七个
+格式模块的接口与语义。json 有专册([json-api](json-api.md));
+分类决策与边界见 [requirements](requirements.md) §4–§5;演示程序
+`programs/formats_demo.c` 覆盖全部接口。
 
 **共用契约**:所有权统一 json 模式(decode 先清零、free 只回收内容
 不碰根);叶子互转走公共文本层(严格:拒绝静默窄化/截断);错误码
@@ -109,7 +108,27 @@ int  shrewd_basic_cbor_free(object, type);
 - 形状映射与 msgpack 完全一致(同族二进制格式,共享
   `bin-internal.h` 读写骨架)。
 
-## 7. 使用示例(节选,全量见 programs/formats_demo.c)
+## 7. bin(formats/bin.h)
+
+```c
+int  shrewd_basic_bin_encode(object, type, options, &out_bytes, &out_size);
+int  shrewd_basic_bin_decode(bytes, size, object, type, options);
+int  shrewd_basic_bin_value_size(value, type, &size);   /* FAM 尺寸 */
+int  shrewd_basic_bin_free(object, type);
+void shrewd_basic_bin_bytes_free(bytes);
+```
+
+- struct ↔ bytes 自有线格式:12 字节自描述头("SBIN"+格式版本+
+  flags+用户版本戳)、端序(LE/BE/本机)、自然对齐填充、规范宽度
+  标量(成员宽度不泄漏,ILP32 的 long 仍编 8 字节)、presence/长度
+  前缀的字符串与指针、派生计数的动态数组/哨兵/柔性尾部、tag+活动
+  变体 union、按单元规范宽度的位组、宽串码元序列(BE 可选);
+- 所有权契约同 json(decode 清零、free 递归回收);环无线上表示
+  (报错,共享目标按树展开);
+- **需求驱动缺口**:`ops->get/set` 与 opaque 字段暂无线格式(触发
+  即做,见 [requirements](requirements.md) §4)。
+
+## 8. 使用示例(节选,全量见 programs/formats_demo.c)
 
 ```c
 /* INI 配置往返 */
@@ -132,7 +151,7 @@ shrewd_basic_msgpack_encode(&obj, &obj_reflect, &bytes, &size);
 shrewd_basic_cbor_encode(&obj, &obj_reflect, &bytes, &size);
 ```
 
-## 8. 已知限制
+## 9. 已知限制
 
 - TOML 子集边界见 §4(拒绝清单逐项带行号);CSV 借用串拒绝
   (scan_text 契约);msgpack/CBOR 的 BIT_INT 走 ops 逃生口;
