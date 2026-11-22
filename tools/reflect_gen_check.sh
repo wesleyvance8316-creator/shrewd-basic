@@ -14,6 +14,14 @@ root=$(dirname "$here")
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
+# The dwarf rounds need pyelftools; skip loudly (77 = ctest SKIP) rather
+# than fail or pretend - never a silent drop.
+if ! python3 -c "import elftools" 2> /dev/null; then
+    echo "reflect_gen_check: SKIPPED - needs python3-pyelftools" >&2
+    echo "  install: sudo apt install -y python3-pyelftools" >&2
+    exit 77
+fi
+
 lib_sources="$root/library/reflect/*.c $root/library/ds/rbtree.c $root/library/ds/ds.c $root/library/log/log.c $root/library/platform/error.c $root/library/platform/memory.c"
 
 compile_smoke() {

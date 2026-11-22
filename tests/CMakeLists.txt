@@ -87,3 +87,57 @@ endif()
 if(SHREWD_BASIC_FORMAT_BIN)
 add_test(NAME shrewd-basic.bin COMMAND shrewd-basic-bin-tests)
 endif()
+
+# --- Generator dogfood: generate stubs at build time (lex backend,
+# python3 only) into the build directory and smoke-test them.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_FOUND)
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/gen/generated.h ${CMAKE_CURRENT_BINARY_DIR}/gen/generated.c
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/gen
+        COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/reflect_gen.py
+                ${PROJECT_SOURCE_DIR}/tools/reflect_gen_sample.h
+                -o ${CMAKE_CURRENT_BINARY_DIR}/gen/generated --quiet
+        DEPENDS ${PROJECT_SOURCE_DIR}/tools/reflect_gen.py
+                ${PROJECT_SOURCE_DIR}/tools/reflect_gen_sample.h
+        COMMENT "reflect_gen: sample stubs")
+    add_executable(shrewd-basic-gen-tests
+            ${PROJECT_SOURCE_DIR}/tools/reflect_gen_smoke.c
+            ${CMAKE_CURRENT_BINARY_DIR}/gen/generated.c)
+    target_include_directories(shrewd-basic-gen-tests
+            PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/gen ${PROJECT_SOURCE_DIR}/tools)
+    target_link_libraries(shrewd-basic-gen-tests
+            PRIVATE
+                shrewd-basic
+                shrewd-basic-warnings)
+    add_test(NAME shrewd-basic.gen COMMAND shrewd-basic-gen-tests)
+
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/gen_ann/generated.h
+               ${CMAKE_CURRENT_BINARY_DIR}/gen_ann/generated.c
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/gen_ann
+        COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/reflect_gen.py
+                ${PROJECT_SOURCE_DIR}/tools/reflect_gen_sample_ann.h
+                -o ${CMAKE_CURRENT_BINARY_DIR}/gen_ann/generated --quiet
+        DEPENDS ${PROJECT_SOURCE_DIR}/tools/reflect_gen.py
+                ${PROJECT_SOURCE_DIR}/tools/reflect_gen_sample_ann.h
+        COMMENT "reflect_gen: annotation stubs")
+    add_executable(shrewd-basic-gen-ann-tests
+            ${PROJECT_SOURCE_DIR}/tools/reflect_gen_ann_smoke.c
+            ${CMAKE_CURRENT_BINARY_DIR}/gen_ann/generated.c)
+    target_include_directories(shrewd-basic-gen-ann-tests
+            PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/gen_ann ${PROJECT_SOURCE_DIR}/tools)
+    target_link_libraries(shrewd-basic-gen-ann-tests
+            PRIVATE
+                shrewd-basic
+                shrewd-basic-warnings)
+    add_test(NAME shrewd-basic.gen-ann COMMAND shrewd-basic-gen-ann-tests)
+
+    # Full generator self-test (dwarf backend, golden, layout). Skips
+    # with a loud message when python3-pyelftools is absent (exit 77).
+    if(NOT WIN32)
+        add_test(NAME shrewd-basic.gen-check
+                 COMMAND ${PROJECT_SOURCE_DIR}/tools/reflect_gen_check.sh)
+        set_tests_properties(shrewd-basic.gen-check PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
+endif()
