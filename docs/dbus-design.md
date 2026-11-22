@@ -188,11 +188,14 @@ typedef int (*shrewd_basic_dbus_recv_fn)(void *ctx,
 
 1. **一期 ✅(2026-11-22)**:§2–§8 全量 inproc——访问族、九宫格
    钩子、路由(`*`/`/**`)、异步分发 + `drain`、export/import/dump;
-2. **二期(建设中)**:shm transport + ABI 指纹校验;
-3. **三期(建设中)**:批量/事务、通知合并、权限钩子、json 策略行
-   并入 pre_set。
+2. **二期 ✅(2026-11-22)**:shm transport(robust mutex、ABI 指纹、
+   变更环 + 进程共享 cond 唤醒——原 eventfd 方案证伪:fd 进程私有,
+   跨进程写不成立)+ 两进程冒烟;
+3. **三期 ✅(2026-11-22)**:set_many(全有或全无)/get_many、
+   coalesce、make_guard、make_policy_ops(RANGE 校验落 CORE get/set
+   虚拟包装——pre_set 无值读取器的 API 缺口,偏差见文件注释)。
 
-## 10. 二期:shm transport(契约)
+## 10. 二期:shm transport(契约,**已落地**)
 
 **选型依据**:钩子是**进程内语义**(驱动映射必须在本进程跑)——
 shm 数据面让各进程挂自己的钩子链、读写共享值;daemon 模型会把钩子
@@ -220,7 +223,7 @@ int shrewd_basic_dbus_attach(const char *name, size_t size,
 - 进程内钩子链、订阅、CAS、批量全部复用 core(transport 只换
   "值从哪来、往哪写、怎么叫醒")。
 
-## 11. 三期:增强(契约)
+## 11. 三期:增强(契约,**已落地**)
 
 ```c
 /* 批量/事务:全有或全无(CAS 逐个核对,整体提交;失败零提交) */
