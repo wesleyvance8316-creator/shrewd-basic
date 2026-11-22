@@ -10,8 +10,11 @@
 
 #include "shrewd-basic/reflect/reflect.h"
 
+#include "shrewd-basic/formats/json.h"
+
 #include "config.h"
 #include "config_reflect.h"
+#include "config_reflect_json.h"
 
 int main(void) {
     demo_config_t cfg;
@@ -41,6 +44,17 @@ int main(void) {
     }
     if (SHREWD_BASIC_ERR_OK != shrewd_basic_reflect_dump(&demo_config_t_reflect, &cfg, "cfg")) {
         return 1;
+    }
+    /* JSON policy table: encode honors the "label" rename. */
+    {
+        char *text = NULL;
+        if (SHREWD_BASIC_ERR_OK
+            != shrewd_basic_json_encode(
+                &cfg, &demo_config_t_reflect, &demo_config_t_json, &text, NULL, NULL)) {
+            return 1;
+        }
+        printf("json: %s\n", text);
+        shrewd_basic_json_text_free(text);
     }
     printf("demo: ok (generated descriptors work)\n");
     return 0;

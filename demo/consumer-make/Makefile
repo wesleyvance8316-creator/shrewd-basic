@@ -12,7 +12,7 @@ ROOT    := $(abspath $(HERE)/../..)
 BUILD   := $(HERE)build
 
 GEN     := $(BUILD)/config_reflect
-STUBS   := $(GEN).c $(GEN).h
+STUBS   := $(GEN).c $(GEN).h $(GEN)_json.c $(GEN)_json.h
 LIB_SRC := $(wildcard $(ROOT)/library/*/*.c)
 DEMO    := $(BUILD)/config_demo
 
@@ -29,7 +29,7 @@ $(STUBS): $(HERE)config.h $(ROOT)/tools/reflect_gen.py
 	$(PYTHON) $(ROOT)/tools/reflect_gen.py $(HERE)config.h -o $(GEN) --quiet
 
 $(DEMO): $(HERE)main.c $(STUBS) $(LIB_SRC)
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(HERE)main.c $(GEN).c $(LIB_SRC) -o $@
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(HERE)main.c $(GEN).c $(GEN)_json.c $(LIB_SRC) -o $@
 
 run: $(DEMO)
 	$(DEMO)

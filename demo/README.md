@@ -10,9 +10,11 @@
 
 两者共用同一模式:
 
-1. **头文件带注解**(`/* reflect: type=NAME */` 严格点名 + 成员意图指令);
-2. **构建期跑生成器**,产物落在构建目录(源树不落生成物);
-3. **应用代码** `#include` 生成的 `.h`,与手写描述符同款使用。
+1. **头文件带注解**(`/* reflect: type=NAME; */` 严格点名 + 成员意图
+   指令,可混 `json:` 命名空间生成 JSON 策略表);
+2. **构建期跑生成器**,产物落在构建目录(源树不落生成物):
+   `config_reflect.{c,h}` 描述符 + `config_reflect_json.{c,h}` 策略表;
+3. **应用代码** `#include` 生成的 `.h`,与手写描述符/策略同款使用。
 
 生成器依赖:`consumer-cmake` 只需 python3(词法后端,构建期默认);
 `consumer-make` 同。`--backend dwarf` 需另装 `python3-pyelftools`,用于

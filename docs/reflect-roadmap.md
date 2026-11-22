@@ -26,7 +26,7 @@
 | P2 直接可实现 | ✅ 全部完成 | B2 匿名成员、C2 布局报告、C3 diff_all、D1 环哈希、D2 分配器注入 |
 | P2 工具线 | ✅ 全部完成 | G1 DWARF 后端、B1 位域、G2 轻量版(--layout) |
 | P2 需求驱动 | ✅ 已完成(reflect 层) | B4 宽字符 |
-| 生成器深化 | ✅ 全部完成 | 严格点名注解(type=/member=)、宽字符串识别、union 生成(union_tag=/case=)、引用闭包硬错误、golden 对账、CMake/Make 下游 demo |
+| 生成器深化 | ✅ 全部完成 | 严格点名注解(type=/member=)、宽字符串识别、union 生成(union_tag=/case=)、引用闭包硬错误、golden 对账、CMake/Make 下游 demo;注解语法 v2(C 语句式)+ json 策略桩生成(`json:` 命名空间 → `<output>_json.{c,h}`) |
 | P3 条件性 | ⏳ 跟踪 | B3 宽标量、C4/C5、H1 |
 
 **验证矩阵**:native / clang / ILP32(ELF 32-bit)/ MSVC(真 cl.exe +
