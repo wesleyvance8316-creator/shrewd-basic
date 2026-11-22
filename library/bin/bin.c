@@ -370,6 +370,12 @@ static int bin_encode_value(bin_ctx_t *ctx,
             return bin_w_word(&ctx->w, bits, 8);
         }
     }
+    case SHREWD_BASIC_REFLECT_KIND_LONG_DOUBLE:
+    case SHREWD_BASIC_REFLECT_KIND_COMPLEX:
+    case SHREWD_BASIC_REFLECT_KIND_BIT_INT:
+        /* Raw-width wire in native order: x87/complex/bit-int shapes
+           have no portable byte order. */
+        return bin_w_bytes(&ctx->w, value, nbytes);
     case SHREWD_BASIC_REFLECT_KIND_STRING: {
         const char *text = reflect_load_str(value);
         if (NULL == text) {
@@ -741,6 +747,11 @@ static int bin_decode_value(bin_ctx_t *ctx,
         }
         return status;
     }
+    case SHREWD_BASIC_REFLECT_KIND_LONG_DOUBLE:
+    case SHREWD_BASIC_REFLECT_KIND_COMPLEX:
+    case SHREWD_BASIC_REFLECT_KIND_BIT_INT:
+        /* Raw-width wire in native order (mirror of the encoder). */
+        return bin_r_bytes(&ctx->r, out, nbytes);
     case SHREWD_BASIC_REFLECT_KIND_STRING: {
         uint64_t present = 0;
         uint64_t length = 0;

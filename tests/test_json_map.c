@@ -9,6 +9,7 @@
  * arrays, unknown keys) and the error paths (paths in errors, cycles).
  */
 
+#include <float.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -253,6 +254,81 @@ static int map_sink_write(void *ctx, const char *data, size_t length) {
     *cursor += length;
     **cursor = '\0';
     return SHREWD_BASIC_ERR_OK;
+}
+
+/* --- wide scalars (LONG_DOUBLE / COMPLEX / BIT_INT) --------------------- */
+
+typedef struct {
+    long double wide;
+    double pair[2];
+} wscalar_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(wscalar_reflect,
+                                 wscalar_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_LONG_DOUBLE(wscalar_t, wide),
+                                 SHREWD_BASIC_REFLECT_FIELD_COMPLEX(wscalar_t, pair));
+
+typedef struct {
+    int32_t bits;
+} wbit_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(wbit_reflect,
+                                 wbit_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_BITINT(wbit_t, bits));
+
+static void test_wscalars(void) {
+    wscalar_t src;
+    memset(&src, 0, sizeof(src));
+    src.wide = 2.5L;
+    src.pair[0] = 1.25;
+    src.pair[1] = -3.5;
+    expect_encode("wscalar encode", &src, &wscalar_reflect, "{\"wide\":2.5,\"pair\":[1.25,-3.5]}");
+
+    /* Round trip through the DOM. */
+    {
+        wscalar_t *clone = NULL;
+        bool same = false;
+        char *text = NULL;
+        expect_eq_int("wscalar roundtrip encode",
+                      shrewd_basic_json_encode(&src, &wscalar_reflect, NULL, &text, NULL, NULL),
+                      SHREWD_BASIC_ERR_OK);
+        clone = decode_new("wscalar roundtrip", text, &wscalar_reflect, sizeof(wscalar_t));
+        shrewd_basic_json_text_free(text);
+        if (NULL != clone) {
+            expect_eq_int("wscalar roundtrip equal",
+                          shrewd_basic_reflect_equal(&src, clone, &wscalar_reflect, &same),
+                          SHREWD_BASIC_ERR_OK);
+            expect_true("wscalar roundtrip same", same);
+            expect_eq_int(
+                "wscalar roundtrip free", free_new(clone, &wscalar_reflect), SHREWD_BASIC_ERR_OK);
+        }
+    }
+
+#if LDBL_MANT_DIG > DBL_MANT_DIG
+    /* Beyond the double number model: clean refusal, never a silent
+       round. Only exists where long double carries more precision than
+       double (x87/quad); where they coincide the value is exactly
+       representable and must encode. */
+    src.wide = 1.0L + (long double)1.0e-18;
+    {
+        char *text = NULL;
+        expect_eq_int("wscalar precision refused",
+                      shrewd_basic_json_encode(&src, &wscalar_reflect, NULL, &text, NULL, NULL),
+                      SHREWD_BASIC_ERR_JSON_UNSUPPORTED);
+        expect_true("wscalar precision no text", NULL == text);
+    }
+#endif
+
+    /* bit-int has no JSON form at all: the refusal is per kind. */
+    {
+        wbit_t bits;
+        char *text = NULL;
+        memset(&bits, 0, sizeof(bits));
+        expect_eq_int("wbit refused",
+                      shrewd_basic_json_encode(&bits, &wbit_reflect, NULL, &text, NULL, NULL),
+                      SHREWD_BASIC_ERR_JSON_UNSUPPORTED);
+        expect_true("wbit no text", NULL == text);
+    }
 }
 
 static void test_encode_person(void) {
@@ -711,6 +787,7 @@ int main(void) {
         (void)shrewd_basic_log_module_set_level(module, SHREWD_BASIC_LOG_LEVEL_NONE);
     }
 
+    test_wscalars();
     test_encode_person();
     test_decode_rules();
     test_union();

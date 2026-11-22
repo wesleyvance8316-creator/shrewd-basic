@@ -3484,6 +3484,89 @@ static void test_wide_ops(void) {
     expect_true("wide ops hook ran", same && (0 < g_wide_ops_equal_calls));
 }
 
+/* --- wide scalars (LONG_DOUBLE / COMPLEX / BIT_INT) --------------------- */
+
+typedef struct {
+    long double wide;
+    double pair[2];
+    int32_t bits;
+} wscalar_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_wscalar_reflect,
+                                 wscalar_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_LONG_DOUBLE(wscalar_t, wide),
+                                 SHREWD_BASIC_REFLECT_FIELD_COMPLEX(wscalar_t, pair),
+                                 SHREWD_BASIC_REFLECT_FIELD_BITINT(wscalar_t, bits));
+
+static void test_wscalar(void) {
+    /* Descriptor shapes. */
+    const shrewd_basic_reflect_field_t *wide = find_or_fail("wscalar", &g_wscalar_reflect, "wide");
+    const shrewd_basic_reflect_field_t *pair = find_or_fail("wscalar", &g_wscalar_reflect, "pair");
+    const shrewd_basic_reflect_field_t *bits = find_or_fail("wscalar", &g_wscalar_reflect, "bits");
+    if ((NULL == wide) || (NULL == pair) || (NULL == bits)) {
+        return;
+    }
+    expect_true("wscalar kinds",
+                (SHREWD_BASIC_REFLECT_KIND_LONG_DOUBLE == wide->sb_refl_type->sb_refl_kind)
+                    && (SHREWD_BASIC_REFLECT_KIND_COMPLEX == pair->sb_refl_type->sb_refl_kind)
+                    && (SHREWD_BASIC_REFLECT_KIND_BIT_INT == bits->sb_refl_type->sb_refl_kind));
+
+    /* Value semantics for long double and complex halves; byte
+       semantics for the bit-int member. */
+    wscalar_t left = {0};
+    wscalar_t right = {0};
+    memset(&left, 0, sizeof(left));
+    memset(&right, 0, sizeof(right));
+    left.wide = 1.5L;
+    right.wide = 1.5L;
+    left.pair[0] = 2.5;
+    left.pair[1] = -3.25;
+    right.pair[0] = 2.5;
+    right.pair[1] = -3.25;
+    left.bits = 0x01020304;
+    right.bits = 0x01020304;
+    bool same = false;
+    expect_eq_int("wscalar equal",
+                  shrewd_basic_reflect_equal(&left, &right, &g_wscalar_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wscalar same", same);
+
+    /* The equal/hash contract: equal values hash equal. */
+    size_t hash_left = 0;
+    size_t hash_right = 0;
+    expect_eq_int("wscalar hash left",
+                  shrewd_basic_reflect_hash(&left, &g_wscalar_reflect, &hash_left),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("wscalar hash right",
+                  shrewd_basic_reflect_hash(&right, &g_wscalar_reflect, &hash_right),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wscalar hash match", hash_left == hash_right);
+
+    /* Inequality fires per component / per value. */
+    right.pair[1] = 0.0;
+    expect_eq_int("wscalar complex diff",
+                  shrewd_basic_reflect_equal(&left, &right, &g_wscalar_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wscalar complex unequal", !same);
+    right.pair[1] = -3.25;
+    right.wide = 1.25L;
+    expect_eq_int("wscalar long double diff",
+                  shrewd_basic_reflect_equal(&left, &right, &g_wscalar_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wscalar long double unequal", !same);
+    right.wide = 1.5L;
+    right.bits = 0x01020305;
+    expect_eq_int("wscalar bit-int diff",
+                  shrewd_basic_reflect_equal(&left, &right, &g_wscalar_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wscalar bit-int unequal", !same);
+
+    /* dump renders the three shapes without error. */
+    expect_eq_int("wscalar dump",
+                  shrewd_basic_reflect_dump(&g_wscalar_reflect, &left, "wscalar"),
+                  SHREWD_BASIC_ERR_OK);
+}
+
 /* int32_t cube[2][2][2]: rows nest (row of rows). */
 typedef struct {
     int32_t cube[2][2][2];
@@ -4785,6 +4868,7 @@ int main(void) {
     test_cbit();
     test_wstring();
     test_wide_ops();
+    test_wscalar();
     test_multidim();
     test_union();
     test_graph_ops();

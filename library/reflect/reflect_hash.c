@@ -237,6 +237,19 @@ static int hash_content_value(hash_ctx_t *ctx,
         *h = hash_u64(*h, bits);
         return SHREWD_BASIC_ERR_OK;
     }
+    case SHREWD_BASIC_REFLECT_KIND_LONG_DOUBLE:
+        *h = hash_u64(*h, reflect_ld_hash_bits(reflect_load_ld(value, nbytes)));
+        return SHREWD_BASIC_ERR_OK;
+    case SHREWD_BASIC_REFLECT_KIND_COMPLEX: {
+        size_t half = nbytes / 2;
+        *h = hash_u64(*h, reflect_ld_hash_bits(reflect_load_cpart(value, half)));
+        *h = hash_u64(*h, reflect_ld_hash_bits(reflect_load_cpart(value + half, half)));
+        return SHREWD_BASIC_ERR_OK;
+    }
+    case SHREWD_BASIC_REFLECT_KIND_BIT_INT:
+        /* Byte semantics: fold the raw width (padding bits included). */
+        *h = hash_bytes(*h, value, nbytes);
+        return SHREWD_BASIC_ERR_OK;
     case SHREWD_BASIC_REFLECT_KIND_STRING:
     case SHREWD_BASIC_REFLECT_KIND_STRING16:
     case SHREWD_BASIC_REFLECT_KIND_STRING32: {

@@ -140,6 +140,30 @@ const shrewd_basic_reflect_type_t shrewd_basic_reflect_string32
        .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
        .sb_refl_field_count = 0,
        .sb_refl_fields = NULL};
+const shrewd_basic_reflect_type_t shrewd_basic_reflect_long_double
+    = {.sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_LONG_DOUBLE,
+       .sb_refl_name = "long double",
+       .sb_refl_size = sizeof(long double),
+       .sb_refl_align = _Alignof(long double),
+       .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
+       .sb_refl_field_count = 0,
+       .sb_refl_fields = NULL};
+const shrewd_basic_reflect_type_t shrewd_basic_reflect_complex
+    = {.sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_COMPLEX,
+       .sb_refl_name = "complex",
+       .sb_refl_size = 0,
+       .sb_refl_align = 0,
+       .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
+       .sb_refl_field_count = 0,
+       .sb_refl_fields = NULL};
+const shrewd_basic_reflect_type_t shrewd_basic_reflect_bit_int
+    = {.sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_BIT_INT,
+       .sb_refl_name = "bit-int",
+       .sb_refl_size = 0,
+       .sb_refl_align = 0,
+       .sb_refl_abi = SHREWD_BASIC_REFLECT_ABI,
+       .sb_refl_field_count = 0,
+       .sb_refl_fields = NULL};
 const shrewd_basic_reflect_type_t shrewd_basic_reflect_void
     = {.sb_refl_kind = SHREWD_BASIC_REFLECT_KIND_OPAQUE,
        .sb_refl_name = "void",
@@ -183,6 +207,12 @@ const char *shrewd_basic_reflect_kind_name(shrewd_basic_reflect_kind_t kind) {
         return "string16";
     case SHREWD_BASIC_REFLECT_KIND_STRING32:
         return "string32";
+    case SHREWD_BASIC_REFLECT_KIND_LONG_DOUBLE:
+        return "long double";
+    case SHREWD_BASIC_REFLECT_KIND_COMPLEX:
+        return "complex";
+    case SHREWD_BASIC_REFLECT_KIND_BIT_INT:
+        return "bit-int";
     case SHREWD_BASIC_REFLECT_KIND_STRUCT:
         return "struct";
     case SHREWD_BASIC_REFLECT_KIND_ARRAY:
@@ -578,6 +608,9 @@ int shrewd_basic_reflect_check_type(const shrewd_basic_reflect_type_t *type) {
     case SHREWD_BASIC_REFLECT_KIND_STRING:
     case SHREWD_BASIC_REFLECT_KIND_STRING16:
     case SHREWD_BASIC_REFLECT_KIND_STRING32:
+    case SHREWD_BASIC_REFLECT_KIND_LONG_DOUBLE:
+    case SHREWD_BASIC_REFLECT_KIND_COMPLEX:
+    case SHREWD_BASIC_REFLECT_KIND_BIT_INT:
     case SHREWD_BASIC_REFLECT_KIND_OPAQUE:
         break;
     default:

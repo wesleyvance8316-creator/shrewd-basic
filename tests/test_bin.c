@@ -214,6 +214,36 @@ static int round_trip_equal(const void *src,
 
 /* --- tests ------------------------------------------------------------- */
 
+/* Wide scalars: raw-width wire in native order. */
+typedef struct {
+    long double wide;
+    double pair[2];
+    int32_t bits;
+} wscalars_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_wscalars_reflect,
+                                 wscalars_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_LONG_DOUBLE(wscalars_t, wide),
+                                 SHREWD_BASIC_REFLECT_FIELD_COMPLEX(wscalars_t, pair),
+                                 SHREWD_BASIC_REFLECT_FIELD_BITINT(wscalars_t, bits));
+
+static void test_wscalars(void) {
+    wscalars_t src;
+    wscalars_t dst;
+    bool same = false;
+    memset(&src, 0, sizeof(src));
+    src.wide = 2.75L;
+    src.pair[0] = 1.5;
+    src.pair[1] = -0.25;
+    src.bits = -77;
+    expect_eq_int("wscalars round trip",
+                  round_trip_equal(&src, &g_wscalars_reflect, NULL, &dst, sizeof(dst), &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wscalars equal", same);
+    expect_eq_int(
+        "wscalars free", shrewd_basic_bin_free(&dst, &g_wscalars_reflect), SHREWD_BASIC_ERR_OK);
+}
+
 static void test_scalars(void) {
     scalars_t src;
     scalars_t dst;
@@ -597,6 +627,7 @@ static void test_errors(void) {
 }
 
 int main(void) {
+    test_wscalars();
     test_scalars();
     test_endian_layout();
     test_strings();

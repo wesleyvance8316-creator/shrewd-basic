@@ -132,6 +132,20 @@ static int reflect_equal_value(const shrewd_basic_reflect_type_t *type,
     case SHREWD_BASIC_REFLECT_KIND_DOUBLE:
         *out_equal = (reflect_load_f64(a, nbytes) == reflect_load_f64(b, nbytes));
         return SHREWD_BASIC_ERR_OK;
+    case SHREWD_BASIC_REFLECT_KIND_LONG_DOUBLE:
+        *out_equal = (reflect_load_ld(a, nbytes) == reflect_load_ld(b, nbytes));
+        return SHREWD_BASIC_ERR_OK;
+    case SHREWD_BASIC_REFLECT_KIND_COMPLEX: {
+        size_t half = nbytes / 2;
+        *out_equal
+            = ((reflect_load_cpart(a, half) == reflect_load_cpart(b, half))
+               && (reflect_load_cpart(a + half, half) == reflect_load_cpart(b + half, half)));
+        return SHREWD_BASIC_ERR_OK;
+    }
+    case SHREWD_BASIC_REFLECT_KIND_BIT_INT:
+        /* Byte semantics: raw-width compare, padding bits included. */
+        *out_equal = (0 == memcmp(a, b, nbytes));
+        return SHREWD_BASIC_ERR_OK;
     case SHREWD_BASIC_REFLECT_KIND_STRING:
     case SHREWD_BASIC_REFLECT_KIND_STRING16:
     case SHREWD_BASIC_REFLECT_KIND_STRING32: {
@@ -674,6 +688,21 @@ static int diff_all_value(const shrewd_basic_reflect_type_t *type,
     case SHREWD_BASIC_REFLECT_KIND_FLOAT:
     case SHREWD_BASIC_REFLECT_KIND_DOUBLE:
         return (reflect_load_f64(a, nbytes) == reflect_load_f64(b, nbytes))
+                   ? SHREWD_BASIC_ERR_OK
+                   : diff_all_report(all, diff, SHREWD_BASIC_REFLECT_DIFF_VALUE);
+    case SHREWD_BASIC_REFLECT_KIND_LONG_DOUBLE:
+        return (reflect_load_ld(a, nbytes) == reflect_load_ld(b, nbytes))
+                   ? SHREWD_BASIC_ERR_OK
+                   : diff_all_report(all, diff, SHREWD_BASIC_REFLECT_DIFF_VALUE);
+    case SHREWD_BASIC_REFLECT_KIND_COMPLEX: {
+        size_t half = nbytes / 2;
+        int same = ((reflect_load_cpart(a, half) == reflect_load_cpart(b, half))
+                    && (reflect_load_cpart(a + half, half) == reflect_load_cpart(b + half, half)));
+        return (same) ? SHREWD_BASIC_ERR_OK
+                      : diff_all_report(all, diff, SHREWD_BASIC_REFLECT_DIFF_VALUE);
+    }
+    case SHREWD_BASIC_REFLECT_KIND_BIT_INT:
+        return (0 == memcmp(a, b, nbytes))
                    ? SHREWD_BASIC_ERR_OK
                    : diff_all_report(all, diff, SHREWD_BASIC_REFLECT_DIFF_VALUE);
     case SHREWD_BASIC_REFLECT_KIND_STRING:

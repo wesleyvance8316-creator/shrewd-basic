@@ -130,7 +130,17 @@ typedef enum shrewd_basic_reflect_kind {
      * automatic association would silently steal plain integer pointers.
      */
     SHREWD_BASIC_REFLECT_KIND_STRING16, /**< char16_t * / wchar_t * (16-bit units). */
-    SHREWD_BASIC_REFLECT_KIND_STRING32  /**< char32_t * / wchar_t * (32-bit units). */
+    SHREWD_BASIC_REFLECT_KIND_STRING32, /**< char32_t * / wchar_t * (32-bit units). */
+    /*
+     * Wide scalars (appended the same way): long double keeps value
+     * semantics like float/double; complex compares and hashes its two
+     * halves value-wise; bit-precise integers are raw-width byte
+     * semantics (equal memcmp, dump hex) - value semantics there needs
+     * the ops escape hatch (signedness/precision live outside the bytes).
+     */
+    SHREWD_BASIC_REFLECT_KIND_LONG_DOUBLE, /**< long double scalar. */
+    SHREWD_BASIC_REFLECT_KIND_COMPLEX,     /**< Complex scalar: [re, im] halves in one member. */
+    SHREWD_BASIC_REFLECT_KIND_BIT_INT      /**< _BitInt(N) / unsigned _BitInt(N): byte semantics. */
 } shrewd_basic_reflect_kind_t;
 
 typedef struct shrewd_basic_reflect_type shrewd_basic_reflect_type_t;
@@ -320,6 +330,9 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_double;
 extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_string;
 extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_string16;
 extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_string32;
+extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_long_double;
+extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_complex;
+extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_bit_int;
 extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
 
 /*
@@ -344,6 +357,7 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
         unsigned long long: &shrewd_basic_reflect_uint64,                                          \
         float: &shrewd_basic_reflect_float,                                                        \
         double: &shrewd_basic_reflect_double,                                                      \
+        long double: &shrewd_basic_reflect_long_double,                                            \
         char *: &shrewd_basic_reflect_string,                                                      \
         const char *: &shrewd_basic_reflect_string)
 
@@ -665,6 +679,73 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
      .sb_refl_count = (size_t)1,                                                                   \
      .sb_refl_stride = sizeof(((struct_type *)0)->member),                                         \
      .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED,                                   \
+     .sb_refl_ops = &(ops_ref)}
+
+/*
+ * Wide scalars. LONG_DOUBLE binds through _Generic like float/double
+ * (value semantics: equal by ==, dump in decimal). COMPLEX and BIT_INT
+ * are explicit macros - no _Generic association: complex types are
+ * optional-ish across compilers (MSVC) and _BitInt(N) would need one
+ * association per N. COMPLEX treats a member as [re, im] halves (float/
+ * double/long double per half width, value semantics); BIT_INT is
+ * raw-width byte semantics (equal memcmp, dump hex bytes) - use an ops
+ * vtable when the signedness/precision semantics matter.
+ */
+#define SHREWD_BASIC_REFLECT_FIELD_LONG_DOUBLE(struct_type, member)                                \
+    {.sb_refl_name = #member,                                                                      \
+     .sb_refl_type = &shrewd_basic_reflect_long_double,                                            \
+     .sb_refl_offset = offsetof(struct_type, member),                                              \
+     .sb_refl_size = sizeof(((struct_type *)0)->member),                                           \
+     .sb_refl_count = (size_t)1,                                                                   \
+     .sb_refl_stride = sizeof(((struct_type *)0)->member),                                         \
+     .sb_refl_flags = (uint32_t)0}
+
+#define SHREWD_BASIC_REFLECT_FIELD_LONG_DOUBLE_OPS(struct_type, member, ops_ref)                   \
+    {.sb_refl_name = #member,                                                                      \
+     .sb_refl_type = &shrewd_basic_reflect_long_double,                                            \
+     .sb_refl_offset = offsetof(struct_type, member),                                              \
+     .sb_refl_size = sizeof(((struct_type *)0)->member),                                           \
+     .sb_refl_count = (size_t)1,                                                                   \
+     .sb_refl_stride = sizeof(((struct_type *)0)->member),                                         \
+     .sb_refl_flags = (uint32_t)0,                                                                 \
+     .sb_refl_ops = &(ops_ref)}
+
+#define SHREWD_BASIC_REFLECT_FIELD_COMPLEX(struct_type, member)                                    \
+    {.sb_refl_name = #member,                                                                      \
+     .sb_refl_type = &shrewd_basic_reflect_complex,                                                \
+     .sb_refl_offset = offsetof(struct_type, member),                                              \
+     .sb_refl_size = sizeof(((struct_type *)0)->member),                                           \
+     .sb_refl_count = (size_t)1,                                                                   \
+     .sb_refl_stride = sizeof(((struct_type *)0)->member),                                         \
+     .sb_refl_flags = (uint32_t)0}
+
+#define SHREWD_BASIC_REFLECT_FIELD_COMPLEX_OPS(struct_type, member, ops_ref)                       \
+    {.sb_refl_name = #member,                                                                      \
+     .sb_refl_type = &shrewd_basic_reflect_complex,                                                \
+     .sb_refl_offset = offsetof(struct_type, member),                                              \
+     .sb_refl_size = sizeof(((struct_type *)0)->member),                                           \
+     .sb_refl_count = (size_t)1,                                                                   \
+     .sb_refl_stride = sizeof(((struct_type *)0)->member),                                         \
+     .sb_refl_flags = (uint32_t)0,                                                                 \
+     .sb_refl_ops = &(ops_ref)}
+
+#define SHREWD_BASIC_REFLECT_FIELD_BITINT(struct_type, member)                                     \
+    {.sb_refl_name = #member,                                                                      \
+     .sb_refl_type = &shrewd_basic_reflect_bit_int,                                                \
+     .sb_refl_offset = offsetof(struct_type, member),                                              \
+     .sb_refl_size = sizeof(((struct_type *)0)->member),                                           \
+     .sb_refl_count = (size_t)1,                                                                   \
+     .sb_refl_stride = sizeof(((struct_type *)0)->member),                                         \
+     .sb_refl_flags = (uint32_t)0}
+
+#define SHREWD_BASIC_REFLECT_FIELD_BITINT_OPS(struct_type, member, ops_ref)                        \
+    {.sb_refl_name = #member,                                                                      \
+     .sb_refl_type = &shrewd_basic_reflect_bit_int,                                                \
+     .sb_refl_offset = offsetof(struct_type, member),                                              \
+     .sb_refl_size = sizeof(((struct_type *)0)->member),                                           \
+     .sb_refl_count = (size_t)1,                                                                   \
+     .sb_refl_stride = sizeof(((struct_type *)0)->member),                                         \
+     .sb_refl_flags = (uint32_t)0,                                                                 \
      .sb_refl_ops = &(ops_ref)}
 
 /*

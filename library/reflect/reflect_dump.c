@@ -284,6 +284,26 @@ static void dump_scalar(dump_ctx_t *ctx,
     case SHREWD_BASIC_REFLECT_KIND_DOUBLE:
         dump_append(ctx, "%g", reflect_load_f64(bytes, nbytes));
         break;
+    case SHREWD_BASIC_REFLECT_KIND_LONG_DOUBLE:
+        dump_append(ctx, "%Lg", reflect_load_ld(bytes, nbytes));
+        break;
+    case SHREWD_BASIC_REFLECT_KIND_COMPLEX: {
+        /* C literal shape: 1.5+2.5i (imag part carries its own sign). */
+        size_t half = nbytes / 2;
+        dump_append(ctx,
+                    "%Lg%+Lgi",
+                    reflect_load_cpart(bytes, half),
+                    reflect_load_cpart(bytes + half, half));
+        break;
+    }
+    case SHREWD_BASIC_REFLECT_KIND_BIT_INT: {
+        /* Byte semantics: raw width in hex, high byte first. */
+        dump_append(ctx, "0x");
+        for (size_t i = nbytes; i > 0; --i) {
+            dump_append(ctx, "%02x", (unsigned int)bytes[i - 1]);
+        }
+        break;
+    }
     case SHREWD_BASIC_REFLECT_KIND_STRING:
         dump_string(ctx, reflect_load_str(bytes), str_max);
         break;

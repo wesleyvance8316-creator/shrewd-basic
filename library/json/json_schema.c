@@ -204,12 +204,17 @@ static int schema_scalar(const shrewd_basic_reflect_type_t *type,
     case SHREWD_BASIC_REFLECT_KIND_UINT32:
     case SHREWD_BASIC_REFLECT_KIND_UINT64:
     case SHREWD_BASIC_REFLECT_KIND_CHAR:
+    case SHREWD_BASIC_REFLECT_KIND_BIT_INT:
         name = "integer";
         break;
     case SHREWD_BASIC_REFLECT_KIND_STRING:
     case SHREWD_BASIC_REFLECT_KIND_STRING16:
     case SHREWD_BASIC_REFLECT_KIND_STRING32:
         name = "string";
+        break;
+    case SHREWD_BASIC_REFLECT_KIND_COMPLEX:
+        /* Wire shape is the [re, im] pair. */
+        name = "array";
         break;
     default:
         break;

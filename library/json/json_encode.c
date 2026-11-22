@@ -157,6 +157,31 @@ static int json_encode_fields(json_map_ctx_t *ctx,
                               size_t depth,
                               shrewd_basic_json_value_t *container);
 
+/*
+ * JSON number from a long double. The JSON number model is double: a
+ * value is emitted only when it survives the narrowing exactly (never
+ * silently round); NaN/inf follow the allow_nan policy like double.
+ */
+static int json_encode_ld_number(json_map_ctx_t *ctx,
+                                 long double number,
+                                 shrewd_basic_json_value_t **out) {
+    double narrowed = (double)number;
+    if ((number != number) || (number > 1.7976931348623157e308L)
+        || (number < -1.7976931348623157e308L)) {
+        if (0 != ctx->options->allow_nan) {
+            return shrewd_basic_json_new(SHREWD_BASIC_JSON_NULL, out);
+        }
+        return json_map_fail(
+            ctx, SHREWD_BASIC_ERR_JSON_UNSUPPORTED, "non-finite number has no JSON form");
+    }
+    if ((long double)narrowed != number) {
+        return json_map_fail(ctx,
+                             SHREWD_BASIC_ERR_JSON_UNSUPPORTED,
+                             "number is not exactly representable in the JSON double model");
+    }
+    return shrewd_basic_json_new_f64(narrowed, out);
+}
+
 static int json_encode_node(json_map_ctx_t *ctx,
                             const shrewd_basic_reflect_type_t *type,
                             const unsigned char *value,
@@ -208,6 +233,35 @@ static int json_encode_node(json_map_ctx_t *ctx,
         }
         return shrewd_basic_json_new_f64(number, out);
     }
+    case SHREWD_BASIC_REFLECT_KIND_LONG_DOUBLE:
+        return json_encode_ld_number(ctx, reflect_load_ld(value, nbytes), out);
+    case SHREWD_BASIC_REFLECT_KIND_COMPLEX: {
+        /* [re, im] pair; each component maps like a long double number. */
+        size_t half = nbytes / 2;
+        shrewd_basic_json_value_t *array = NULL;
+        int status = shrewd_basic_json_new(SHREWD_BASIC_JSON_ARRAY, &array);
+        for (size_t i = 0; (SHREWD_BASIC_ERR_OK == status) && (i < 2); ++i) {
+            shrewd_basic_json_value_t *item = NULL;
+            status
+                = json_encode_ld_number(ctx, reflect_load_cpart(value + (i * half), half), &item);
+            if (SHREWD_BASIC_ERR_OK == status) {
+                status = shrewd_basic_json_append(array, item);
+            }
+            if (SHREWD_BASIC_ERR_OK != status) {
+                shrewd_basic_json_value_free(item);
+            }
+        }
+        if (SHREWD_BASIC_ERR_OK != status) {
+            shrewd_basic_json_value_free(array);
+            return status;
+        }
+        *out = array;
+        return SHREWD_BASIC_ERR_OK;
+    }
+    case SHREWD_BASIC_REFLECT_KIND_BIT_INT:
+        return json_map_fail(ctx,
+                             SHREWD_BASIC_ERR_JSON_UNSUPPORTED,
+                             "bit-int has no JSON form (use an ops->encode hook)");
     case SHREWD_BASIC_REFLECT_KIND_STRING: {
         const char *text = reflect_load_str(value);
         if (NULL == text) {

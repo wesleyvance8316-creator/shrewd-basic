@@ -91,6 +91,43 @@ static inline double reflect_load_f64(const unsigned char *bytes, size_t nbytes)
     return 0.0;
 }
 
+/* Long double load (value semantics; padding bits never enter a compare). */
+static inline long double reflect_load_ld(const unsigned char *bytes, size_t nbytes) {
+    if (nbytes == sizeof(long double)) {
+        long double value = 0.0L;
+        memcpy(&value, bytes, sizeof(value));
+        return value;
+    }
+    return 0.0L;
+}
+
+/* One complex component (half of a complex member) as long double. */
+static inline long double reflect_load_cpart(const unsigned char *bytes, size_t nbytes) {
+    if (4 == nbytes) {
+        return (long double)reflect_load_f64(bytes, nbytes);
+    }
+    if (8 == nbytes) {
+        return (long double)reflect_load_f64(bytes, nbytes);
+    }
+    return reflect_load_ld(bytes, nbytes);
+}
+
+/* Canonical hash fold shared by float/double/long double and complex parts. */
+static inline uint64_t reflect_ld_hash_bits(long double number) {
+    if (number != number) {
+        return UINT64_C(0x7ff8000000000000); /* NaN marker */
+    }
+    if (0.0L == number) {
+        number = 0.0L; /* fold -0.0 into +0.0 (they compare equal) */
+    }
+    {
+        double folded = (double)number;
+        uint64_t bits = 0;
+        memcpy(&bits, &folded, sizeof(bits));
+        return bits;
+    }
+}
+
 static inline void *reflect_load_ptr(const unsigned char *bytes) {
     void *pointer = NULL;
     memcpy(&pointer, bytes, sizeof(pointer));

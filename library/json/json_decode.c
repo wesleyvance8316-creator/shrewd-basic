@@ -300,6 +300,48 @@ static int json_decode_node(json_map_ctx_t *ctx,
         }
         return SHREWD_BASIC_ERR_OK;
     }
+    case SHREWD_BASIC_REFLECT_KIND_LONG_DOUBLE: {
+        double number = 0.0;
+        long double wide = 0.0L;
+        if (SHREWD_BASIC_ERR_OK != shrewd_basic_json_to_f64(value, &number)) {
+            return json_map_fail(ctx, SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH, "expected a number");
+        }
+        wide = (long double)number;
+        memcpy(target, &wide, sizeof(wide));
+        return SHREWD_BASIC_ERR_OK;
+    }
+    case SHREWD_BASIC_REFLECT_KIND_COMPLEX: {
+        size_t half = nbytes / 2;
+        if (SHREWD_BASIC_JSON_ARRAY != shrewd_basic_json_kind(value)) {
+            return json_map_fail(
+                ctx, SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH, "expected an [re, im] array");
+        }
+        if (2 != shrewd_basic_json_count(value)) {
+            return json_map_fail(
+                ctx, SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH, "expected an [re, im] pair");
+        }
+        for (size_t i = 0; i < 2; ++i) {
+            double number = 0.0;
+            if (SHREWD_BASIC_ERR_OK
+                != shrewd_basic_json_to_f64(shrewd_basic_json_at(value, i), &number)) {
+                return json_map_fail(ctx, SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH, "expected a number");
+            }
+            if (4 == half) {
+                float single = (float)number;
+                memcpy(target + (i * half), &single, sizeof(single));
+            } else if (8 == half) {
+                memcpy(target + (i * half), &number, sizeof(number));
+            } else {
+                long double wide = (long double)number;
+                memcpy(target + (i * half), &wide, sizeof(wide));
+            }
+        }
+        return SHREWD_BASIC_ERR_OK;
+    }
+    case SHREWD_BASIC_REFLECT_KIND_BIT_INT:
+        return json_map_fail(ctx,
+                             SHREWD_BASIC_ERR_JSON_UNSUPPORTED,
+                             "bit-int values cannot be decoded (use an ops->decode hook)");
     case SHREWD_BASIC_REFLECT_KIND_STRING: {
         const char *text = NULL;
         void *block = NULL;
@@ -663,6 +705,16 @@ static int json_decode_default(json_map_ctx_t *ctx,
             memcpy(at, &narrowed, sizeof(narrowed));
         } else {
             memcpy(at, &view->def_d, sizeof(view->def_d));
+        }
+        return SHREWD_BASIC_ERR_OK;
+    }
+    case SHREWD_BASIC_REFLECT_KIND_LONG_DOUBLE: {
+        if (SHREWD_BASIC_JSON_DEF_NUM != view->def_kind) {
+            return SHREWD_BASIC_ERR_OK;
+        }
+        {
+            long double wide = (long double)view->def_d;
+            memcpy(at, &wide, sizeof(wide));
         }
         return SHREWD_BASIC_ERR_OK;
     }
