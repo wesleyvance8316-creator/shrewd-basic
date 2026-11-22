@@ -313,9 +313,20 @@ static int hash_content_fields(hash_ctx_t *ctx,
             continue;
         }
         if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
-            /* Text buffers fold by content up to the first NUL unit. */
+            /* Text buffers fold by content up to the first NUL unit; a
+               field-level hash hook replaces that fold (hooks are never
+               silently ignored). */
             const void *text = value + field->sb_refl_offset;
             size_t unit = field->sb_refl_stride;
+            if ((NULL != field_ops) && (NULL != field_ops->hash)) {
+                size_t custom = 0;
+                int status = field_ops->hash(text, &custom);
+                if (SHREWD_BASIC_ERR_OK != status) {
+                    return status;
+                }
+                *h = hash_u64(*h, (uint64_t)custom);
+                continue;
+            }
             size_t len = reflect_wstrn_len(text, unit, field->sb_refl_count);
             *h = hash_u64(*h, 1);
             *h = hash_bytes(*h, text, len * unit);

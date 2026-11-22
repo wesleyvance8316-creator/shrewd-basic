@@ -248,10 +248,22 @@ static int reflect_equal_fields(const shrewd_basic_reflect_field_t *fields,
             continue;
         }
         if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
-            /* Text buffers compare by content up to the first NUL unit. */
+            /* Text buffers compare by content up to the first NUL unit;
+               a field-level equal hook replaces that compare (hooks are
+               never silently ignored). */
             const void *text_a = a + field->sb_refl_offset;
             const void *text_b = b + field->sb_refl_offset;
             size_t unit = field->sb_refl_stride;
+            if ((NULL != field_ops) && (NULL != field_ops->equal)) {
+                bool same = true;
+                int status = field_ops->equal(text_a, text_b, &same);
+                if ((SHREWD_BASIC_ERR_OK != status) || (!same)) {
+                    *out_equal = false;
+                    return status;
+                }
+                diff_path_restore(diff, mark);
+                continue;
+            }
             size_t len_a = reflect_wstrn_len(text_a, unit, field->sb_refl_count);
             size_t len_b = reflect_wstrn_len(text_b, unit, field->sb_refl_count);
             if ((len_a != len_b) || (0 != memcmp(text_a, text_b, len_a * unit))) {

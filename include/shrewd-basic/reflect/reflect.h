@@ -677,8 +677,8 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
  * becoming strings. SHREWD_BASIC_REFLECT_FIELD_WSTRING picks the unit
  * width from wchar_t at compile time (WCHAR_MAX).
  *
- * The wide pointer forms lack _OPS twins on purpose - add one beside
- * these when a real call site needs a field-level ops override.
+ * Every wide form has an _OPS twin (below) for field-level ops
+ * overrides, mirroring the char string family.
  */
 #define SHREWD_BASIC_REFLECT_FIELD_STRING16(struct_type, member)                                   \
     {.sb_refl_name = #member,                                                                      \
@@ -751,6 +751,83 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
     SHREWD_BASIC_REFLECT_FIELD_STRING32_OWNED(struct_type, member)
 #define SHREWD_BASIC_REFLECT_FIELD_WSTRING_BUFFER(struct_type, member)                             \
     SHREWD_BASIC_REFLECT_FIELD_STRING32_BUFFER(struct_type, member)
+#endif
+
+/* Wide forms with a field-level ops override. */
+#define SHREWD_BASIC_REFLECT_FIELD_STRING16_OPS(struct_type, member, ops_ref)                      \
+    {.sb_refl_name = #member,                                                                      \
+     .sb_refl_type = &shrewd_basic_reflect_string16,                                               \
+     .sb_refl_offset = offsetof(struct_type, member),                                              \
+     .sb_refl_size = sizeof(((struct_type *)0)->member),                                           \
+     .sb_refl_count = (size_t)1,                                                                   \
+     .sb_refl_stride = sizeof(((struct_type *)0)->member),                                         \
+     .sb_refl_flags = (uint32_t)0,                                                                 \
+     .sb_refl_ops = &(ops_ref)}
+
+#define SHREWD_BASIC_REFLECT_FIELD_STRING16_OWNED_OPS(struct_type, member, ops_ref)                \
+    {.sb_refl_name = #member,                                                                      \
+     .sb_refl_type = &shrewd_basic_reflect_string16,                                               \
+     .sb_refl_offset = offsetof(struct_type, member),                                              \
+     .sb_refl_size = sizeof(((struct_type *)0)->member),                                           \
+     .sb_refl_count = (size_t)1,                                                                   \
+     .sb_refl_stride = sizeof(((struct_type *)0)->member),                                         \
+     .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED,                                   \
+     .sb_refl_ops = &(ops_ref)}
+
+#define SHREWD_BASIC_REFLECT_FIELD_STRING16_BUFFER_OPS(struct_type, member, ops_ref)               \
+    {.sb_refl_name = #member,                                                                      \
+     .sb_refl_type = &shrewd_basic_reflect_string16,                                               \
+     .sb_refl_offset = offsetof(struct_type, member),                                              \
+     .sb_refl_size = sizeof(((struct_type *)0)->member),                                           \
+     .sb_refl_count = sizeof(((struct_type *)0)->member) / sizeof(((struct_type *)0)->member[0]),  \
+     .sb_refl_stride = sizeof(((struct_type *)0)->member[0]),                                      \
+     .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_ARRAY | SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF, \
+     .sb_refl_ops = &(ops_ref)}
+
+#define SHREWD_BASIC_REFLECT_FIELD_STRING32_OPS(struct_type, member, ops_ref)                      \
+    {.sb_refl_name = #member,                                                                      \
+     .sb_refl_type = &shrewd_basic_reflect_string32,                                               \
+     .sb_refl_offset = offsetof(struct_type, member),                                              \
+     .sb_refl_size = sizeof(((struct_type *)0)->member),                                           \
+     .sb_refl_count = (size_t)1,                                                                   \
+     .sb_refl_stride = sizeof(((struct_type *)0)->member),                                         \
+     .sb_refl_flags = (uint32_t)0,                                                                 \
+     .sb_refl_ops = &(ops_ref)}
+
+#define SHREWD_BASIC_REFLECT_FIELD_STRING32_OWNED_OPS(struct_type, member, ops_ref)                \
+    {.sb_refl_name = #member,                                                                      \
+     .sb_refl_type = &shrewd_basic_reflect_string32,                                               \
+     .sb_refl_offset = offsetof(struct_type, member),                                              \
+     .sb_refl_size = sizeof(((struct_type *)0)->member),                                           \
+     .sb_refl_count = (size_t)1,                                                                   \
+     .sb_refl_stride = sizeof(((struct_type *)0)->member),                                         \
+     .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED,                                   \
+     .sb_refl_ops = &(ops_ref)}
+
+#define SHREWD_BASIC_REFLECT_FIELD_STRING32_BUFFER_OPS(struct_type, member, ops_ref)               \
+    {.sb_refl_name = #member,                                                                      \
+     .sb_refl_type = &shrewd_basic_reflect_string32,                                               \
+     .sb_refl_offset = offsetof(struct_type, member),                                              \
+     .sb_refl_size = sizeof(((struct_type *)0)->member),                                           \
+     .sb_refl_count = sizeof(((struct_type *)0)->member) / sizeof(((struct_type *)0)->member[0]),  \
+     .sb_refl_stride = sizeof(((struct_type *)0)->member[0]),                                      \
+     .sb_refl_flags = SHREWD_BASIC_REFLECT_FIELD_F_ARRAY | SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF, \
+     .sb_refl_ops = &(ops_ref)}
+
+#if WCHAR_MAX <= 0xFFFF
+#define SHREWD_BASIC_REFLECT_FIELD_WSTRING_OPS(struct_type, member, ops_ref)                       \
+    SHREWD_BASIC_REFLECT_FIELD_STRING16_OPS(struct_type, member, ops_ref)
+#define SHREWD_BASIC_REFLECT_FIELD_WSTRING_OWNED_OPS(struct_type, member, ops_ref)                 \
+    SHREWD_BASIC_REFLECT_FIELD_STRING16_OWNED_OPS(struct_type, member, ops_ref)
+#define SHREWD_BASIC_REFLECT_FIELD_WSTRING_BUFFER_OPS(struct_type, member, ops_ref)                \
+    SHREWD_BASIC_REFLECT_FIELD_STRING16_BUFFER_OPS(struct_type, member, ops_ref)
+#else
+#define SHREWD_BASIC_REFLECT_FIELD_WSTRING_OPS(struct_type, member, ops_ref)                       \
+    SHREWD_BASIC_REFLECT_FIELD_STRING32_OPS(struct_type, member, ops_ref)
+#define SHREWD_BASIC_REFLECT_FIELD_WSTRING_OWNED_OPS(struct_type, member, ops_ref)                 \
+    SHREWD_BASIC_REFLECT_FIELD_STRING32_OWNED_OPS(struct_type, member, ops_ref)
+#define SHREWD_BASIC_REFLECT_FIELD_WSTRING_BUFFER_OPS(struct_type, member, ops_ref)                \
+    SHREWD_BASIC_REFLECT_FIELD_STRING32_BUFFER_OPS(struct_type, member, ops_ref)
 #endif
 
 /*

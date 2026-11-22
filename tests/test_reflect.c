@@ -3423,6 +3423,67 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_matrix_reflect,
                                  SHREWD_BASIC_REFLECT_FIELD_ARRAY(matrix_t, m, g_row3_reflect),
                                  SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(matrix_t, id));
 
+/* --- wide _OPS twins --------------------------------------------------- */
+
+static int g_wide_ops_equal_calls = 0;
+
+static int wide_ops_equal(const void *a, const void *b, bool *out_equal) {
+    (void)a;
+    (void)b;
+    ++g_wide_ops_equal_calls;
+    *out_equal = true;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+static const shrewd_basic_reflect_ops_t g_wide_ops = {.equal = wide_ops_equal};
+
+typedef struct {
+    const char16_t *tag;
+    char16_t buf[4];
+    const wchar_t *label;
+} wops_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_wops_reflect,
+                                 wops_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING16_OPS(wops_t, tag, g_wide_ops),
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING16_BUFFER_OPS(wops_t,
+                                                                                buf,
+                                                                                g_wide_ops),
+                                 SHREWD_BASIC_REFLECT_FIELD_WSTRING_OPS(wops_t, label, g_wide_ops));
+
+static void test_wide_ops(void) {
+    /* The _OPS twins attach a field-level vtable like the char forms. */
+    const shrewd_basic_reflect_field_t *tag = find_or_fail("wide-ops", &g_wops_reflect, "tag");
+    const shrewd_basic_reflect_field_t *buf = find_or_fail("wide-ops", &g_wops_reflect, "buf");
+    const shrewd_basic_reflect_field_t *label = find_or_fail("wide-ops", &g_wops_reflect, "label");
+    if ((NULL == tag) || (NULL == buf) || (NULL == label)) {
+        return;
+    }
+    expect_true("wide ops tag attach", &g_wide_ops == tag->sb_refl_ops);
+    expect_true("wide ops buffer attach", &g_wide_ops == buf->sb_refl_ops);
+    expect_true("wide ops wstring attach", &g_wide_ops == label->sb_refl_ops);
+
+    /* Behavior: the field-level equal hook wins over content compare. */
+    static const char16_t left_units[] = {'l', 0};
+    static const char16_t right_units[] = {'r', 0};
+    wops_t left = {0};
+    wops_t right = {0};
+    memset(&left, 0, sizeof(left));
+    memset(&right, 0, sizeof(right));
+    left.tag = left_units;
+    right.tag = right_units;
+    left.buf[0] = 'x';
+    right.buf[0] = 'y';
+    left.label = L"a";
+    right.label = L"b";
+    bool same = false;
+    g_wide_ops_equal_calls = 0;
+    expect_eq_int("wide ops equal",
+                  shrewd_basic_reflect_equal(&left, &right, &g_wops_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wide ops hook ran", same && (0 < g_wide_ops_equal_calls));
+}
+
 /* int32_t cube[2][2][2]: rows nest (row of rows). */
 typedef struct {
     int32_t cube[2][2][2];
@@ -4723,6 +4784,7 @@ int main(void) {
     test_bits();
     test_cbit();
     test_wstring();
+    test_wide_ops();
     test_multidim();
     test_union();
     test_graph_ops();
