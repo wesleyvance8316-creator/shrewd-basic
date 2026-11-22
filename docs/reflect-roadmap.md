@@ -26,6 +26,7 @@
 | P2 直接可实现 | ✅ 全部完成 | B2 匿名成员、C2 布局报告、C3 diff_all、D1 环哈希、D2 分配器注入 |
 | P2 工具线 | ✅ 全部完成 | G1 DWARF 后端、B1 位域、G2 轻量版(--layout) |
 | P2 需求驱动 | ✅ 已完成(reflect 层) | B4 宽字符 |
+| 生成器深化 | ✅ 全部完成 | 严格点名注解(type=/member=)、宽字符串识别、union 生成(union_tag=/case=)、引用闭包硬错误、golden 对账、CMake/Make 下游 demo |
 | P3 条件性 | ⏳ 跟踪 | B3 宽标量、C4/C5、H1 |
 
 **验证矩阵**:native / clang / ILP32(ELF 32-bit)/ MSVC(真 cl.exe +
@@ -52,16 +53,20 @@ wine)四平台各 7 套件全绿,`tools/verify_platforms.sh` 一键复现;
 | H1 标准化互操作 | **零成本跟踪** | ISO C 反射 TS 仍在演进;描述符保持"纯 const 数据"形态即最大兼容——届时生成器改产出标准调用即可,无需任何预留动作。 |
 | 宽宏 `_OPS` 变体 | **等调用点** | 纯机械(约 10 分钟),宏注释已承诺"有真实调用点再加"。 |
 
-**两个工程小尾巴**(不阻塞收尾,顺手做即可):
-- `reflect_gen_check.sh` 未接门禁——生成器回归目前只靠人手动跑发现,
-  一行接进 `verify_platforms.sh` 即可;
-- 生成器对宽字符串成员的解析缺口(见下节生成器讨论)——`char16_t *`
-  成员如今被两个后端分别错解为"外部结构体指针"/"uint16 指针",
-  应产出 `FIELD_STRING16`/`FIELD_WSTRING` 形态。
+**两个工程小尾巴**(已随生成器深化清零,2026-11-22):
+- ~~`reflect_gen_check.sh` 未接门禁~~ → 已接 ctest(`shrewd-basic.gen-check`,
+  缺 pyelftools 时响亮跳过并给安装命令,绝不静默降级);
+- ~~生成器对宽字符串成员的解析缺口~~ → 两后端均识别
+  `char16_t`/`char32_t`/`wchar_t`(及一层 typedef 别名),产出
+  `FIELD_STRING16/32`/`FIELD_WSTRING` 家族。
 
-**生成器 union 跳过的定性修正**:union 标签成员是**设计意图**,DWARF
-与词法都无法推断哪个成员是 tag——"跳过并告警"就是终态,移出"遗留"
-记为"不支持(按设计)"。
+**生成器 union 支持(2026-11-22,修正旧定性)**:union 标签成员是
+**设计意图**,DWARF 与词法都无法推断哪个成员是 tag——解法是注解
+`union_tag=MEMBER` + `case=CONST[,CONST]`(或 `case=*`)显式声明,
+生成 `UNION_DEFINE` + `FIELD_UNION`;未给 `union_tag=`(或 `skip=`)的
+联合体成员硬错误,不猜。配套的**严格点名**(`type=` 注解才生成)+
+引用闭包硬错误(`--type`/`--external` 两条出口)同批落地;
+下游接入样板见 `demo/`(CMake + Make 两个最小工程)。
 
 ---
 

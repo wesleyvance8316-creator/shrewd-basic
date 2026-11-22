@@ -448,9 +448,39 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
                                    # 编译探针读真实布局:位域 FIELD_BITS_UNIT、
                                    # _Static_assert(sizeof/offsetof) 指纹防陈旧
     python3 tools/reflect_gen.py input.h --backend dwarf --layout
-                                   # pahole-lite 布局报告(偏移/填充/packed)
+                                   # pahole-lite 布局报告(偏移/填充/packed,--json 机器可读)
 
-- 收录:`typedef struct/enum`;标量/字符串(`FIELD_PRIMITIVE`)、嵌套结构体
+### 注解语法(严格点名)
+
+生成器**只生成注解点名的类型**——头文件里的 struct 不全量收录,
+未标注的不生成。分工原则:事实问编译器(布局/宽度),意图问注释
+(所有权/联合体标签):
+
+    /* reflect: type=demo_config_t */
+    typedef struct {
+        const char *name; /* reflect: member=demo_config_t.name owned */
+        ...
+    } demo_config_t;
+
+- `type=NAME`:点名生成;`type=NAME external`:被引用但手写描述符,
+  不生成。目标全限定(`member=TYPE.MEMBER`),注解位置零语义——
+  放哪里都不改变含义,重构安全;
+- 成员指令:`owned`/`stringbuf`/`wstringbuf`(字符串三形态)、`skip`、
+  `count=`(柔性数组配对计数成员)、`ops=`、`name=`(改字段名);
+- 联合体:`union_tag=MEMBER` + `case=CONST[,CONST]`(或 `case=*`)→
+  `UNION_DEFINE` + `FIELD_UNION`,按 case 分组切标签——tag 是设计意图,
+  两个后端都无法从布局推断,联合体成员必须给 `union_tag=` 或 `skip`;
+- 宽字符串(`char16_t`/`char32_t`/`wchar_t` 及一层 typedef 别名)识别为
+  `FIELD_STRING16/32`/`FIELD_WSTRING` 家族;
+- **引用闭包硬错误**:被引用的头内类型必须同样点名(或 `--external NAME`),
+  否则报错退出——两条出口:生成,或 external。不可改的第三方头用
+  `--type NAME` / `--external NAME` 命令行点名。
+
+### 产出与收录
+
+- 默认输出 `<input>_reflect.{c,h}`,拒绝覆盖输入本身;
+- 描述符命名约定 `<类型名>_reflect`(如 `shape_t_reflect`);
+- 收录形态:标量/字符串(`FIELD_PRIMITIVE`)、嵌套结构体
   (`FIELD_STRUCT`)、定长数组(`FIELD_ARRAY`)、柔性尾部(`FIELD_FLEX`,含 GNU
   `[0]` 形态,自动配对 `name_count`/`name_len`/`count`/`len` 计数成员,配不到则
   告警跳过)、指针(`FIELD_PTR`/`FIELD_PTR_ARRAY`)、枚举(`FIELD_ENUM`/`ENUM_DEFINE`),
@@ -458,12 +488,20 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
 - 多维数组 `T m[N][M]`(任意维):逐层生成 `ARRAY_DEFINE` 行类型(内层在前,
   3D+ 自然嵌套)+ `FIELD_ARRAY`;`char[N]` 默认生成 `FIELD_ARRAY`
   (字节精确);文本缓冲可手工改为 `FIELD_STRING_BUFFER`(C 字符串语义);
-- 描述符命名约定 `<类型名>_reflect`(如 `shape_t_reflect`);
-- 跳过并告警:联合体、函数指针;bit-field 由 `--backend dwarf` 支持
-  (词法后端跳过);
-- 验证:`tools/reflect_gen_check.sh` 一键自测(双后端生成 → 编译 → 运行
-  dump/equal/enum 冒烟 + 位域双向对账 + `--layout` 报告),样例输入
-  `tools/reflect_gen_sample.h` / `tools/reflect_gen_sample_bits.h`;
+- 位域:词法后端快速失败,`--backend dwarf` 产出 `FIELD_BITS_UNIT`
+  (放置参数取自编译器真实布局);函数指针快速失败并报错;
+- 指纹防陈旧:生成头携带工具链记录 + `_Static_assert(sizeof/offsetof)`
+  漂移守卫,库升位/换 ABI 编译即暴露而非运行期错读。
+
+### 验证与下游示例
+
+- `tools/reflect_gen_check.sh` 一键自测(双后端生成 → 编译 → 运行
+  dump/equal/enum 冒烟 + 位域双向对账 + `--layout` 报告 + golden 全文比对,
+  `--update-golden` 刷新基准),样例输入 `tools/reflect_gen_sample*.h`;
+  已接 ctest(缺 `python3-pyelftools` 时响亮跳过并给安装命令);
+- 下游接入样板:`demo/consumer-cmake/`(CMake)与 `demo/consumer-make/`
+  (Make)两个最小工程,演示构建期生成、产物落构建目录、
+  应用代码直接使用生成描述符;
 - 基准:`tools/reflect_bench.sh` 输出关键路径的 ns/op 基线(find/resolve/path_get/field_get/equal/copy+destroy/dump),供优化工作对照。
 
 ## 11. 路线图
