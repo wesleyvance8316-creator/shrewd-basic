@@ -1,0 +1,46 @@
+# CI: build, test and style gate on every push / pull request.
+# Matrix: gcc + clang on Linux (the platform policy targets embedded
+# Linux; ILP32 and the wider matrix stay with tools/verify_platforms.sh).
+name: ci
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    env:
+      CC: ${{ matrix.cc }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang-format clang-tidy \
+                                  python3 python3-pyelftools
+
+      - name: configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: build
+        run: cmake --build build -j
+
+      - name: test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: style gate
+        run: tools/check-style.sh
+        env:
+          BUILD: build
+
+      - name: demos
+        run: |
+          ./build/programs/shrewd-basic-formats-demo
+          ./build/programs/shrewd-basic-dbus-demo

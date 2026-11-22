@@ -254,3 +254,40 @@ int shrewd_basic_dbus_make_policy_ops(const shrewd_basic_json_info_t *info,
 - `set_many`:持全局锁跨全部提交(天然原子);任一 CAS/尺寸/守卫
   失败 → 整体拒绝、零提交;成功才逐个 post_set + 入队;
 - 合并仅作用于**尚未投递**的队列项(已交给 recv 的不撤回)。
+
+## 12. 三期候选实现契约(2026-11-22 规划并落地)
+
+### 12.1 通知批量合并(note 折叠计数)
+
+`shrewd_basic_dbus_note_t` 增 `size_t folded`:coalesce 开启时被折叠
+的同路径变更次数记入 note(订阅端可判"错过几次");recv 签名不变。
+
+### 12.2 事务(跨资源读改写,乐观 CAS)
+
+```c
+typedef struct shrewd_basic_dbus_txn shrewd_basic_dbus_txn_t;
+int shrewd_basic_dbus_txn_begin(shrewd_basic_dbus_t *bus, shrewd_basic_dbus_txn_t **out);
+int shrewd_basic_dbus_txn_get(txn, path, out, size);   /* 记录该资源版本 */
+int shrewd_basic_dbus_txn_set(txn, path, in, size);    /* 暂存写集 */
+int shrewd_basic_dbus_txn_commit(txn);                 /* 全有或全无 */
+void shrewd_basic_dbus_txn_abort(txn);                 /* 丢弃写集 */
+```
+
+commit = 写集整体走 set_many 语义(以读集版本为 CAS 基准,任一被
+并发修改即 `ERR_DBUS_CONFLICT`、零提交);txn 句柄一次一用,commit/
+abort 后释放。钩子在 commit 的逐资源路径上照常跑(pre 同步)。
+
+### 12.3 策略行完善(HIDDEN)
+
+`make_policy_ops` 除 RANGE 外支持 **HIDDEN 行**:命中字段的
+pre_get/pre_set 一律拒绝(`ERR_DBUS_UNADDRESSABLE` / 不可写)。
+其余策略行(KEY/DEFAULT/REQUIRED)不映射到总线语义,注释写明。
+
+### 12.4 shm 变更环扩容 + 持久化
+
+- `shrewd_basic_dbus_options_t` 增 `ring_size`(0 = 默认 64),
+  attach 时写入区域头(容量定于创建时);
+- 持久化 = json 快照落盘的便捷包装:
+  `shrewd_basic_dbus_save(bus, pattern, file)` /
+  `shrewd_basic_dbus_load(bus, pattern, file)`(内部 export/import +
+  文件读写,语义即"批量初始化绕过钩子")。

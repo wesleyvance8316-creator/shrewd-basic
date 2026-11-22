@@ -1146,6 +1146,9 @@ static void free_fields(const shrewd_basic_reflect_type_t *type, void *object, s
                     if (NULL != slot) {
                         void *old = slot;
                         (void)shrewd_basic_platform_free(&old);
+                        /* zero the slot: cross-module free hand-off is
+                           then safe (no double free on re-free) */
+                        memset(at + (j * field->sb_refl_stride), 0, sizeof(slot));
                     }
                 }
             }
@@ -1164,6 +1167,9 @@ static void free_fields(const shrewd_basic_reflect_type_t *type, void *object, s
             if (NULL != slot) {
                 void *old = slot;
                 (void)shrewd_basic_platform_free(&old);
+                /* zero the slot: cross-module free hand-off is then
+                   safe (no double free on re-free) */
+                memset(at, 0, sizeof(slot));
             }
             continue;
         }

@@ -26,8 +26,8 @@ BIT_INT)、ABI 自检与指纹、四平台验证矩阵。——至此收尾,无�
 
 **已交付**:注解语法 v2(`namespace: 项, 项;` C 语句式、位置零、
 严格点名、引用闭包硬错误)、宽形态识别、union 生成、json 策略桩、
-`--schema-dump`、golden 全文对账、ctest 门禁、CMake/Make 下游样板。
-——收尾,无遗留。
+`dbus:` 挂载表桩、`--schema-dump`、golden 全文对账、ctest 门禁、
+CMake/Make 下游样板。——收尾,无遗留。
 
 ## 3. json
 
@@ -65,20 +65,27 @@ skip_bom、jsonl、sort_keys)、宽串 UTF-8 互转。——功能面完整。
 
 ## 6. sb_dbus(数据总线)
 
-**已交付**:一/二/三期全量——inproc 核心(路由/钩子九宫格/访问族/
-通知管道)、shm 数据面(ABI 指纹、robust 锁、跨进程唤醒)、批量
-(set_many 全有或全无)、coalesce、make_guard、make_policy_ops、
-json 持久化、全接口 demo。
+**已交付**:一/二/三期全量 + 三期候选清盘——inproc 核心(路由/
+钩子九宫格/访问族/通知管道)、shm 数据面(ABI 指纹、robust 锁、
+跨进程唤醒、环容量可配)、批量/事务(set_many/txn,全有或全无)、
+coalesce(folded 计数)、make_guard、make_policy_ops(RANGE+HIDDEN)、
+json 持久化(save/load)、生成器挂载表桩、全接口 demo 与基准。
 
 **已知限制(v1,契约)**:OWNED set 为原始拷贝(平坦值类型);shm
 崩溃丢最后一次未完提交;变更环滞后跳中间变更(终值必达);set_many
 仅存储型节点原子;shm 各进程须本进程 mount(值槽按路径共享)。
 
-**候选(需求触发)**:通知批量合并进分发、事务跨资源回滚、
-权限钩子的策略行完善、shm 变更环扩容/持久化。
+**待决策**:HIDDEN 整资源访问语义(现行仅拦字段直取;整体读是否
+清零隐藏字段/拒读)。**剩余候选(需求触发)**:策略行 KEY/DEFAULT
+映射、事务集扩容、recv 批量投递形态。
 
 ## 7. 工程配套(持续义务)
 
 风格门(clang-format/clang-tidy/条件括号)、pre-commit/pre-push 钩子、
-ctest 全量、ASan/UBSan 复核、四平台验证矩阵、demo 与测试同交付、
-文档与代码同提交。
+ctest 全量、ASan/UBSan 复核、Linux 验证矩阵(gcc/clang + ILP32)、
+demo 与测试同交付、文档与代码同提交。
+
+**平台政策(2026-11-22)**:**暂停 Windows 生态支持,专注嵌入式
+Linux**——MSVC/wine 验证停跑(WIN32 裁剪守卫保留在构建里但不再
+验证);shm/pthread 等 POSIX 面由此无条件成立。恢复 Windows 时
+须重跑 MSVC 矩阵并复核 WIN32 分支。

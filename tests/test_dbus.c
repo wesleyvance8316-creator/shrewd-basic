@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 /**
  * @file test_dbus.c
  * @brief Core flow tests for sb_dbus (mount/get/peek/set/touch, hook
@@ -8,6 +10,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "shrewd-basic/dbus/dbus.h"
 #include "shrewd-basic/formats/json.h"
@@ -54,6 +58,33 @@ static int pre_set_ok(void *ctx, shrewd_basic_dbus_req_t *req) {
 static int pre_set_deny(void *ctx, shrewd_basic_dbus_req_t *req) {
     (void)ctx;
     return shrewd_basic_dbus_req_deny(req, SHREWD_BASIC_ERR_KEY_NOTFOUND);
+}
+
+static volatile int g_first_seen = 0;
+static volatile int g_release = 0;
+static size_t g_note_count = 0;
+static size_t g_fold_sum = 0;
+static int32_t g_last_value = 0;
+
+/* Hold the dispatcher inside the first delivery so the follow-up
+   changes deterministically fold into one later job. */
+static int recv_block_first(void *ctx, const shrewd_basic_dbus_note_t *note) {
+    struct timespec ts;
+    (void)ctx;
+    if (0 == g_note_count) {
+        g_first_seen = 1;
+        while (0 == g_release) {
+            ts.tv_sec = 0;
+            ts.tv_nsec = 1000000;
+            (void)nanosleep(&ts, NULL);
+        }
+    }
+    ++g_note_count;
+    g_fold_sum += note->folded;
+    if (NULL != note->value) {
+        memcpy(&g_last_value, note->value, sizeof(g_last_value));
+    }
+    return SHREWD_BASIC_ERR_OK;
 }
 
 int main(void) {
@@ -286,6 +317,182 @@ int main(void) {
         expect("coalesce unmount", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_unmount(abus, am));
         am = NULL;
         shrewd_basic_dbus_destroy(abus);
+    }
+
+    /* folded: coalesced changes carry their fold count. */
+    {
+        shrewd_basic_dbus_t *b2 = NULL;
+        shrewd_basic_dbus_options_t opt2;
+        shrewd_basic_dbus_mount_t m2;
+        shrewd_basic_dbus_handle_t *hh = NULL;
+        shrewd_basic_dbus_handle_t *ss = NULL;
+        struct timespec ts;
+        int32_t v = 0;
+        memset(&opt2, 0, sizeof(opt2)); /* async dispatcher */
+        memset(&m2, 0, sizeof(m2));
+        m2.type = &g_db_cfg_reflect;
+        m2.store = SHREWD_BASIC_DBUS_STORE_OWNED;
+        g_first_seen = 0;
+        g_release = 0;
+        g_note_count = 0;
+        g_fold_sum = 0;
+        g_last_value = 0;
+        expect("fold bus", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_create(&opt2, &b2));
+        expect("fold mount", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_mount(b2, "/fold", &m2, &hh));
+        expect("fold sub",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_subscribe(b2, "/fold", recv_block_first, NULL, &ss));
+        expect("fold coalesce", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_coalesce(b2, 1));
+        v = 1;
+        expect("fold set 1",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_set(b2, "/fold.level", &v, sizeof(v), NULL));
+        while (0 == g_first_seen) {
+            ts.tv_sec = 0;
+            ts.tv_nsec = 1000000;
+            (void)nanosleep(&ts, NULL);
+        }
+        for (v = 2; v <= 5; ++v) {
+            expect("fold set next",
+                   SHREWD_BASIC_ERR_OK
+                       == shrewd_basic_dbus_set(b2, "/fold.level", &v, sizeof(v), NULL));
+        }
+        g_release = 1;
+        expect("fold drain", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_drain(b2));
+        expect("fold notes", 2 == g_note_count);
+        expect("fold counted", 3 == g_fold_sum);
+        expect("fold value", 5 == g_last_value);
+        expect("fold unsub", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_unsubscribe(b2, ss));
+        expect("fold unmount", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_unmount(b2, hh));
+        shrewd_basic_dbus_destroy(b2);
+    }
+
+    /* Transactions: optimistic read-modify-write, zero commit on fail. */
+    {
+        shrewd_basic_dbus_txn_t *txn = NULL;
+        int32_t val = 0;
+        int32_t want = 11;
+        double ratio = 1.5;
+        double ratio2 = 2.5;
+        expect("txn begin", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_txn_begin(bus, &txn));
+        expect("txn get",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_txn_get(txn, "/config/log.level", &val, sizeof(val)));
+        expect("txn set",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_txn_set(txn, "/config/log.level", &want, sizeof(want)));
+        expect("txn commit", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_txn_commit(txn));
+        expect("txn committed",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_get(bus, "/config/log.level", &val, sizeof(val), NULL));
+        expect("txn committed value", 11 == val);
+
+        /* read, external write, staged write -> conflict, zero commit */
+        want = 13;
+        val = 0;
+        expect("txn begin 2", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_txn_begin(bus, &txn));
+        expect("txn get 2",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_txn_get(txn, "/config/log.level", &val, sizeof(val)));
+        val = 12;
+        expect("txn external",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_set(bus, "/config/log.level", &val, sizeof(val), NULL));
+        expect("txn set 2",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_txn_set(txn, "/config/log.level", &want, sizeof(want)));
+        expect("txn conflict", SHREWD_BASIC_ERR_DBUS_CONFLICT == shrewd_basic_dbus_txn_commit(txn));
+        val = 0;
+        expect("txn zero commit",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_get(bus, "/config/log.level", &val, sizeof(val), NULL));
+        expect("txn zero commit value", 12 == val);
+
+        /* multi-resource write set is all-or-nothing */
+        want = 20;
+        expect("txn begin 3", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_txn_begin(bus, &txn));
+        expect("txn get 3a",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_txn_get(txn, "/config/log.level", &val, sizeof(val)));
+        {
+            double seen = 0.0;
+            expect("txn get 3b",
+                   SHREWD_BASIC_ERR_OK
+                       == shrewd_basic_dbus_txn_get(txn, "/config/log.ratio", &seen, sizeof(seen)));
+        }
+        ratio = 9.5;
+        expect("txn external 2",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_set(bus, "/config/log.ratio", &ratio, sizeof(ratio), NULL));
+        expect("txn set 3a",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_txn_set(txn, "/config/log.level", &want, sizeof(want)));
+        expect("txn set 3b",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_txn_set(txn, "/config/log.ratio", &ratio2, sizeof(ratio2)));
+        expect("txn multi conflict",
+               SHREWD_BASIC_ERR_DBUS_CONFLICT == shrewd_basic_dbus_txn_commit(txn));
+        val = 0;
+        expect("txn multi zero",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_get(bus, "/config/log.level", &val, sizeof(val), NULL));
+        expect("txn multi zero value", 12 == val);
+
+        /* multi-resource success */
+        expect("txn begin 4", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_txn_begin(bus, &txn));
+        expect("txn set 4a",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_txn_set(txn, "/config/log.level", &want, sizeof(want)));
+        expect("txn set 4b",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_txn_set(txn, "/config/log.ratio", &ratio2, sizeof(ratio2)));
+        expect("txn multi commit", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_txn_commit(txn));
+        {
+            double seen = 0.0;
+            expect("txn multi ok a",
+                   SHREWD_BASIC_ERR_OK
+                       == shrewd_basic_dbus_get(bus, "/config/log.level", &val, sizeof(val), NULL));
+            expect(
+                "txn multi ok b",
+                SHREWD_BASIC_ERR_OK
+                    == shrewd_basic_dbus_get(bus, "/config/log.ratio", &seen, sizeof(seen), NULL));
+            expect("txn multi values", (20 == val) && (2.5 == seen));
+        }
+
+        /* abort discards the staged writes */
+        want = 99;
+        expect("txn begin 5", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_txn_begin(bus, &txn));
+        expect("txn set 5",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_txn_set(txn, "/config/log.level", &want, sizeof(want)));
+        shrewd_basic_dbus_txn_abort(txn);
+        val = 0;
+        expect("txn abort",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_get(bus, "/config/log.level", &val, sizeof(val), NULL));
+        expect("txn abort value", 20 == val);
+    }
+
+    /* save/load: json snapshot round trip (no hooks, no notify). */
+    {
+        char snap[64];
+        int32_t level = 1;
+        snprintf(snap, sizeof(snap), "/tmp/sb_dbus_snap_%d.json", (int)getpid());
+        expect("snap set",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_set(bus, "/config/log.level", &level, sizeof(level), NULL));
+        expect("snap save", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_save(bus, "/config/**", snap));
+        level = 2;
+        expect("snap change",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_set(bus, "/config/log.level", &level, sizeof(level), NULL));
+        expect("snap load", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_load(bus, "/config/**", snap));
+        level = 0;
+        expect("snap get",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_get(bus, "/config/log.level", &level, sizeof(level), NULL));
+        expect("snap restored", 1 == level);
+        (void)remove(snap);
     }
 
     /* Argument and routing refusals. */

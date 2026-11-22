@@ -1,0 +1,23 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+if(@SHREWD_BASIC_DBUS@)
+    find_dependency(Threads)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/shrewd-basic-targets.cmake")
+
+# shrewd-basic::shrewd-basic: the neutral link name (static preferred).
+if(NOT TARGET shrewd-basic::shrewd-basic)
+    if(TARGET shrewd-basic::shrewd-basic-static)
+        add_library(shrewd-basic::shrewd-basic INTERFACE IMPORTED)
+        set_target_properties(shrewd-basic::shrewd-basic PROPERTIES
+                INTERFACE_LINK_LIBRARIES shrewd-basic::shrewd-basic-static)
+    elseif(TARGET shrewd-basic::shrewd-basic-shared)
+        add_library(shrewd-basic::shrewd-basic INTERFACE IMPORTED)
+        set_target_properties(shrewd-basic::shrewd-basic PROPERTIES
+                INTERFACE_LINK_LIBRARIES shrewd-basic::shrewd-basic-shared)
+    endif()
+endif()
+
+check_required_components(shrewd-basic)
