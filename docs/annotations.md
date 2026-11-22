@@ -166,6 +166,27 @@ typedef struct {
 external)。产出 `<x>_dbus_mounts` 表 + `<x>_dbus_mounts_count` +
 `<x>_dbus_mount_all`(全有或全无挂载,失败回滚)。
 
+### 6.6 对象:csv / ini 策略(`csv:` / `ini:` 等价入口)
+
+与 `json:` **同表合并**(指令集 `key=`/`keys=`/`required`/`hidden`),
+产出相同的策略行——csv 列名、ini 键名由同一张表驱动:
+
+    /* csv: member=row_t.a, key="A";
+       ini:  member=cfg_t.name, required; */
+
+### 6.7 对象:xml 策略(`xml:` 命名空间)
+
+```c
+/* reflect: type=cfg_t;
+   xml:     type=cfg_t; */
+/* xml: member=cfg_t.name, name="id", attr, required; */
+/* xml: member=cfg_t.secret, hidden; */
+```
+
+指令:`name=`(标签/属性名)、`attr`(→ 父元素属性)、`required`、
+`hidden`;产出 `<x>_policy`(`shrewd_basic_xml_policy_t` 行表)+
+`_count`,`name=` 改表名。闭包与硬错误同族。
+
 ## 7. 命令行与后端
 
 ```sh

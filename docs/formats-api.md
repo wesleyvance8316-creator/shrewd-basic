@@ -17,7 +17,8 @@ int shrewd_basic_reflect_scan_text(field, value, text, len);            /* 文�
 ```
 
 - **往返安全**:浮点按十进制有效位(`%.9g`/`%.17g`/`LDBL_DECIMAL_DIG`)、
-  枚举按常量名(扫描 miss 落回十进制);
+  枚举按常量名(扫描 miss 落回十进制);**宽串**(STRING16/32
+  owned/缓冲)经 UTF 转换器双向 strict;
 - **严格**:全文消费、拒静默窄化(浮点窄化即 `REFLECT_TEXT`)、
   缓冲超长 `REFLECT_MISMATCH`;缓冲拷贝+NUL、owned 分配、借用/宽串
   `REFLECT_NOT_SUPPORTED`;
@@ -28,11 +29,14 @@ int shrewd_basic_reflect_scan_text(field, value, text, len);            /* 文�
 ## 1. INI(formats/ini.h)
 
 ```c
-int  shrewd_basic_ini_encode(object, type, &out_text, options, error);
-int  shrewd_basic_ini_decode(text, length, object, type, options, error);
+int  shrewd_basic_ini_encode(object, type, info, &out_text, options, error);
+int  shrewd_basic_ini_decode(text, length, object, type, info, options, error);
 void shrewd_basic_ini_text_free(text);
 int  shrewd_basic_ini_free(object, type);
 ```
+
+`info` 同 csv(KEY/REQUIRED/HIDDEN);**重复键追加数组**(定长按序/
+DARRAY grow,单次出现填第 0 元素)。
 
 - 形态:行注释(`;`/`#`)、`[section]`/`[a.b]` 路径节头(嵌套
   struct)、`key = value`;数组/指针等非叶子响亮拒绝;
@@ -55,11 +59,14 @@ int shrewd_basic_env_free(object, type);
 ## 3. CSV(formats/csv.h)
 
 ```c
-int  shrewd_basic_csv_encode(rows, count, row_type, &out_text, error);
-int  shrewd_basic_csv_decode(text, length, &out_rows, &out_count, row_type, error);
+int  shrewd_basic_csv_encode(rows, count, row_type, info, &out_text, error);
+int  shrewd_basic_csv_decode(text, length, &out_rows, &out_count, row_type, info, error);
 int  shrewd_basic_csv_rows_free(rows, count, row_type);
 void shrewd_basic_csv_text_free(text);
 ```
+
+`info`(json 策略表,可 NULL):KEY 列名/别名、REQUIRED 缺列报错、
+HIDDEN 双向跳过。
 
 - 行 ↔ struct、表 ↔ struct 数组;嵌套展平 `a.b` 列前缀;
 - RFC 4180 引号(`"` 双写、内嵌换行);表头**按名匹配**(列序无关)、
@@ -74,10 +81,12 @@ void shrewd_basic_toml_text_free(text);
 int  shrewd_basic_toml_free(object, type);
 ```
 
-- **TOML 1.0 子集**:`[table]`/`[a.b]`、基本/字面串(转义含 `\u`/
-  `\U`+代理对)、整数(十进制/`0x`/下划线/`+`)、浮点(保形)、
-  布尔、同类型标量数组;**22 项不支持构造带行号响亮拒绝**
-  (datetime/多行串/内联表/点分键/数组表/引号键/异类型数组/重复键表…)。
+- **TOML 1.0 功能构造齐平**:表格/点分键/基本与字面串/**多行串**、
+  **内联表**、**数组表 [[items]]**(定长/DARRAY)、**引号键**、
+  **datetime**(映射字符串字段原文保真;非字符串字段拒)、内联 AoT;
+  整数十进制/`0x`/下划线/`+`,浮点保形,同类型标量数组;
+  **保持拒绝**:重复键表、坏转义、孤立代理、混合类型数组(结构限制)、
+  数组超定长、未知键/表——全部带行号。
 
 ## 5. msgpack(formats/msgpack.h)
 
