@@ -468,22 +468,45 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
 
 生成器**只生成注解点名的类型**——头文件里的 struct 不全量收录,
 未标注的不生成。分工原则:事实问编译器(布局/宽度),意图问注释
-(所有权/联合体标签):
+(所有权/联合体标签)。
 
-    /* reflect: type=demo_config_t */
+**语句式语法**(C 风格):注解注释里的每条语句是
+`namespace: 项, 项, ...;`——`;` 结束语句(必填),`,` 分项;项为
+目标(`type=NAME` / `member=TYPE.MEMBER`,**必须在首项、每句一次**)、
+裸指令(`owned`)或键值(`key="x"`、`count=len`)。值是裸词或
+`'...'`/`"..."` 引号文本(**无转义**——两种引号都嵌不下的值不支持),
+列表套一层花括号:`case={A,B}`。命名空间是开放词汇(`reflect:` /
+`json:` / 未来的 `bin:`),每个应用层独立描述、可混排;**工具不认识的
+命名空间硬错误**,绝不静默跳过。
+
+    /* reflect: type=demo_config_t;
+       reflect: member=demo_config_t.name, owned; */
     typedef struct {
-        const char *name; /* reflect: member=demo_config_t.name owned */
-        ...
+        /* reflect: member=demo_config_t.age, range 语义见 json 章节 */
+        int32_t age;
     } demo_config_t;
 
-- `type=NAME`:点名生成;`type=NAME external`:被引用但手写描述符,
-  不生成。目标全限定(`member=TYPE.MEMBER`),注解位置零语义——
-  放哪里都不改变含义,重构安全;
+**放置自由(位置零语义)**:注解按目标名(`member=TYPE.MEMBER`)认主,
+不看它挨着哪一行——成员/类型**上一行**(推荐:意图贴着字段、长指令
+随便折行、clang-format 不挪窝)、同行末尾(短指令)、文件顶部集中
+清单块,语义完全相同。注意:注解语句必须**领起注释块**(`/* reflect:`
+开头);普通注释里夹注解语句会硬错误,防止被误当散文丢弃;`/* */`
+是唯一注释形态(不做 `//`——被"注释掉"的注解会意外生效)。
+
+**收录契约**:只收 `typedef struct|union|enum {体} 名字;` 形式
+(带 tag 的 `typedef struct foo {...} a_t;` 与多名字 `} a_t, b_t;`
+均可,注册的是 typedef 名;裸 `struct foo {...};` 不收)。**命名完全
+自由**——`_t` 只是示例习惯,生成器不校验命名,描述符名机械拼接
+`<原名>_reflect`(如 `DemoConfig` → `DemoConfig_reflect`)。
+
+- `type=NAME`:点名生成;`type=NAME, external`:被引用但手写描述符,
+  不生成;
 - 成员指令:`owned`/`stringbuf`/`wstringbuf`(字符串三形态)、`skip`、
   `count=`(柔性数组配对计数成员)、`ops=`、`name=`(改字段名);
-- 联合体:`union_tag=MEMBER` + `case=CONST[,CONST]`(或 `case=*`)→
-  `UNION_DEFINE` + `FIELD_UNION`,按 case 分组切标签——tag 是设计意图,
-  两个后端都无法从布局推断,联合体成员必须给 `union_tag=` 或 `skip`;
+- 联合体:`union_tag=MEMBER` + `case=CONST`(多个写 `case={A,B}`,
+  全部写 `case=*`)→ `UNION_DEFINE` + `FIELD_UNION`,按 case 分组切
+  标签——tag 是设计意图,两个后端都无法从布局推断,联合体成员必须
+  给 `union_tag=` 或 `skip`;
 - 宽字符串(`char16_t`/`char32_t`/`wchar_t` 及一层 typedef 别名)识别为
   `FIELD_STRING16/32`/`FIELD_WSTRING` 家族;
 - **引用闭包硬错误**:被引用的头内类型必须同样点名(或 `--external NAME`),

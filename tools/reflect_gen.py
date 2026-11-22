@@ -5,20 +5,23 @@ Emits the very same SHREWD_BASIC_REFLECT_* macros a human would write,
 so the generated code stays readable and hand-editable. Multi-dimension
 arrays gain ARRAY_DEFINE row types (one per row level, innermost first).
 
-Types generate only when named - strict opt-in. Annotate in the header:
+Types generate only when named - strict opt-in. Annotate in the header
+(C-style statements; ';' ends one, ',' separates items, values are bare
+tokens or '...'/"..." quoted text, lists nest one brace level):
 
-    /* reflect: type=packet_t */
-    /* reflect: type=helper_t external */          (referenced, hand-written)
-    /* reflect: member=packet_t.name owned */
-    /* reflect: member=packet_t.data count=len */
+    /* reflect: type=packet_t;
+       reflect: type=helper_t, external;              (referenced, hand-written)
+       reflect: member=packet_t.name, owned;
+       reflect: member=packet_t.data, count=len; */
 
 or name them on the command line (--type / --external) for headers you
 cannot edit. Member directives: owned, stringbuf, wstringbuf, skip,
-count=, ops=, name=, union_tag=, case=. Targets are fully qualified and
-annotation position carries zero semantics. Wide strings (char16_t /
-char32_t / wchar_t, plus one level of typedef alias) map to the
-FIELD_STRING16/32/WSTRING family. Unions generate UNION_DEFINE from
-case= directives; union-typed members need union_tag= (or skip=).
+count=, ops=, name=, union_tag=, case={A,B}. Targets are fully qualified
+and annotation position carries zero semantics (annotation above the
+member, at the line end, or in a manifest block - all equivalent). Wide
+strings (char16_t / char32_t / wchar_t, plus one level of typedef alias)
+map to the FIELD_STRING16/32/WSTRING family. Unions generate UNION_DEFINE
+from case= directives; union-typed members need union_tag= (or skip=).
 
 Fast-fail facts (never silently wrong): lexical backend rejects
 bit-fields and function pointers (--backend dwarf describes bit-fields);
@@ -152,24 +155,52 @@ def member_parts(member):
 
 # --- Annotations -------------------------------------------------------------
 #
-# /* reflect: type=NAME ... */ and /* reflect: member=TYPE.MEMBER ... */
-# carry the *intent* the layout cannot express: which types generate,
-# ownership, text-buffer semantics, count pairing, union tags. Targets
-# are named explicitly (fully qualified) and annotation position carries
-# zero semantics - a comment moved by a refactoring tool never changes
-# the output. Facts (offsets, sizes, bit placement) come from the
-# compiler, never from here.
+# Per-layer intent lives in annotation comments as C-style statements:
+#
+#     /* reflect: member=packet_t.name, owned;
+#        reflect: type=packet_t; */
+#
+# A comment whose text starts with `word:` is an annotation comment;
+# every statement is `namespace: item, item, ...;`. The namespace
+# vocabulary is open to future layers (json, bin, ...) but unknown
+# namespace words are hard errors - never silently ignored. ';' ends a
+# statement, ',' separates items; values are bare tokens or '...' /
+# "..." quoted text (no escapes - a value that needs both quote kinds
+# is an error) and lists nest one brace level: case={A,B},
+# keys={"a","b"}. Targets (type=NAME / member=TYPE.MEMBER) are fully
+# qualified, lead the statement and appear exactly once; annotation
+# position carries zero semantics - a comment moved by a refactoring
+# tool never changes the output. Facts (offsets, sizes, bit placement)
+# come from the compiler, never from here.
 
 class AnnotationError(Exception):
     pass
 
 
-ANNOTATION_RE = re.compile(r"/\*\s*reflect:\s*(.*?)\*/", re.S)
+ANNOTATION_COMMENTS_RE = re.compile(r"/\*(.*?)\*/", re.S)
+ANNOTATION_ENTRY_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*:")
+# Safety net: a namespace statement misfiled inside a prose comment
+# must not be silently dropped.
+ANNOTATION_LOST_RE = re.compile(r"(?m)^\s*([A-Za-z_]\w*)\s*:")
 TYPE_FLAGS = {"external"}
 TYPE_VALUES = {"name", "ops"}
 MEMBER_FLAGS = {"owned", "stringbuf", "wstringbuf", "skip"}
 MEMBER_VALUES = {"count", "ops", "union_tag", "case"}
 WIDE_NAMES = {"char16_t": "16", "char32_t": "32", "wchar_t": "wchar"}
+
+# Namespace -> statement spec. "types_attr"/"members_attr" name the
+# Annotations tables the statements land in.
+NAMESPACES = {
+    "reflect": {
+        "targets": ("type", "member"),
+        "type_flags": TYPE_FLAGS,
+        "type_values": TYPE_VALUES,
+        "member_flags": MEMBER_FLAGS,
+        "member_values": MEMBER_VALUES,
+        "types_attr": "types",
+        "members_attr": "members",
+    },
+}
 
 
 class Annotations:
@@ -210,41 +241,149 @@ def _annotation_target(token):
     raise AnnotationError("target must start with type= or member=: %r" % token)
 
 
-def scan_annotations(text):
-    """Parse every /* reflect: ... */ comment into one Annotations table.
+def _split_top(text, sep):
+    """Split on sep at brace depth zero and outside quotes."""
+    parts = []
+    depth = 0
+    quote = None
+    start = 0
+    for i, ch in enumerate(text):
+        if quote is not None:
+            if ch == quote:
+                quote = None
+        elif ch in "\"'":
+            quote = ch
+        elif "{" == ch:
+            depth += 1
+        elif "}" == ch:
+            depth -= 1
+            if depth < 0:
+                raise AnnotationError("unbalanced '}' in annotation")
+        elif (sep == ch) and (0 == depth):
+            parts.append(text[start:i])
+            start = i + 1
+    if quote is not None:
+        raise AnnotationError("unterminated quote in annotation")
+    if 0 != depth:
+        raise AnnotationError("unbalanced '{' in annotation")
+    parts.append(text[start:])
+    return parts
 
-    Grammar (whitespace separated): the first token names the target,
-    the rest are directives - bare flags (owned, stringbuf, wstringbuf,
-    skip, external) or key=value (name=, ops=, count=, union_tag=,
-    case=). case= takes a comma-separated list of tag constants."""
+
+def _parse_value(raw):
+    """One item value: bare token, '...'/"..." quoted text (no escapes)
+    or a one-level brace list of those (str for scalars, list for
+    braces)."""
+    raw = raw.strip()
+    if not raw:
+        raise AnnotationError("missing value in annotation")
+    if raw[0] in "\"'":
+        if (2 > len(raw)) or (raw[-1] != raw[0]):
+            raise AnnotationError("unterminated quoted value: %r" % raw)
+        inner = raw[1:-1]
+        if raw[0] in inner:
+            raise AnnotationError("value needs both quote kinds - unsupported: %r" % raw)
+        return inner
+    if "{" == raw[0]:
+        if "}" != raw[-1]:
+            raise AnnotationError("unterminated brace list: %r" % raw)
+        inner = raw[1:-1]
+        items = []
+        for chunk in _split_top(inner, ","):
+            value = _parse_value(chunk)
+            if isinstance(value, list):
+                raise AnnotationError("nested brace lists are not supported: %r" % raw)
+            items.append(value)
+        if not items:
+            raise AnnotationError("empty brace list in annotation")
+        return items
+    return raw
+
+
+def _parse_items(chunk):
+    """Statement body -> ordered [(key, value_or_None), ...]."""
+    items = []
+    for part in _split_top(chunk, ","):
+        part = part.strip()
+        if not part:
+            raise AnnotationError("empty item in annotation statement")
+        key, sep, rest = part.partition("=")
+        key = key.strip()
+        if not re.match(r"^[A-Za-z_]\w*$", key):
+            raise AnnotationError("bad annotation item: %r" % part)
+        if sep:
+            items.append((key, _parse_value(rest)))
+        else:
+            items.append((key, None))
+    return items
+
+
+def _apply_statement(ann, chunk):
+    head, sep, rest = chunk.partition(":")
+    if not sep:
+        raise AnnotationError("statement needs 'namespace: ...': %r" % chunk.strip())
+    ns = head.strip()
+    if not re.match(r"^[A-Za-z_]\w*$", ns):
+        raise AnnotationError("bad namespace: %r" % head.strip())
+    if ns not in NAMESPACES:
+        raise AnnotationError(
+            "unknown namespace '%s' (known: %s) - reword the comment if "
+            "it is not an annotation" % (ns, ", ".join(sorted(NAMESPACES))))
+    spec = NAMESPACES[ns]
+    items = _parse_items(rest)
+    if not items:
+        raise AnnotationError("empty %s statement" % ns)
+    lead = items[0][0]
+    if lead not in spec["targets"]:
+        raise AnnotationError(
+            "%s statement must lead with %s=: %r"
+            % (ns, " or ".join("%s=NAME" % t for t in spec["targets"]), chunk.strip()))
+    if items[0][1] is None:
+        raise AnnotationError("%s target needs a value: %r" % (ns, chunk.strip()))
+    if isinstance(items[0][1], list):
+        raise AnnotationError("%s target takes a single name: %r" % (ns, chunk.strip()))
+    kind, target = _annotation_target("%s=%s" % (lead, items[0][1]))
+    flags = spec[kind + "_flags"]
+    values = spec[kind + "_values"]
+    table = getattr(ann, spec[kind + "s_attr"])
+    store = table.setdefault(target, {})
+    for key, value in items[1:]:
+        if key in store:
+            raise AnnotationError("%s: duplicate '%s' directive" % (chunk.strip(), key))
+        if value is None:
+            if key not in flags:
+                raise AnnotationError("'%s' is not a %s directive" % (key, kind))
+            store[key] = True
+        else:
+            if key not in values:
+                raise AnnotationError("'%s' is not a %s directive" % (key, kind))
+            store[key] = value
+
+
+def scan_annotations(text):
+    """Parse every annotation comment into one Annotations table.
+
+    Grammar (see the section comment): `namespace: item, ...;` per
+    statement; the leading item is the target (type=NAME or
+    member=TYPE.MEMBER); remaining items are bare flags or key=value."""
     ann = Annotations()
-    for match in ANNOTATION_RE.finditer(text):
-        tokens = match.group(1).split()
-        if not tokens:
-            raise AnnotationError("empty reflect annotation")
-        kind, target = _annotation_target(tokens[0])
-        flags = TYPE_FLAGS if "type" == kind else MEMBER_FLAGS
-        values = TYPE_VALUES if "type" == kind else MEMBER_VALUES
-        table = ann.types if "type" == kind else ann.members
-        store = table.setdefault(target, {})
-        for token in tokens[1:]:
-            if "=" in token:
-                key, _, value = token.partition("=")
-                if key not in values:
+    for match in ANNOTATION_COMMENTS_RE.finditer(text):
+        body = match.group(1)
+        entry = ANNOTATION_ENTRY_RE.match(body)
+        if entry is None:
+            # Prose comment: a misfiled namespace statement must not be
+            # silently dropped.
+            for lost in ANNOTATION_LOST_RE.finditer(body):
+                if lost.group(1) in NAMESPACES:
                     raise AnnotationError(
-                        "%s: '%s' is not a %s directive" % (tokens[0], key, kind))
-                if not value:
-                    raise AnnotationError("%s: %s= needs a value" % (tokens[0], key))
-                if key in store:
-                    raise AnnotationError("%s: duplicate %s= directive" % (tokens[0], key))
-                store[key] = value
-            else:
-                if token not in flags:
-                    raise AnnotationError(
-                        "%s: '%s' is not a %s directive" % (tokens[0], token, kind))
-                if token in store:
-                    raise AnnotationError("%s: duplicate '%s' directive" % (tokens[0], token))
-                store[token] = True
+                        "annotation statement for '%s:' inside a prose comment - "
+                        "annotation statements must lead their comment block"
+                        % lost.group(1))
+            continue
+        for chunk in _split_top(body, ";"):
+            if not chunk.strip():
+                continue
+            _apply_statement(ann, chunk)
     return ann
 
 
@@ -1050,8 +1189,8 @@ def check_closure(parser, ann, selected, external):
                     and (not ann.for_type(base).get("external")):
                 raise ParseError(
                     "%s references %s, but %s is neither generated nor external\n"
-                    "  - to generate it:  /* reflect: type=%s */ or --type %s\n"
-                    "  - to keep it external:  /* reflect: type=%s external */ or "
+                    "  - to generate it:  /* reflect: type=%s; */ or --type %s\n"
+                    "  - to keep it external:  /* reflect: type=%s, external; */ or "
                     "--external %s" % (name, base, base, base, base, base, base))
     for name in selected:
         if name in parser.unions:
@@ -1083,7 +1222,7 @@ def union_variants(parser, name, members, ann, desc):
             print("reflect_gen: %s: %s" % (name, warning), file=sys.stderr)
         if macro is None:
             continue
-        for tag in tags.split(","):
+        for tag in (tags if isinstance(tags, list) else [tags]):
             tag = tag.strip()
             if not tag:
                 raise ParseError("union %s.%s: empty case= entry" % (name, mname))
@@ -1390,7 +1529,7 @@ def main():
         return 1
     if not selected:
         print("reflect_gen: %s: nothing selected - annotate types with "
-              "/* reflect: type=NAME */ or pass --type NAME" % args.input,
+              "/* reflect: type=NAME; */ or pass --type NAME" % args.input,
               file=sys.stderr)
         return 1
     try:
