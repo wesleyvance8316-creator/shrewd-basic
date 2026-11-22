@@ -760,6 +760,14 @@ int shrewd_basic_json_pull_open(shrewd_basic_json_pull_t **out,
     if (NULL != options) {
         pull->options = *options;
     }
+    if ((0 != pull->options.skip_bom) && (3 <= pull->length)
+        && (0xEF == (unsigned char)pull->data[0]) && (0xBB == (unsigned char)pull->data[1])
+        && (0xBF == (unsigned char)pull->data[2])) {
+        /* skip_bom: ignore one leading UTF-8 BOM. Error offsets then
+           count from the stripped text (reader sources unaffected). */
+        pull->data = pull->data + 3;
+        pull->length = pull->length - 3;
+    }
     pull->error = error;
     pull->inline_tok = (char *)block + sizeof(*pull);
     pull->inline_key = (char *)block + sizeof(*pull) + 256;

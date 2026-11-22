@@ -238,6 +238,26 @@ static void test_parse_options(void) {
         expect_true("options depth message", '\0' != error.message[0]);
     }
 
+    /* skip_bom: one leading UTF-8 BOM is ignored when asked. */
+    {
+        const char bom_doc[] = {'\xEF', '\xBB', '\xBF', '[', '1', ']', '\0'};
+        memset(&options, 0, sizeof(options));
+        v = NULL;
+        expect_true("options bom strict fails",
+                    SHREWD_BASIC_ERR_OK != shrewd_basic_json_parse(bom_doc, 6, &v, &options, NULL));
+        options.skip_bom = 1;
+        v = NULL;
+        expect_eq_int("options bom skipped",
+                      shrewd_basic_json_parse(bom_doc, 6, &v, &options, NULL),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("options bom count", (NULL != v) && ((size_t)1 == shrewd_basic_json_count(v)));
+        shrewd_basic_json_value_free(v);
+        v = NULL;
+        expect_eq_int("options bom interior kept",
+                      shrewd_basic_json_parse("[\xEF\xBB\xBF]", 4, &v, &options, NULL),
+                      SHREWD_BASIC_ERR_JSON_SYNTAX);
+    }
+
     /* Default depth (32) is enforced too. */
     {
         char deep[82]; /* 40 x '[', one value, 40 x ']' */

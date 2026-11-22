@@ -1013,7 +1013,7 @@ int shrewd_basic_json_decode_value(const shrewd_basic_json_value_t *value,
                                    const shrewd_basic_json_info_t *info,
                                    const shrewd_basic_json_options_t *options,
                                    shrewd_basic_json_error_t *error) {
-    static const shrewd_basic_json_options_t plain = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    static const shrewd_basic_json_options_t plain = {0};
     json_map_ctx_t ctx = {0};
     if ((NULL == value) || (NULL == object) || (NULL == type)) {
         shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,

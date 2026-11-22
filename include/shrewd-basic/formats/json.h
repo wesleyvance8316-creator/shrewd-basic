@@ -78,6 +78,7 @@ typedef struct shrewd_basic_json_options {
     int key_match;             /**< decode: SHREWD_BASIC_JSON_KEY_MATCH_*. */
     int escape_unicode;        /**< serialize: non-ASCII as \\uXXXX escapes. */
     int validate_utf8;         /**< parse: reject invalid UTF-8 in strings. */
+    int skip_bom;              /**< parse: ignore one leading UTF-8 BOM (text sources). */
 } shrewd_basic_json_options_t;
 
 /** Key matching strategies for decode. */
