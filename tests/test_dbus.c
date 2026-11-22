@@ -203,6 +203,91 @@ int main(void) {
     }
     expect("dump", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_dump(bus, "/config/**"));
 
+    /* set_many: all-or-nothing batch commit. */
+    {
+        const char *paths[2] = {"/config/log.level", "/config/log.ratio"};
+        int32_t lv = 20;
+        double rt = 1.5;
+        const void *ins[2] = {&lv, &rt};
+        size_t sizes[2] = {sizeof(lv), sizeof(rt)};
+        shrewd_basic_dbus_stamp_t stamps[2];
+        int32_t got = 0;
+        double got_r = 0.0;
+        memset(stamps, 0, sizeof(stamps));
+        expect("set_many",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_set_many(bus, 2, paths, ins, sizes, stamps));
+        expect("set_many value",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_get(bus, "/config/log.level", &got, sizeof(got), NULL));
+        expect("set_many value ok", 20 == got);
+        /* stale stamp poisons the batch: zero commits */
+        stamps[0].version += 5;
+        lv = 30;
+        rt = 9.5;
+        expect("set_many conflict",
+               SHREWD_BASIC_ERR_DBUS_CONFLICT
+                   == shrewd_basic_dbus_set_many(bus, 2, paths, ins, sizes, stamps));
+        expect("set_many rolled back",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_get(bus, "/config/log.level", &got, sizeof(got), NULL));
+        expect("set_many rollback value", 20 == got);
+        expect("set_many rollback value 2",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_get(bus, "/config/log.ratio", &got_r, sizeof(got_r), NULL));
+        expect("set_many rollback ratio", 1.5 == got_r);
+        /* get_many: sequential fetch */
+        {
+            void *outs[2] = {&got, &got_r};
+            memset(stamps, 0, sizeof(stamps));
+            expect("get_many",
+                   SHREWD_BASIC_ERR_OK
+                       == shrewd_basic_dbus_get_many(bus, 2, paths, outs, sizes, stamps));
+            expect("get_many values", (20 == got) && (1.5 == got_r) && (0 != stamps[0].version));
+        }
+    }
+
+    /* coalesce: fold undelivered notifications. Needs an async bus -
+       inline delivery never leaves anything queued to fold. With five
+       rapid writes the dispatcher can pop at most one job before the
+       rest fold, so at most 2 notes arrive (1 if it pops none). */
+    {
+        shrewd_basic_dbus_t *abus = NULL;
+        shrewd_basic_dbus_options_t aopt;
+        shrewd_basic_dbus_handle_t *am = NULL;
+        shrewd_basic_dbus_handle_t *as = NULL;
+        shrewd_basic_dbus_mount_t amount;
+        int32_t lv = 1;
+        memset(&aopt, 0, sizeof(aopt));
+        memset(&amount, 0, sizeof(amount));
+        expect("coalesce bus", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_create(&aopt, &abus));
+        amount.type = &g_db_cfg_reflect;
+        amount.store = SHREWD_BASIC_DBUS_STORE_OWNED;
+        expect("coalesce mount",
+               SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_mount(abus, "/config/log", &amount, &am));
+        expect("coalesce on", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_coalesce(abus, 1));
+        expect("coalesce subscribe",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_subscribe(abus, "/config/log", recv_cb, NULL, &as));
+        g_notes = 0;
+        for (int i = 0; i < 5; ++i) {
+            lv = 100 + i;
+            expect("coalesce set",
+                   SHREWD_BASIC_ERR_OK
+                       == shrewd_basic_dbus_set(abus, "/config/log.level", &lv, sizeof(lv), NULL));
+        }
+        expect("coalesce drain", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_drain(abus));
+        expect("coalesce folded", (1 <= g_notes) && (2 >= g_notes));
+        expect("coalesce last value", 104 == g_last_level);
+        expect("coalesce off", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_coalesce(abus, 0));
+        expect("coalesce unsubscribe",
+               SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_unsubscribe(abus, as));
+        as = NULL;
+        expect("coalesce unmount", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_unmount(abus, am));
+        am = NULL;
+        shrewd_basic_dbus_destroy(abus);
+    }
+
     /* Argument and routing refusals. */
     {
         int32_t level = 0;

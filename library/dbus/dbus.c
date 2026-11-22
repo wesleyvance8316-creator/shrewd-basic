@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "shrewd-basic/config/config.h"
+#include "shrewd-basic-internal/dbus-internal.h"
 #include "shrewd-basic/dbus/dbus.h"
 #include "shrewd-basic/ds/radix.h"
 #include "shrewd-basic/log/log.h"
@@ -173,7 +174,8 @@ typedef struct dbus_node {
     const shrewd_basic_reflect_type_t *type;
     shrewd_basic_dbus_store_t store;
     void *data;
-    uint64_t version;
+    uint64_t version; /* local backing; pver points here or at the arena seq */
+    uint64_t *pver;   /* authoritative version counter */
     uint32_t flags;
     const shrewd_basic_dbus_ops_t *ops; /* primary mount hooks (CORE + pre/post) */
     void *ops_ctx;
@@ -223,9 +225,11 @@ struct shrewd_basic_dbus {
     dbus_sub_t *subs;
     dbus_job_t *jobs_head;
     dbus_job_t *jobs_tail;
-    int active;  /* deliveries in flight */
-    int running; /* dispatcher alive */
-    int sync;    /* deliver inline */
+    int active;                             /* deliveries in flight */
+    int running;                            /* dispatcher alive */
+    int sync;                               /* deliver inline */
+    int coalesce;                           /* fold undelivered notifications per path */
+    const shrewd_basic_dbus_arena_t *arena; /* NULL = in-process storage */
     pthread_t thread;
     int thread_made;
 };
@@ -248,6 +252,18 @@ static void dbus_lock(shrewd_basic_dbus_t *bus) {
 
 static void dbus_unlock(shrewd_basic_dbus_t *bus) {
     (void)pthread_mutex_unlock(&bus->lock);
+}
+
+/* Release node storage per the active transport (shared slots stay). */
+static void dbus_node_free_data(shrewd_basic_dbus_t *bus, dbus_node_t *node) {
+    if (NULL != bus->arena) {
+        bus->arena->val_release(bus->arena->ctx, node->path, node->data);
+        return;
+    }
+    if ((SHREWD_BASIC_DBUS_STORE_OWNED == node->store) && (NULL != node->data)
+        && (NULL != node->type)) {
+        (void)shrewd_basic_reflect_destroy(node->data, node->type);
+    }
 }
 
 /* Locate the node + value slot for a full path; bumps node refs. */
@@ -559,6 +575,29 @@ static void dbus_enqueue(shrewd_basic_dbus_t *bus,
     dbus_sub_t **subs = NULL;
     size_t i = 0;
     dbus_lock(bus);
+    if (0 != bus->coalesce) {
+        /* Fold into an undelivered job for the same path (keep its
+           subscriber list; only the snapshot and version move on). */
+        for (dbus_job_t *j = bus->jobs_head; NULL != j; j = j->next) {
+            void *fresh = NULL;
+            size_t cap = 0;
+            if ((j->kind != kind) || (0 != strcmp(j->path, path))) {
+                continue;
+            }
+            cap = (0 < size) ? size : 1;
+            if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_realloc(&fresh, j->value, cap)) {
+                break;
+            }
+            j->value = fresh;
+            if (0 < size) {
+                memcpy(j->value, value, size);
+            }
+            j->size = size;
+            j->version = version;
+            dbus_unlock(bus);
+            return;
+        }
+    }
     for (dbus_sub_t *sub = bus->subs; NULL != sub; sub = sub->next) {
         if ((0 == sub->dead) && (0 != dbus_match_note(sub, path))) {
             ++matches;
@@ -626,6 +665,12 @@ static void dbus_enqueue(shrewd_basic_dbus_t *bus,
 
 int shrewd_basic_dbus_create(const shrewd_basic_dbus_options_t *options,
                              shrewd_basic_dbus_t **out) {
+    return shrewd_basic_dbus_create_arena(options, NULL, out);
+}
+
+int shrewd_basic_dbus_create_arena(const shrewd_basic_dbus_options_t *options,
+                                   const shrewd_basic_dbus_arena_t *arena,
+                                   shrewd_basic_dbus_t **out) {
     shrewd_basic_dbus_t *bus = NULL;
     if (NULL == out) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
@@ -637,6 +682,7 @@ int shrewd_basic_dbus_create(const shrewd_basic_dbus_options_t *options,
     (void)pthread_mutex_init(&bus->lock, NULL);
     (void)pthread_cond_init(&bus->idle, NULL);
     bus->sync = ((NULL != options) && (0 != options->sync_notify)) ? 1 : 0;
+    bus->arena = arena;
     bus->running = 1;
     if (SHREWD_BASIC_ERR_OK != shrewd_basic_radix_create(&bus->exact)) {
         shrewd_basic_dbus_destroy(bus);
@@ -686,10 +732,7 @@ void shrewd_basic_dbus_destroy(shrewd_basic_dbus_t *bus) {
             (void)shrewd_basic_platform_free(&old);
             hook = hnext;
         }
-        if ((SHREWD_BASIC_DBUS_STORE_OWNED == node->store) && (NULL != node->data)
-            && (NULL != node->type)) {
-            (void)shrewd_basic_reflect_destroy(node->data, node->type);
-        }
+        dbus_node_free_data(bus, node);
         {
             void *old = node->path;
             (void)shrewd_basic_platform_free(&old);
@@ -706,6 +749,9 @@ void shrewd_basic_dbus_destroy(shrewd_basic_dbus_t *bus) {
     }
     if (NULL != bus->exact) {
         (void)shrewd_basic_radix_destroy(bus->exact);
+    }
+    if ((NULL != bus->arena) && (NULL != bus->arena->close)) {
+        bus->arena->close(bus->arena->ctx);
     }
     (void)pthread_cond_destroy(&bus->idle);
     (void)pthread_mutex_destroy(&bus->lock);
@@ -815,6 +861,7 @@ int shrewd_basic_dbus_mount(shrewd_basic_dbus_t *bus,
         (void)shrewd_basic_platform_free(&old);
         return SHREWD_BASIC_ERR_MEM_NOMEM;
     }
+    node->pver = &node->version;
     node->path = dbus_strdup(key);
     if (NULL == node->path) {
         void *old = node;
@@ -828,9 +875,24 @@ int shrewd_basic_dbus_mount(shrewd_basic_dbus_t *bus,
     node->flags = mount->flags;
     node->ops = mount->ops;
     node->ops_ctx = mount->ctx;
-    node->version = 1;
+    (*node->pver) = 1;
     if ((0 == is_virtual) && (0 == is_event) && (NULL != mount->type)) {
-        if (SHREWD_BASIC_DBUS_STORE_LINKED == mount->store) {
+        if (NULL != bus->arena) {
+            /* Shared storage: the arena owns the bytes and the version. */
+            uint64_t *seq = NULL;
+            int astatus = bus->arena->val_acquire(
+                bus->arena->ctx, node->path, mount->type, &node->data, &seq);
+            if (SHREWD_BASIC_ERR_OK != astatus) {
+                void *old = node->path;
+                (void)shrewd_basic_platform_free(&old);
+                old = node;
+                (void)shrewd_basic_platform_free(&old);
+                old = handle;
+                (void)shrewd_basic_platform_free(&old);
+                return astatus;
+            }
+            node->pver = seq;
+        } else if (SHREWD_BASIC_DBUS_STORE_LINKED == mount->store) {
             if (NULL == mount->data) {
                 void *old = node->path;
                 (void)shrewd_basic_platform_free(&old);
@@ -865,10 +927,7 @@ int shrewd_basic_dbus_mount(shrewd_basic_dbus_t *bus,
         }
         if (SHREWD_BASIC_ERR_OK != status) {
             dbus_unlock(bus);
-            if ((SHREWD_BASIC_DBUS_STORE_OWNED == node->store) && (NULL != node->data)
-                && (NULL != node->type)) {
-                (void)shrewd_basic_reflect_destroy(node->data, node->type);
-            }
+            dbus_node_free_data(bus, node);
             {
                 void *old = node->path;
                 (void)shrewd_basic_platform_free(&old);
@@ -937,10 +996,7 @@ int shrewd_basic_dbus_unmount(shrewd_basic_dbus_t *bus, shrewd_basic_dbus_handle
         (void)shrewd_basic_platform_free(&old);
         hook = next;
     }
-    if ((SHREWD_BASIC_DBUS_STORE_OWNED == node->store) && (NULL != node->data)
-        && (NULL != node->type)) {
-        (void)shrewd_basic_reflect_destroy(node->data, node->type);
-    }
+    dbus_node_free_data(bus, node);
     {
         void *old = node->path;
         (void)shrewd_basic_platform_free(&old);
@@ -1041,7 +1097,7 @@ int shrewd_basic_dbus_get(shrewd_basic_dbus_t *bus,
         return status;
     }
     dbus_lock(bus);
-    dbus_req_init(&req, path, field, type, node->version);
+    dbus_req_init(&req, path, field, type, (*node->pver));
     dbus_unlock(bus);
     status = dbus_run_pre(bus, node, &req, 1);
     if (SHREWD_BASIC_ERR_OK == status) {
@@ -1066,7 +1122,7 @@ int shrewd_basic_dbus_get(shrewd_basic_dbus_t *bus,
     }
     if (NULL != stamp) {
         dbus_lock(bus);
-        stamp->version = node->version;
+        stamp->version = (*node->pver);
         dbus_unlock(bus);
     }
     dbus_release(bus, node);
@@ -1093,7 +1149,7 @@ int shrewd_basic_dbus_peek(shrewd_basic_dbus_t *bus,
         return status;
     }
     dbus_lock(bus);
-    dbus_req_init(&req, path, field, type, node->version);
+    dbus_req_init(&req, path, field, type, (*node->pver));
     dbus_unlock(bus);
     status = dbus_run_pre(bus, node, &req, 1);
     if (SHREWD_BASIC_ERR_OK == status) {
@@ -1111,7 +1167,7 @@ int shrewd_basic_dbus_peek(shrewd_basic_dbus_t *bus,
     }
     if (NULL != stamp) {
         dbus_lock(bus);
-        stamp->version = node->version;
+        stamp->version = (*node->pver);
         dbus_unlock(bus);
     }
     dbus_release(bus, node);
@@ -1153,7 +1209,7 @@ int shrewd_basic_dbus_set(shrewd_basic_dbus_t *bus,
         return SHREWD_BASIC_ERR_DBUS_REENTRANT;
     }
     dbus_lock(bus);
-    dbus_req_init(&req, path, field, type, node->version);
+    dbus_req_init(&req, path, field, type, (*node->pver));
     dbus_unlock(bus);
     status = dbus_run_pre(bus, node, &req, 0);
     if (SHREWD_BASIC_ERR_OK == status) {
@@ -1167,14 +1223,14 @@ int shrewd_basic_dbus_set(shrewd_basic_dbus_t *bus,
             status = node->ops->set(node->ops_ctx, &req, payload, payload_size);
         } else if (NULL != node->data) {
             dbus_lock(bus);
-            if ((NULL != stamp) && (0 != stamp->version) && (stamp->version != node->version)) {
+            if ((NULL != stamp) && (0 != stamp->version) && (stamp->version != (*node->pver))) {
                 dbus_unlock(bus);
                 dbus_release(bus, node);
                 return SHREWD_BASIC_ERR_DBUS_CONFLICT;
             }
             memcpy(at, payload, payload_size);
-            node->version += 1;
-            version = node->version;
+            (*node->pver) += 1;
+            version = (*node->pver);
             dbus_unlock(bus);
         } else {
             status = SHREWD_BASIC_ERR_ARG_INVALID;
@@ -1183,6 +1239,9 @@ int shrewd_basic_dbus_set(shrewd_basic_dbus_t *bus,
     if ((SHREWD_BASIC_ERR_OK == status) && (0 != version)) {
         dbus_run_post(bus, node, &req, 0);
         dbus_enqueue(bus, path, at, want, version, SHREWD_BASIC_DBUS_NOTE_CHANGE);
+        if (NULL != bus->arena) {
+            bus->arena->commit(bus->arena->ctx, path, at, want, version);
+        }
     }
     if ((NULL != stamp) && (SHREWD_BASIC_ERR_OK == status) && (0 != version)) {
         stamp->version = version;
@@ -1213,15 +1272,18 @@ int shrewd_basic_dbus_touch(shrewd_basic_dbus_t *bus,
         return SHREWD_BASIC_ERR_DBUS_REENTRANT;
     }
     dbus_lock(bus);
-    if ((NULL != stamp) && (0 != stamp->version) && (stamp->version != node->version)) {
+    if ((NULL != stamp) && (0 != stamp->version) && (stamp->version != (*node->pver))) {
         dbus_unlock(bus);
         dbus_release(bus, node);
         return SHREWD_BASIC_ERR_DBUS_CONFLICT;
     }
-    node->version += 1;
-    version = node->version;
+    (*node->pver) += 1;
+    version = (*node->pver);
     dbus_unlock(bus);
     dbus_enqueue(bus, path, at, want, version, SHREWD_BASIC_DBUS_NOTE_CHANGE);
+    if (NULL != bus->arena) {
+        bus->arena->commit(bus->arena->ctx, path, at, want, version);
+    }
     if (NULL != stamp) {
         stamp->version = version;
     }
@@ -1281,7 +1343,7 @@ int shrewd_basic_dbus_dump(shrewd_basic_dbus_t *bus, const char *pattern) {
                                  "dump",
                                  "%s (v%llu)\n",
                                  node->path,
-                                 (unsigned long long)node->version);
+                                 (unsigned long long)(*node->pver));
                 (void)shrewd_basic_reflect_dump(node->type, node->data, node->path);
             }
             dbus_lock(bus);
@@ -1402,7 +1464,7 @@ int shrewd_basic_dbus_import(shrewd_basic_dbus_t *bus,
                    == shrewd_basic_json_decode_value(
                        val, node->data, node->type, NULL, NULL, NULL)) {
             dbus_lock(bus);
-            node->version += 1;
+            (*node->pver) += 1;
             dbus_unlock(bus);
         }
         dbus_release(bus, node);
@@ -1432,6 +1494,174 @@ int shrewd_basic_dbus_import(shrewd_basic_dbus_t *bus,
 }
 
 #endif /* SHREWD_BASIC_FORMAT_JSON */
+
+/* --- batch / coalesce / remote notify (phase 3) --------------------------- */
+
+int shrewd_basic_dbus_get_many(shrewd_basic_dbus_t *bus,
+                               size_t count,
+                               const char *const *paths,
+                               void *const *outs,
+                               const size_t *sizes,
+                               shrewd_basic_dbus_stamp_t *stamps) {
+    /* Sequential reads: not globally atomic - already fetched entries
+       are kept when a later one fails. */
+    if ((NULL == bus) || ((0 != count) && ((NULL == paths) || (NULL == outs) || (NULL == sizes)))) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    for (size_t i = 0; i < count; ++i) {
+        int status = shrewd_basic_dbus_get(
+            bus, paths[i], outs[i], sizes[i], (NULL != stamps) ? &stamps[i] : NULL);
+        if (SHREWD_BASIC_ERR_OK != status) {
+            return status;
+        }
+    }
+    return SHREWD_BASIC_ERR_OK;
+}
+
+int shrewd_basic_dbus_set_many(shrewd_basic_dbus_t *bus,
+                               size_t count,
+                               const char *const *paths,
+                               const void *const *ins,
+                               const size_t *sizes,
+                               shrewd_basic_dbus_stamp_t *stamps) {
+    typedef struct {
+        dbus_node_t *node;
+        unsigned char *at;
+        size_t want;
+        char field[64];
+        shrewd_basic_dbus_req_t req;
+        const void *payload;
+        size_t psize;
+        uint64_t version;
+    } entry_t;
+    entry_t *ents = NULL;
+    int status = 0;
+    size_t done = 0;
+    if ((NULL == bus) || ((0 != count) && ((NULL == paths) || (NULL == ins) || (NULL == sizes)))) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    if (0 == count) {
+        return SHREWD_BASIC_ERR_OK;
+    }
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_calloc((void **)&ents, count, sizeof(*ents))) {
+        return SHREWD_BASIC_ERR_MEM_NOMEM;
+    }
+    /* Phase 1: resolve and run pre_set hooks outside the lock. */
+    for (done = 0; done < count; ++done) {
+        entry_t *e = &ents[done];
+        status = dbus_resolve(
+            bus, paths[done], &e->node, &e->at, &e->want, &e->req.type, e->field, sizeof(e->field));
+        if (SHREWD_BASIC_ERR_OK != status) {
+            break;
+        }
+        if ((0u != (e->node->flags & SHREWD_BASIC_DBUS_MOUNT_READONLY))
+            || (0u != (e->node->flags & SHREWD_BASIC_DBUS_MOUNT_EVENT))
+            || (NULL == e->node->type)) {
+            status = SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
+            break;
+        }
+        if (0 != dbus_reentrant(bus, e->node)) {
+            status = SHREWD_BASIC_ERR_DBUS_REENTRANT;
+            break;
+        }
+        if ((NULL != e->node->ops) && (NULL != e->node->ops->set)) {
+            /* hook-committed nodes are not part of the atomic guarantee */
+            status = SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
+            break;
+        }
+        dbus_lock(bus);
+        dbus_req_init(&e->req, paths[done], e->field, e->req.type, (*e->node->pver));
+        dbus_unlock(bus);
+        status = dbus_run_pre(bus, e->node, &e->req, 0);
+        if (SHREWD_BASIC_ERR_OK != status) {
+            break;
+        }
+        e->payload = (0 != e->req.rewritten) ? e->req.rewrite : ins[done];
+        e->psize = (0 != e->req.rewritten) ? e->req.rewrite_size : sizes[done];
+    }
+    if (SHREWD_BASIC_ERR_OK == status) {
+        /* Phase 2: validate everything, then commit everything - one
+           lock span, so the batch is all-or-nothing. */
+        dbus_lock(bus);
+        for (size_t i = 0; i < count; ++i) {
+            entry_t *e = &ents[i];
+            if (e->psize != e->want) {
+                status = SHREWD_BASIC_ERR_REFLECT_MISMATCH;
+                break;
+            }
+            if ((NULL != stamps) && (0 != stamps[i].version)
+                && (stamps[i].version != (*e->node->pver))) {
+                status = SHREWD_BASIC_ERR_DBUS_CONFLICT;
+                break;
+            }
+        }
+        if (SHREWD_BASIC_ERR_OK == status) {
+            for (size_t i = 0; i < count; ++i) {
+                entry_t *e = &ents[i];
+                memcpy(e->at, e->payload, e->psize);
+                (*e->node->pver) += 1;
+                e->version = (*e->node->pver);
+            }
+        }
+        dbus_unlock(bus);
+    }
+    if (SHREWD_BASIC_ERR_OK != status) {
+        for (size_t i = 0; i < done; ++i) {
+            dbus_release(bus, ents[i].node);
+        }
+        {
+            void *old = ents;
+            (void)shrewd_basic_platform_free(&old);
+        }
+        return status;
+    }
+    /* Phase 3: posts and notifications only on success (zero on fail). */
+    for (size_t i = 0; i < count; ++i) {
+        entry_t *e = &ents[i];
+        dbus_run_post(bus, e->node, &e->req, 0);
+        dbus_enqueue(bus, paths[i], e->at, e->want, e->version, SHREWD_BASIC_DBUS_NOTE_CHANGE);
+        if (NULL != bus->arena) {
+            bus->arena->commit(bus->arena->ctx, paths[i], e->at, e->want, e->version);
+        }
+        if (NULL != stamps) {
+            stamps[i].version = e->version;
+        }
+        dbus_release(bus, e->node);
+    }
+    {
+        void *old = ents;
+        (void)shrewd_basic_platform_free(&old);
+    }
+    return SHREWD_BASIC_ERR_OK;
+}
+
+int shrewd_basic_dbus_coalesce(shrewd_basic_dbus_t *bus, int on) {
+    if (NULL == bus) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    dbus_lock(bus);
+    bus->coalesce = (0 != on) ? 1 : 0;
+    dbus_unlock(bus);
+    return SHREWD_BASIC_ERR_OK;
+}
+
+void shrewd_basic_dbus_notify_remote(shrewd_basic_dbus_t *bus, const char *path, uint64_t seq) {
+    dbus_node_t *node = NULL;
+    unsigned char *at = NULL;
+    size_t want = 0;
+    const shrewd_basic_reflect_type_t *type = NULL;
+    char field[64];
+    if ((NULL == bus) || (NULL == path)) {
+        return;
+    }
+    /* Local subscribers only; snapshot read live from shared storage. */
+    if (SHREWD_BASIC_ERR_OK
+        != dbus_resolve(bus, path, &node, &at, &want, &type, field, sizeof(field))) {
+        return;
+    }
+    dbus_enqueue(bus, path, at, want, seq, SHREWD_BASIC_DBUS_NOTE_CHANGE);
+    dbus_release(bus, node);
+}
 
 int shrewd_basic_dbus_drain(shrewd_basic_dbus_t *bus) {
     if (NULL == bus) {

@@ -168,6 +168,28 @@ target_link_libraries(shrewd-basic-dbus-tests
 
 add_test(NAME shrewd-basic.dbus COMMAND shrewd-basic-dbus-tests)
 
+# sb_dbus guard/policy hook builders (phase 3).
+add_executable(shrewd-basic-dbus-ops-tests test_dbus_ops.c)
+
+target_link_libraries(shrewd-basic-dbus-ops-tests
+        PRIVATE
+            shrewd-basic
+            shrewd-basic-warnings)
+
+add_test(NAME shrewd-basic.dbus-ops COMMAND shrewd-basic-dbus-ops-tests)
+
+if(NOT WIN32)
+    # sb_dbus shm transport (phase 2): needs shm_open + robust mutex.
+    add_executable(shrewd-basic-dbus-shm-tests test_dbus_shm.c)
+
+    target_link_libraries(shrewd-basic-dbus-shm-tests
+            PRIVATE
+                shrewd-basic
+                shrewd-basic-warnings)
+
+    add_test(NAME shrewd-basic.dbus-shm COMMAND shrewd-basic-dbus-shm-tests)
+endif()
+
 endif()
 
 # Test binary returns non-zero on failure, so a plain COMMAND run is enough.
