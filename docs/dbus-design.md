@@ -255,7 +255,7 @@ int shrewd_basic_dbus_make_policy_ops(const shrewd_basic_json_info_t *info,
   失败 → 整体拒绝、零提交;成功才逐个 post_set + 入队;
 - 合并仅作用于**尚未投递**的队列项(已交给 recv 的不撤回)。
 
-## 12. 三期候选实现契约(2026-11-22 规划)
+## 12. 三期候选实现契约(2026-11-22 规划并落地)
 
 ### 12.1 通知批量合并(note 折叠计数)
 

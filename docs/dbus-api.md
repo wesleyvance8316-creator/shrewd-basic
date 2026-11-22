@@ -136,7 +136,7 @@ int shrewd_basic_dbus_drain(bus);
 `note = {path, value(快照,回调期间有效), size, version, kind(CHANGE|EVENT)}`。
 订阅模式含字段选择器 = 字段级订阅;不含 = 资源及其字段写。
 
-## 6. 批量/守卫/策略(三期)
+## 6. 批量/事务/守卫/策略(三期)
 
 ```c
 int shrewd_basic_dbus_set_many(bus, count, paths[], ins[], sizes[], stamps[]);
@@ -150,9 +150,20 @@ int shrewd_basic_dbus_make_policy_ops(const shrewd_basic_json_info_t *info,
   失败零提交零通知;仅存储型节点(ops->set 节点拒);
 - `make_guard`:掩码(`ALLOW_READ`/`ALLOW_WRITE`)→ pre_get/pre_set
   守卫,挂拦截链即权限门;
-- `make_policy_ops`:json 策略行(RANGE)校验——**CORE get/set 虚拟
-  包装**(pre_set 无值读取器的 API 缺口,偏差说明见 `dbus_ops.c`
-  文件头);ctx = `{void *target; const shrewd_basic_json_info_t *info;}`。
+- `make_policy_ops`:json 策略行校验(RANGE 越界拒 + **HIDDEN** 字段
+  双向拒)——**CORE get/set 虚拟包装**(pre_set 无值读取器的 API
+  缺口,偏差说明见 `dbus_ops.c` 文件头);ctx = `{void *target;
+  const shrewd_basic_json_info_t *info;}`;
+- **事务**:`txn_begin/get/set/commit/abort`——get 记录读集版本,
+  set 暂存写集,commit 全有或全无(读集 CAS,冲突零提交);
+  单次句柄;读/写集各限 32 项;
+- `shrewd_basic_dbus_save/load(bus, pattern, file)`:json 快照落盘/
+  回灌(import 语义:绕过钩子与通知);
+- `note.folded`:coalesce 折叠掉的同路径变更次数;`options.ring_size`
+  定 shm 变更环容量(默认 64)。
+
+**HIDDEN 边界(现行语义)**:字段选择器命中才拒;`get("/res")` 整体
+拷贝仍携带隐藏字段字节——收紧策略(整体读清零/拒读)待决策。
 
 ## 7. 持久化与观测
 

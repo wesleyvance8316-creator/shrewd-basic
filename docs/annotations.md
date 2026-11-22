@@ -143,6 +143,29 @@ typedef struct {
 - 值里的引号文本**原样捕获**,C 转义由生成器负责
   (`pattern="^\d+$"` 生成 `"^\\d+$"`)。
 
+### 6.5 对象:dbus 挂载(`dbus:` 命名空间)
+
+构建期生成 sb_dbus 挂载表(`db<stub>_dbus.{c,h}`):
+
+```c
+/* reflect: type=user_t;
+   dbus:    type=user_t, path=/config/user; */
+/* dbus: type=s_t, path=/hw/adc0, ops=adc_ops; */
+/* dbus: path=/event/alarm, flags={event}; */
+```
+
+| 指令 | 语义 |
+|---|---|
+| `path=/a/b` | 必填,`/` 开头;重复挂载路径硬错误 |
+| `store=owned` | 默认;`store=linked` 硬错误(data 指针生成器拿不到,手写) |
+| `flags={event,readonly}` | 挂载标志(花括号列表可并存) |
+| `ops=NAME` | 虚拟/拦截:ops vtable 符号 |
+| `name=` | 表名改名(默认回退首个 type) |
+
+`type=` 可省(纯事件 topic);闭包硬错误(type 须 reflect 点名或
+external)。产出 `<x>_dbus_mounts` 表 + `<x>_dbus_mounts_count` +
+`<x>_dbus_mount_all`(全有或全无挂载,失败回滚)。
+
 ## 7. 命令行与后端
 
 ```sh
