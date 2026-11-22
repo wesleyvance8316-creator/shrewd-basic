@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "shrewd-basic/formats/bson.h"
 #include "shrewd-basic/formats/cbor.h"
 #include "shrewd-basic/formats/csv.h"
 #include "shrewd-basic/formats/env.h"
@@ -228,6 +229,11 @@ int main(int argc, char **argv) {
                 shrewd_basic_cbor_decode,
                 shrewd_basic_cbor_bytes_free,
                 shrewd_basic_cbor_free);
+    demo_binary("bson",
+                shrewd_basic_bson_encode,
+                shrewd_basic_bson_decode,
+                shrewd_basic_bson_bytes_free,
+                shrewd_basic_bson_free);
     printf("formats demo: ok\n");
     return 0;
 }
