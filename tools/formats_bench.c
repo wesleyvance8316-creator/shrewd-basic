@@ -17,11 +17,13 @@
 #include <string.h>
 #include <time.h>
 
+#include "shrewd-basic/formats/bson.h"
 #include "shrewd-basic/formats/cbor.h"
 #include "shrewd-basic/formats/csv.h"
 #include "shrewd-basic/formats/ini.h"
 #include "shrewd-basic/formats/msgpack.h"
 #include "shrewd-basic/formats/toml.h"
+#include "shrewd-basic/formats/xml.h"
 #include "shrewd-basic/log/log.h"
 #include "shrewd-basic/reflect/reflect.h"
 
@@ -135,7 +137,7 @@ static void run_case(const char *what, batch_fn fn, void *ctx, double bytes) {
 
 static void quiet_logs(void) {
     static const char *const names[]
-        = {"reflect", "json", "ds", "log", "ini", "csv", "toml", "msgpack", "cbor"};
+        = {"reflect", "json", "ds", "log", "ini", "csv", "toml", "msgpack", "cbor", "xml", "bson"};
     for (size_t i = 0; i < (sizeof(names) / sizeof(names[0])); ++i) {
         shrewd_basic_log_module_t *quiet = NULL;
         if (SHREWD_BASIC_ERR_OK == shrewd_basic_log_module_find(names[i], &quiet)) {
@@ -291,6 +293,41 @@ static void cbor_decode_op(void *arg, long n) {
     }
 }
 
+static void xml_encode_op(void *arg, long n) {
+    map_ctx_t *c = (map_ctx_t *)arg;
+    for (long i = 0; i < n; ++i) {
+        char *text = NULL;
+        (void)shrewd_basic_xml_encode(c->src, &cfg_reflect, NULL, 0, &text, NULL);
+        shrewd_basic_xml_text_free(text);
+    }
+}
+
+static void xml_decode_op(void *arg, long n) {
+    map_ctx_t *c = (map_ctx_t *)arg;
+    for (long i = 0; i < n; ++i) {
+        (void)shrewd_basic_xml_free(c->target, &cfg_reflect);
+        (void)shrewd_basic_xml_decode(c->doc, c->doc_len, c->target, &cfg_reflect, NULL, 0, NULL);
+    }
+}
+
+static void bson_encode_op(void *arg, long n) {
+    map_ctx_t *c = (map_ctx_t *)arg;
+    for (long i = 0; i < n; ++i) {
+        void *bytes = NULL;
+        size_t size = 0;
+        (void)shrewd_basic_bson_encode(c->src, &cfg_reflect, &bytes, &size);
+        shrewd_basic_bson_bytes_free(bytes);
+    }
+}
+
+static void bson_decode_op(void *arg, long n) {
+    map_ctx_t *c = (map_ctx_t *)arg;
+    for (long i = 0; i < n; ++i) {
+        (void)shrewd_basic_bson_free(c->target, &cfg_reflect);
+        (void)shrewd_basic_bson_decode(c->bytes, c->bytes_len, c->target, &cfg_reflect);
+    }
+}
+
 int main(void) {
     static cfg_t cfg;
     static cfg_t target;
@@ -412,6 +449,36 @@ int main(void) {
         (void)shrewd_basic_cbor_free(&target, &cfg_reflect);
         memset(&target, 0, sizeof(target));
         shrewd_basic_cbor_bytes_free(bytes);
+    }
+
+    /* --- XML / BSON --- */
+    {
+        char *seed = NULL;
+        (void)shrewd_basic_xml_encode(&cfg, &cfg_reflect, NULL, 0, &seed, NULL);
+        mctx.doc = seed;
+        mctx.doc_len = (NULL != seed) ? strlen(seed) : 0;
+        mctx.src = &cfg;
+        mctx.target = &target;
+        printf("formats_bench: xml (%zu bytes)\n", mctx.doc_len);
+        run_case("xml encode", xml_encode_op, &mctx, (double)mctx.doc_len);
+        run_case("xml decode", xml_decode_op, &mctx, (double)mctx.doc_len);
+        (void)shrewd_basic_xml_free(&target, &cfg_reflect);
+        memset(&target, 0, sizeof(target));
+        shrewd_basic_xml_text_free(seed);
+    }
+    {
+        void *bytes = NULL;
+        size_t size = 0;
+        (void)shrewd_basic_bson_encode(&cfg, &cfg_reflect, &bytes, &size);
+        mctx.bytes = bytes;
+        mctx.bytes_len = size;
+        mctx.src = &cfg;
+        printf("formats_bench: bson (%zu bytes)\n", size);
+        run_case("bson encode", bson_encode_op, &mctx, (double)size);
+        run_case("bson decode", bson_decode_op, &mctx, (double)size);
+        (void)shrewd_basic_bson_free(&target, &cfg_reflect);
+        memset(&target, 0, sizeof(target));
+        shrewd_basic_bson_bytes_free(bytes);
     }
 
     printf("formats_bench: done\n");

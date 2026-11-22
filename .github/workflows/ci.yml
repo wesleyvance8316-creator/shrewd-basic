@@ -1,6 +1,6 @@
 # CI: build, test and style gate on every push / pull request.
-# Matrix: gcc + clang on Linux (the platform policy targets embedded
-# Linux; ILP32 and the wider matrix stay with tools/verify_platforms.sh).
+# Matrix: gcc + clang + gcc -m32 (ILP32) on Linux - the platform policy
+# targets embedded Linux; the wider matrix stays in tools/verify_platforms.sh.
 name: ci
 
 on:
@@ -14,9 +14,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cc: [gcc, clang]
+        include:
+          - cc: gcc
+            flags: ""
+            name: gcc
+          - cc: clang
+            flags: ""
+            name: clang
+          - cc: gcc
+            flags: "-m32"
+            name: gcc-ilp32
+    name: ${{ matrix.name }}
     env:
       CC: ${{ matrix.cc }}
+      EXTRA_FLAGS: ${{ matrix.flags }}
     steps:
       - uses: actions/checkout@v4
 
@@ -24,10 +35,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build clang-format clang-tidy \
-                                  python3 python3-pyelftools
+                                  python3 python3-pyelftools gcc-multilib libc6-dev-i386
 
       - name: configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+        run: >
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          -DCMAKE_C_FLAGS="$EXTRA_FLAGS"
+          -DCMAKE_EXE_LINKER_FLAGS="$EXTRA_FLAGS"
 
       - name: build
         run: cmake --build build -j
