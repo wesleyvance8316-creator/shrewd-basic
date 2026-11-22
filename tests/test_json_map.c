@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <uchar.h>
 
 #include "shrewd-basic/formats/json.h"
 #include "shrewd-basic/log/log.h"
@@ -254,6 +255,106 @@ static int map_sink_write(void *ctx, const char *data, size_t length) {
     *cursor += length;
     **cursor = '\0';
     return SHREWD_BASIC_ERR_OK;
+}
+
+/* --- wide strings (UTF-8 <-> code units) ------------------------------- */
+
+typedef struct {
+    const char16_t *title; /* borrowed */
+    char16_t body[6];      /* wide string buffer */
+} wtext_map_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(wtext_map_reflect,
+                                 wtext_map_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING16(wtext_map_t, title),
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING16_BUFFER(wtext_map_t, body));
+
+static void test_wide_strings(void) {
+    /* caf + U+00E9 (é) + a surrogate pair (U+1F600): exercises BMP and
+       supplementary-plane conversion in one string. */
+    static const char16_t title_units[] = {'c', 'a', 'f', 0x00e9, 0xd83d, 0xde00, 0};
+    wtext_map_t src;
+    memset(&src, 0, sizeof(src));
+    src.title = title_units;
+    src.body[0] = 'o';
+    src.body[1] = 'k';
+    src.body[2] = 0;
+
+    /* Encode: strict wide -> UTF-8; ASCII parts are verbatim. */
+    {
+        char *text = NULL;
+        expect_eq_int("wtext encode",
+                      shrewd_basic_json_encode(&src, &wtext_map_reflect, NULL, &text, NULL, NULL),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("wtext encode body",
+                    (NULL != text) && (NULL != strstr(text, "\"body\":\"ok\"")));
+        expect_true("wtext encode title",
+                    (NULL != text) && (NULL != strstr(text, "\"title\":\"caf")));
+        shrewd_basic_json_text_free(text);
+    }
+
+    /* Round trip: units -> UTF-8 -> units stays content-equal. */
+    {
+        wtext_map_t *clone = NULL;
+        bool same = false;
+        char *text = NULL;
+        expect_eq_int("wtext roundtrip encode",
+                      shrewd_basic_json_encode(&src, &wtext_map_reflect, NULL, &text, NULL, NULL),
+                      SHREWD_BASIC_ERR_OK);
+        clone = decode_new("wtext roundtrip", text, &wtext_map_reflect, sizeof(wtext_map_t));
+        shrewd_basic_json_text_free(text);
+        if (NULL != clone) {
+            expect_eq_int("wtext roundtrip equal",
+                          shrewd_basic_reflect_equal(&src, clone, &wtext_map_reflect, &same),
+                          SHREWD_BASIC_ERR_OK);
+            expect_true("wtext roundtrip same", same);
+            expect_eq_int(
+                "wtext roundtrip free", free_new(clone, &wtext_map_reflect), SHREWD_BASIC_ERR_OK);
+        }
+    }
+
+    /* NULL borrowed string renders as null. */
+    {
+        char *text = NULL;
+        src.title = NULL;
+        expect_eq_int("wtext null encode",
+                      shrewd_basic_json_encode(&src, &wtext_map_reflect, NULL, &text, NULL, NULL),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("wtext null body", (NULL != text) && (NULL != strstr(text, "\"title\":null")));
+        shrewd_basic_json_text_free(text);
+        src.title = title_units;
+    }
+
+    /* Lone surrogate in source content: clean REFLECT_ENCODING on
+       encode, never a replacement character. */
+    {
+        wtext_map_t bad;
+        char *text = NULL;
+        memset(&bad, 0, sizeof(bad));
+        bad.title = title_units;
+        bad.body[0] = (char16_t)0xd800; /* lone high surrogate */
+        expect_eq_int("wtext lone surrogate",
+                      shrewd_basic_json_encode(&bad, &wtext_map_reflect, NULL, &text, NULL, NULL),
+                      SHREWD_BASIC_ERR_REFLECT_ENCODING);
+        expect_true("wtext lone surrogate no text", NULL == text);
+    }
+
+    /* A lone-surrogate escape on decode: refused either at the parser
+       (JSON_SYNTAX) or at the strict converter (REFLECT_ENCODING) -
+       never stored as garbage units. */
+    {
+        wtext_map_t dst;
+        shrewd_basic_json_error_t error = {0};
+        const char *wire = "{\"title\":\"a\",\"body\":\"\\ud800\"}";
+        int status = 0;
+        memset(&dst, 0, sizeof(dst));
+        status = shrewd_basic_json_decode(
+            wire, strlen(wire), &dst, &wtext_map_reflect, NULL, NULL, &error);
+        expect_true("wtext bad escape refused",
+                    (SHREWD_BASIC_ERR_REFLECT_ENCODING == status)
+                        || (SHREWD_BASIC_ERR_JSON_SYNTAX == status));
+        (void)shrewd_basic_json_free(&dst, &wtext_map_reflect, NULL);
+    }
 }
 
 /* --- wide scalars (LONG_DOUBLE / COMPLEX / BIT_INT) --------------------- */
@@ -787,6 +888,7 @@ int main(void) {
         (void)shrewd_basic_log_module_set_level(module, SHREWD_BASIC_LOG_LEVEL_NONE);
     }
 
+    test_wide_strings();
     test_wscalars();
     test_encode_person();
     test_decode_rules();

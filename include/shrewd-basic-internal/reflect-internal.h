@@ -205,6 +205,24 @@ static inline int reflect_wstrn_eq(const void *a, const void *b, size_t unit, si
     return ((len_a == len_b) && (0 == memcmp(a, b, len_a * unit))) ? 1 : 0;
 }
 
+/*
+ * Strict UTF conversions between NUL-unit-terminated wide strings and
+ * UTF-8 (reflect_utf.c). Both directions are strict: invalid UTF-8,
+ * truncated sequences, lone UTF-16 surrogates and out-of-range code
+ * points fail with SHREWD_BASIC_ERR_REFLECT_ENCODING - never
+ * replacement characters. Measure first (dst NULL), then convert into
+ * an exact buffer; no terminator is written (callers own layout).
+ * unit is the code-unit width in bytes (2 or 4).
+ */
+int reflect_utf8_from_units(
+    const void *src, size_t unit, size_t max_units, char *dst, size_t dst_cap, size_t *out_len);
+int reflect_units_from_utf8(const char *src,
+                            size_t src_len,
+                            size_t unit,
+                            void *dst,
+                            size_t dst_cap_units,
+                            size_t *out_units);
+
 /* Width-matched store: the write-side twin of reflect_load_u64(). */
 static inline void reflect_store_u64(unsigned char *bytes, size_t nbytes, uint64_t value) {
     switch (nbytes) {

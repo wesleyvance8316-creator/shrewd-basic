@@ -361,6 +361,40 @@ static int json_decode_node(json_map_ctx_t *ctx,
         memcpy(target, &block, sizeof(block));
         return SHREWD_BASIC_ERR_OK;
     }
+    case SHREWD_BASIC_REFLECT_KIND_STRING16:
+    case SHREWD_BASIC_REFLECT_KIND_STRING32: {
+        /* UTF-8 -> wide units (strict); owned copy with a NUL unit
+           (calloc zeroes the terminator slot). */
+        const char *text = NULL;
+        void *block = NULL;
+        size_t unit = reflect_string_unit(type->sb_refl_kind);
+        size_t needed = 0;
+        int status = 0;
+        if (SHREWD_BASIC_JSON_NULL == shrewd_basic_json_kind(value)) {
+            memset(target, 0, nbytes);
+            return SHREWD_BASIC_ERR_OK;
+        }
+        if (SHREWD_BASIC_JSON_STRING != shrewd_basic_json_kind(value)) {
+            return json_map_fail(
+                ctx, SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH, "expected a string or null");
+        }
+        text = shrewd_basic_json_to_string(value);
+        status = reflect_units_from_utf8(text, strlen(text), unit, NULL, 0, &needed);
+        if (SHREWD_BASIC_ERR_OK != status) {
+            return json_map_fail(ctx, status, "string is not valid UTF-8");
+        }
+        if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_calloc(&block, 1, (needed + 1) * unit)) {
+            return SHREWD_BASIC_ERR_MEM_NOMEM;
+        }
+        status = reflect_units_from_utf8(text, strlen(text), unit, block, needed + 1, &needed);
+        if (SHREWD_BASIC_ERR_OK != status) {
+            void *old = block;
+            (void)shrewd_basic_platform_free(&old);
+            return json_map_fail(ctx, status, "string is not valid UTF-8");
+        }
+        memcpy(target, &block, sizeof(block));
+        return SHREWD_BASIC_ERR_OK;
+    }
     case SHREWD_BASIC_REFLECT_KIND_CHAR: {
         char c = '\0';
         if (SHREWD_BASIC_JSON_STRING == shrewd_basic_json_kind(value)) {
@@ -514,15 +548,34 @@ static int json_decode_field(json_map_ctx_t *ctx,
     if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
         const char *text = NULL;
         size_t length = 0;
-        if (1 != field->sb_refl_stride) {
-            /* Wide buffer: needs the UTF-8 mapping (not yet). */
-            return json_map_fail(
-                ctx, SHREWD_BASIC_ERR_JSON_UNSUPPORTED, "wide string buffer has no JSON form yet");
-        }
         if (SHREWD_BASIC_JSON_STRING != shrewd_basic_json_kind(value)) {
             return json_map_fail(ctx, SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH, "expected a string");
         }
         text = shrewd_basic_json_to_string(value);
+        if (1 != field->sb_refl_stride) {
+            /* Wide buffer: strict UTF-8 -> units, NUL unit when room. */
+            size_t unit = field->sb_refl_stride;
+            size_t needed = 0;
+            int status = reflect_units_from_utf8(text, strlen(text), unit, NULL, 0, &needed);
+            if (SHREWD_BASIC_ERR_OK != status) {
+                return json_map_fail(ctx, status, "string is not valid UTF-8");
+            }
+            if (needed > field->sb_refl_count) {
+                return json_map_fail(ctx,
+                                     SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH,
+                                     "string longer than %zu",
+                                     field->sb_refl_count);
+            }
+            status = reflect_units_from_utf8(
+                text, strlen(text), unit, at, field->sb_refl_count, &needed);
+            if (SHREWD_BASIC_ERR_OK != status) {
+                return json_map_fail(ctx, status, "string is not valid UTF-8");
+            }
+            if (needed < field->sb_refl_count) {
+                memset(at + (needed * unit), 0, unit);
+            }
+            return SHREWD_BASIC_ERR_OK;
+        }
         length = strlen(text);
         if (length > field->sb_refl_count) {
             return json_map_fail(ctx,

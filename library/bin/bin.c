@@ -260,15 +260,27 @@ static int bin_encode_fields(bin_ctx_t *ctx,
             continue;
         }
         if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
-            const char *text = (const char *)(object + field->sb_refl_offset);
-            size_t length = reflect_strn_len(text, field->sb_refl_count);
+            const unsigned char *text = object + field->sb_refl_offset;
+            size_t unit = field->sb_refl_stride;
+            size_t length = reflect_wstrn_len(text, unit, field->sb_refl_count);
             status = bin_w_word(&ctx->w, (uint64_t)length, 4);
             if (SHREWD_BASIC_ERR_OK != status) {
                 return status;
             }
-            status = bin_w_bytes(&ctx->w, text, length);
-            if (SHREWD_BASIC_ERR_OK != status) {
-                return status;
+            if (1 == unit) {
+                status = bin_w_bytes(&ctx->w, text, length);
+                if (SHREWD_BASIC_ERR_OK != status) {
+                    return status;
+                }
+            } else {
+                /* Wide buffer: unit count prefix + code units, wire
+                   endian follows the bin options. */
+                for (size_t k = 0; k < length; ++k) {
+                    status = bin_w_word(&ctx->w, reflect_load_u64(text + (k * unit), unit), unit);
+                    if (SHREWD_BASIC_ERR_OK != status) {
+                        return status;
+                    }
+                }
             }
             continue;
         }
@@ -390,6 +402,34 @@ static int bin_encode_value(bin_ctx_t *ctx,
             return status;
         }
         return bin_w_bytes(&ctx->w, text, strlen(text));
+    }
+    case SHREWD_BASIC_REFLECT_KIND_STRING16:
+    case SHREWD_BASIC_REFLECT_KIND_STRING32: {
+        /* Wide string: presence + unit count + code units (wire endian
+           follows the bin options). */
+        const void *text = reflect_load_ptr(value);
+        size_t unit = reflect_string_unit(type->sb_refl_kind);
+        size_t length = 0;
+        if (NULL == text) {
+            return bin_w_u8(&ctx->w, 0);
+        }
+        length = reflect_wstrn_len(text, unit, SIZE_MAX);
+        status = bin_w_u8(&ctx->w, 1);
+        if (SHREWD_BASIC_ERR_OK != status) {
+            return status;
+        }
+        status = bin_w_word(&ctx->w, (uint64_t)length, 4);
+        if (SHREWD_BASIC_ERR_OK != status) {
+            return status;
+        }
+        for (size_t i = 0; i < length; ++i) {
+            status = bin_w_word(
+                &ctx->w, reflect_load_u64((const unsigned char *)text + (i * unit), unit), unit);
+            if (SHREWD_BASIC_ERR_OK != status) {
+                return status;
+            }
+        }
+        return SHREWD_BASIC_ERR_OK;
     }
     case SHREWD_BASIC_REFLECT_KIND_OPAQUE:
         return SHREWD_BASIC_ERR_BIN_UNSUPPORTED;
@@ -523,6 +563,7 @@ static int bin_decode_fields(bin_ctx_t *ctx,
         }
         if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
             uint64_t length = 0;
+            size_t unit = field->sb_refl_stride;
             status = bin_r_word(&ctx->r, 4, &length);
             if (SHREWD_BASIC_ERR_OK != status) {
                 return status;
@@ -530,10 +571,26 @@ static int bin_decode_fields(bin_ctx_t *ctx,
             if (length > field->sb_refl_count) {
                 return SHREWD_BASIC_ERR_BIN_FORMAT;
             }
-            status = bin_r_bytes(&ctx->r, at, (size_t)length);
-            if ((SHREWD_BASIC_ERR_OK == status) && (NULL != at)
-                && (length < field->sb_refl_count)) {
-                at[length] = '\0';
+            if (1 == unit) {
+                status = bin_r_bytes(&ctx->r, at, (size_t)length);
+                if ((SHREWD_BASIC_ERR_OK == status) && (NULL != at)
+                    && (length < field->sb_refl_count)) {
+                    at[length] = '\0';
+                }
+            } else {
+                for (size_t k = 0; k < (size_t)length; ++k) {
+                    uint64_t code_unit = 0;
+                    status = bin_r_word(&ctx->r, unit, &code_unit);
+                    if ((SHREWD_BASIC_ERR_OK == status) && (NULL != at)) {
+                        reflect_store_u64(at + (k * unit), unit, code_unit);
+                    }
+                    if (SHREWD_BASIC_ERR_OK != status) {
+                        return status;
+                    }
+                }
+                if ((NULL != at) && (length < field->sb_refl_count)) {
+                    memset(at + (length * unit), 0, unit);
+                }
             }
             if (SHREWD_BASIC_ERR_OK != status) {
                 return status;
@@ -784,6 +841,54 @@ static int bin_decode_value(bin_ctx_t *ctx,
             void *old = block;
             (void)shrewd_basic_platform_free(&old);
             return status;
+        }
+        if (NULL != out) {
+            memcpy(out, &block, sizeof(block));
+        }
+        return SHREWD_BASIC_ERR_OK;
+    }
+    case SHREWD_BASIC_REFLECT_KIND_STRING16:
+    case SHREWD_BASIC_REFLECT_KIND_STRING32: {
+        /* Wide string: presence + unit count + code units; the copy is
+           calloc'd so the trailing NUL unit comes for free. */
+        uint64_t present = 0;
+        uint64_t length = 0;
+        void *block = NULL;
+        size_t unit = reflect_string_unit(type->sb_refl_kind);
+        status = bin_r_word(&ctx->r, 1, &present);
+        if (SHREWD_BASIC_ERR_OK != status) {
+            return status;
+        }
+        if (0 == present) {
+            if (NULL != out) {
+                memset(out, 0, sizeof(void *));
+            }
+            return SHREWD_BASIC_ERR_OK;
+        }
+        status = bin_r_word(&ctx->r, 4, &length);
+        if (SHREWD_BASIC_ERR_OK != status) {
+            return status;
+        }
+        if (length >= (SIZE_MAX / unit)) {
+            return SHREWD_BASIC_ERR_BIN_FORMAT;
+        }
+        if (NULL != out) {
+            if (SHREWD_BASIC_ERR_OK
+                != shrewd_basic_platform_calloc(&block, 1, ((size_t)length + 1) * unit)) {
+                return SHREWD_BASIC_ERR_MEM_NOMEM;
+            }
+        }
+        for (size_t i = 0; i < (size_t)length; ++i) {
+            uint64_t code_unit = 0;
+            status = bin_r_word(&ctx->r, unit, &code_unit);
+            if ((SHREWD_BASIC_ERR_OK == status) && (NULL != block)) {
+                reflect_store_u64((unsigned char *)block + (i * unit), unit, code_unit);
+            }
+            if (SHREWD_BASIC_ERR_OK != status) {
+                void *old = block;
+                (void)shrewd_basic_platform_free(&old);
+                return status;
+            }
         }
         if (NULL != out) {
             memcpy(out, &block, sizeof(block));

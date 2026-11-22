@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <uchar.h>
 
 #include "shrewd-basic/formats/bin.h"
 #include "shrewd-basic/platform/memory.h"
@@ -213,6 +214,46 @@ static int round_trip_equal(const void *src,
 }
 
 /* --- tests ------------------------------------------------------------- */
+
+/* Wide strings: unit count prefix + code units (wire endian follows
+   the bin options). */
+typedef struct {
+    const char16_t *title;
+    char16_t body[6];
+} wtext_bin_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_wtext_bin_reflect,
+                                 wtext_bin_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING16(wtext_bin_t, title),
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING16_BUFFER(wtext_bin_t, body));
+
+static void test_wide_strings(void) {
+    static const char16_t title_units[] = {'c', 'a', 'f', 0x00e9, 0xd83d, 0xde00, 0};
+    wtext_bin_t src;
+    wtext_bin_t dst;
+    bool same = false;
+    memset(&src, 0, sizeof(src));
+    src.title = title_units;
+    src.body[0] = 'o';
+    src.body[1] = 'k';
+    src.body[2] = 0;
+    expect_eq_int("wtext bin round trip",
+                  round_trip_equal(&src, &g_wtext_bin_reflect, NULL, &dst, sizeof(dst), &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wtext bin equal", same);
+    expect_eq_int(
+        "wtext bin free", shrewd_basic_bin_free(&dst, &g_wtext_bin_reflect), SHREWD_BASIC_ERR_OK);
+
+    /* NULL borrowed pointer round-trips as NULL. */
+    src.title = NULL;
+    expect_eq_int("wtext bin null round trip",
+                  round_trip_equal(&src, &g_wtext_bin_reflect, NULL, &dst, sizeof(dst), &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wtext bin null equal", same);
+    expect_eq_int("wtext bin null free",
+                  shrewd_basic_bin_free(&dst, &g_wtext_bin_reflect),
+                  SHREWD_BASIC_ERR_OK);
+}
 
 /* Wide scalars: raw-width wire in native order. */
 typedef struct {
@@ -627,6 +668,7 @@ static void test_errors(void) {
 }
 
 int main(void) {
+    test_wide_strings();
     test_wscalars();
     test_scalars();
     test_endian_layout();
