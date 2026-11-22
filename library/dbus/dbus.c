@@ -77,6 +77,7 @@ typedef struct {
     char seg[DBUS_SEG_MAX][64];
     unsigned char wild[DBUS_SEG_MAX];
     size_t count;
+    int subtree;    /* trailing double-star: match the rest of the path */
     char field[64]; /* empty = any field */
     int has_field;
 } dbus_pattern_t;
@@ -108,6 +109,14 @@ static int dbus_pattern_compile(const char *pattern, dbus_pattern_t *out) {
         if ((0 == len) || (len >= sizeof(out->seg[0])) || (out->count >= DBUS_SEG_MAX)) {
             return SHREWD_BASIC_ERR_ARG_INVALID;
         }
+        if ((2 == len) && ('*' == pattern[start]) && ('*' == pattern[start + 1])) {
+            if (end != n) {
+                return SHREWD_BASIC_ERR_ARG_INVALID; /* ** is trailing only */
+            }
+            out->subtree = 1;
+            start = end + 1;
+            continue;
+        }
         memcpy(out->seg[out->count], pattern + start, len);
         out->seg[out->count][len] = '\0';
         out->wild[out->count] = (0 == strcmp(out->seg[out->count], "*")) ? DBUS_SEG_WILD : 0;
@@ -121,15 +130,14 @@ static int dbus_pattern_compile(const char *pattern, dbus_pattern_t *out) {
 static int dbus_match(const dbus_pattern_t *pat, const char *path, size_t res_len) {
     size_t seg = 0;
     size_t start = 1;
-    size_t count = 0;
     while (start < res_len) {
         size_t end = start;
         while ((end < res_len) && ('/' != path[end])) {
             ++end;
         }
-        ++count;
         if (seg >= pat->count) {
-            return 0;
+            /* only a subtree tail can consume extra segments */
+            return (0 != pat->subtree) ? 1 : 0;
         }
         if (0 == pat->wild[seg]) {
             size_t len = end - start;
@@ -140,7 +148,7 @@ static int dbus_match(const dbus_pattern_t *pat, const char *path, size_t res_le
         ++seg;
         start = end + 1;
     }
-    return (seg == pat->count) ? 1 : 0;
+    return ((seg == pat->count) || ((0 != pat->subtree) && (seg == pat->count))) ? 1 : 0;
 }
 
 /* --- nodes, hooks, subscriptions ----------------------------------------- */
@@ -1239,11 +1247,171 @@ int shrewd_basic_dbus_publish(shrewd_basic_dbus_t *bus,
 
 /* --- observation / persistence --------------------------------------------- */
 
-int shrewd_basic_dbus_dump(shrewd_basic_dbus_t *bus, const char *pattern) {
-    (void)bus;
-    (void)pattern;
-    return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
+/* Pattern match against a node's resource path (field selector on the
+   pattern is ignored here: dump/export work at resource granularity). */
+static int dbus_match_node(const dbus_pattern_t *pat, const char *path) {
+    size_t res_len = 0;
+    const char *field = NULL;
+    if (SHREWD_BASIC_ERR_OK != dbus_split(path, &res_len, &field)) {
+        return 0;
+    }
+    (void)field;
+    return dbus_match(pat, path, res_len);
 }
+
+int shrewd_basic_dbus_dump(shrewd_basic_dbus_t *bus, const char *pattern) {
+    dbus_pattern_t pat;
+    if (NULL == bus) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    memset(&pat, 0, sizeof(pat));
+    if (NULL == pattern) {
+        pat.subtree = 1; /* match everything */
+    } else if (SHREWD_BASIC_ERR_OK != dbus_pattern_compile(pattern, &pat)) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    dbus_lock(bus);
+    for (dbus_node_t *node = bus->nodes; NULL != node; node = node->next) {
+        if ((0 == node->dead) && (0 != dbus_match_node(&pat, node->path))) {
+            node->refs += 1;
+            dbus_unlock(bus);
+            if ((NULL != node->type) && (NULL != node->data)) {
+                shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_INFO,
+                                 shrewd_basic_dbus_log,
+                                 "dump",
+                                 "%s (v%llu)\n",
+                                 node->path,
+                                 (unsigned long long)node->version);
+                (void)shrewd_basic_reflect_dump(node->type, node->data, node->path);
+            }
+            dbus_lock(bus);
+            node->refs -= 1;
+        }
+    }
+    dbus_unlock(bus);
+    return SHREWD_BASIC_ERR_OK;
+}
+
+#if SHREWD_BASIC_FORMAT_JSON
+
+int shrewd_basic_dbus_export(shrewd_basic_dbus_t *bus, const char *pattern, char **out_json) {
+    dbus_pattern_t pat;
+    shrewd_basic_json_value_t *root = NULL;
+    char *text = NULL;
+    int status = 0;
+    if ((NULL == bus) || (NULL == out_json)) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    *out_json = NULL;
+    memset(&pat, 0, sizeof(pat));
+    if (NULL == pattern) {
+        pat.subtree = 1; /* match everything */
+    } else {
+        status = dbus_pattern_compile(pattern, &pat);
+        if (SHREWD_BASIC_ERR_OK != status) {
+            return status;
+        }
+    }
+    status = shrewd_basic_json_new(SHREWD_BASIC_JSON_OBJECT, &root);
+    dbus_lock(bus);
+    for (dbus_node_t *node = bus->nodes; (NULL != node) && (SHREWD_BASIC_ERR_OK == status);
+         node = node->next) {
+        if ((0 != node->dead) || (0 == dbus_match_node(&pat, node->path)) || (NULL == node->type)
+            || (NULL == node->data)) {
+            continue;
+        }
+        node->refs += 1;
+        dbus_unlock(bus);
+        {
+            shrewd_basic_json_value_t *val = NULL;
+            status = shrewd_basic_json_encode_value(node->data, node->type, NULL, &val, NULL, NULL);
+            if (SHREWD_BASIC_ERR_OK == status) {
+                status = shrewd_basic_json_set(root, node->path, val);
+                if (SHREWD_BASIC_ERR_OK != status) {
+                    shrewd_basic_json_value_free(val);
+                }
+            }
+        }
+        dbus_lock(bus);
+        node->refs -= 1;
+    }
+    dbus_unlock(bus);
+    if (SHREWD_BASIC_ERR_OK == status) {
+        status = shrewd_basic_json_serialize(root, &text, NULL, NULL);
+    }
+    shrewd_basic_json_value_free(root);
+    if (SHREWD_BASIC_ERR_OK != status) {
+        return status;
+    }
+    *out_json = text;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+int shrewd_basic_dbus_import(shrewd_basic_dbus_t *bus,
+                             const char *pattern,
+                             const char *json,
+                             size_t length) {
+    dbus_pattern_t pat;
+    shrewd_basic_json_value_t *root = NULL;
+    int status = 0;
+    if ((NULL == bus) || (NULL == json)) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    memset(&pat, 0, sizeof(pat));
+    if (NULL == pattern) {
+        pat.subtree = 1; /* match everything */
+    } else {
+        status = dbus_pattern_compile(pattern, &pat);
+        if (SHREWD_BASIC_ERR_OK != status) {
+            return status;
+        }
+    }
+    status = shrewd_basic_json_parse(json, length, &root, NULL, NULL);
+    if (SHREWD_BASIC_ERR_OK != status) {
+        return status;
+    }
+    /* Bulk initialization: commits values without hooks or notify. */
+    for (size_t i = 0; (SHREWD_BASIC_ERR_OK == status) && (i < shrewd_basic_json_count(root));
+         ++i) {
+        const char *key = shrewd_basic_json_key_at(root, i);
+        const shrewd_basic_json_value_t *val = shrewd_basic_json_at(root, i);
+        size_t res_len = 0;
+        const char *field = NULL;
+        dbus_node_t *node = NULL;
+        if ((NULL == key) || (SHREWD_BASIC_ERR_OK != dbus_split(key, &res_len, &field))
+            || (0 == dbus_match_node(&pat, key)) || (NULL != field)) {
+            continue;
+        }
+        dbus_lock(bus);
+        status = shrewd_basic_radix_search(bus->exact, key, (void **)&node);
+        if ((SHREWD_BASIC_ERR_OK == status)
+            && ((0 != node->dead) || (NULL == node->type) || (NULL == node->data))) {
+            status = SHREWD_BASIC_ERR_KEY_NOTFOUND;
+        }
+        if (SHREWD_BASIC_ERR_OK == status) {
+            node->refs += 1;
+        }
+        dbus_unlock(bus);
+        if (SHREWD_BASIC_ERR_OK != status) {
+            status = SHREWD_BASIC_ERR_OK; /* unmatched keys are skipped */
+            continue;
+        }
+        if (0 != dbus_reentrant(bus, node)) {
+            status = SHREWD_BASIC_ERR_DBUS_REENTRANT;
+        } else if (SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_json_decode_value(
+                       val, node->data, node->type, NULL, NULL, NULL)) {
+            dbus_lock(bus);
+            node->version += 1;
+            dbus_unlock(bus);
+        }
+        dbus_release(bus, node);
+    }
+    shrewd_basic_json_value_free(root);
+    return status;
+}
+
+#else /* !SHREWD_BASIC_FORMAT_JSON */
 
 int shrewd_basic_dbus_export(shrewd_basic_dbus_t *bus, const char *pattern, char **out_json) {
     (void)bus;
@@ -1262,6 +1430,8 @@ int shrewd_basic_dbus_import(shrewd_basic_dbus_t *bus,
     (void)length;
     return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
 }
+
+#endif /* SHREWD_BASIC_FORMAT_JSON */
 
 int shrewd_basic_dbus_drain(shrewd_basic_dbus_t *bus) {
     if (NULL == bus) {

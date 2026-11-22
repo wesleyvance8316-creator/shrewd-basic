@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "shrewd-basic/dbus/dbus.h"
+#include "shrewd-basic/formats/json.h"
 
 static int g_failures = 0;
 
@@ -181,6 +182,26 @@ int main(void) {
     expect("pre_set ran", 0 < g_pre_set_calls);
     expect("unmount hook 2", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_unmount(bus, h_hook));
     h_hook = NULL;
+
+    /* export/import: json snapshot round trip (bypasses hooks/notify). */
+    {
+        char *json = NULL;
+        int32_t level = 0;
+        expect("export", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_export(bus, "/config/**", &json));
+        expect("export text", (NULL != json) && (NULL != strstr(json, "/config/log")));
+        expect("mutate",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_set(bus, "/config/log.level", &nine, sizeof(nine), NULL));
+        expect("import",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_import(bus, "/config/**", json, strlen(json)));
+        expect("import value",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_get(bus, "/config/log.level", &level, sizeof(level), NULL));
+        expect("import restored", 1 == level);
+        shrewd_basic_json_text_free(json);
+    }
+    expect("dump", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_dump(bus, "/config/**"));
 
     /* Argument and routing refusals. */
     {
