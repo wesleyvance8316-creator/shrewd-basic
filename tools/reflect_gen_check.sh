@@ -212,6 +212,79 @@ if python3 "$here/reflect_gen.py" "$work/dbus/evtype.h" -o "$work/dbus/evtype_ge
     exit 1
 fi
 
+
+# --- xml: policy-table generation + csv/ini equivalence ----------------
+mkdir -p "$work/xml"
+python3 "$here/reflect_gen.py" "$here/reflect_gen_sample_xml.h" \
+    -o "$work/xml/generated"
+grep -q 'const shrewd_basic_xml_policy_t cfg_t_xml_policy\[\] = {' "$work/xml/generated_xml.c"
+grep -q '{"name", "id", 1, SHREWD_BASIC_XML_REQUIRED},' "$work/xml/generated_xml.c"
+grep -q '{"secret", NULL, 0, SHREWD_BASIC_XML_HIDDEN},' "$work/xml/generated_xml.c"
+grep -q '{"size", NULL, 1, 0},' "$work/xml/generated_xml.c"
+grep -q '{"child", NULL, 0, 0},' "$work/xml/generated_xml.c"
+grep -q 'const size_t cfg_t_xml_policy_count = 4;' "$work/xml/generated_xml.c"
+grep -q 'const shrewd_basic_xml_policy_t row_map_policy\[\] = {' "$work/xml/generated_xml.c"
+grep -q '{"b", "beta", 0, SHREWD_BASIC_XML_REQUIRED | SHREWD_BASIC_XML_HIDDEN},' \
+    "$work/xml/generated_xml.c"
+grep -q 'extern const shrewd_basic_xml_policy_t cfg_t_xml_policy\[\];' "$work/xml/generated_xml.h"
+grep -q 'extern const size_t row_map_policy_count;' "$work/xml/generated_xml.h"
+# csv:/ini: equivalence entrances land on the json policy tables
+grep -q 'SHREWD_BASIC_JSON_KEY(a, "A")' "$work/xml/generated_json.c"
+grep -q 'SHREWD_BASIC_JSON_REQUIRED(a)' "$work/xml/generated_json.c"
+
+# compile smoke: the table is pure data (no module link needed)
+cat > "$work/xml/smoke.c" <<'EOF'
+#include <stdio.h>
+
+#include "generated_xml.h"
+#include "reflect_gen_sample_xml.h"
+
+int main(void) {
+    if ((4 != cfg_t_xml_policy_count) || (1 != row_map_policy_count)) {
+        printf("reflect_gen_xml_smoke: FAILED counts\n");
+        return 1;
+    }
+    if ((1 != cfg_t_xml_policy[0].as_attr) || (0 != cfg_t_xml_policy[3].as_attr)) {
+        printf("reflect_gen_xml_smoke: FAILED rows\n");
+        return 1;
+    }
+    printf("reflect_gen_xml_smoke: ok\n");
+    return 0;
+}
+EOF
+${CC:-cc} -std=c11 \
+    -I"$root/include" -I"$here" -I"$work/xml" \
+    "$work/xml/smoke.c" "$work/xml/generated_xml.c" \
+    -o "$work/xml/smoke"
+"$work/xml/smoke"
+
+# refusals: member without its type anchor; flags on the type statement;
+# duplicate directives; an anchor with no member rows
+printf '/* reflect: type=t_t;\n   xml: member=t_t.a, attr; */\ntypedef struct { int a; } t_t;\n' \
+    > "$work/xml/nanchor.h"
+if python3 "$here/reflect_gen.py" "$work/xml/nanchor.h" -o "$work/xml/nanchor_gen" --quiet 2> /dev/null; then
+    echo "reflect_gen_check: xml member without type= was accepted" >&2
+    exit 1
+fi
+printf '/* reflect: type=t_t;\n   xml: type=t_t, attr; */\ntypedef struct { int a; } t_t;\n' \
+    > "$work/xml/flagtype.h"
+if python3 "$here/reflect_gen.py" "$work/xml/flagtype.h" -o "$work/xml/flagtype_gen" --quiet 2> /dev/null; then
+    echo "reflect_gen_check: xml attr on a type statement was accepted" >&2
+    exit 1
+fi
+printf '/* reflect: type=t_t;\n   xml: type=t_t; */\ntypedef struct {\n    /* xml: member=t_t.a, attr, attr; */\n    int a;\n} t_t;\n' \
+    > "$work/xml/dup.h"
+if python3 "$here/reflect_gen.py" "$work/xml/dup.h" -o "$work/xml/dup_gen" --quiet 2> /dev/null; then
+    echo "reflect_gen_check: duplicate xml directive was accepted" >&2
+    exit 1
+fi
+printf '/* reflect: type=t_t;\n   xml: type=t_t; */\ntypedef struct { int a; } t_t;\n' \
+    > "$work/xml/empty.h"
+if python3 "$here/reflect_gen.py" "$work/xml/empty.h" -o "$work/xml/empty_gen" --quiet 2> /dev/null; then
+    echo "reflect_gen_check: empty xml policy table was accepted" >&2
+    exit 1
+fi
+
 # --- golden: full-text lock on the sample stubs ---------------------------
 python3 "$here/reflect_gen.py" "$here/reflect_gen_sample.h" -o "$work/golden" --quiet
 mkdir "$work/golden_json"
@@ -220,6 +293,9 @@ python3 "$here/reflect_gen.py" "$here/reflect_gen_sample_json.h" \
 mkdir "$work/golden_dbus"
 python3 "$here/reflect_gen.py" "$here/reflect_gen_sample_dbus.h" \
     -o "$work/golden_dbus/generated" --quiet
+mkdir "$work/golden_xml"
+python3 "$here/reflect_gen.py" "$here/reflect_gen_sample_xml.h" \
+    -o "$work/golden_xml/generated" --quiet
 if [ "${1:-}" = "--update-golden" ]; then
     cp "$work/golden.c" "$here/reflect_gen_golden.c"
     cp "$work/golden.h" "$here/reflect_gen_golden.h"
@@ -227,6 +303,8 @@ if [ "${1:-}" = "--update-golden" ]; then
     cp "$work/golden_json/generated_json.h" "$here/reflect_gen_golden_json.h"
     cp "$work/golden_dbus/generated_dbus.c" "$here/reflect_gen_golden_dbus.c"
     cp "$work/golden_dbus/generated_dbus.h" "$here/reflect_gen_golden_dbus.h"
+    cp "$work/golden_xml/generated_xml.c" "$here/reflect_gen_golden_xml.c"
+    cp "$work/golden_xml/generated_xml.h" "$here/reflect_gen_golden_xml.h"
     echo "reflect_gen_check: golden files updated"
     exit 0
 fi
@@ -237,6 +315,8 @@ if [ -f "$here/reflect_gen_golden.c" ]; then
     diff -u "$here/reflect_gen_golden_json.h" "$work/golden_json/generated_json.h"
     diff -u "$here/reflect_gen_golden_dbus.c" "$work/golden_dbus/generated_dbus.c"
     diff -u "$here/reflect_gen_golden_dbus.h" "$work/golden_dbus/generated_dbus.h"
+    diff -u "$here/reflect_gen_golden_xml.c" "$work/golden_xml/generated_xml.c"
+    diff -u "$here/reflect_gen_golden_xml.h" "$work/golden_xml/generated_xml.h"
 else
     echo "reflect_gen_check: no golden files (run: tools/reflect_gen_check.sh --update-golden)" >&2
     exit 1
