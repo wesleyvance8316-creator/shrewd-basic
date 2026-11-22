@@ -72,6 +72,76 @@ target_link_libraries(shrewd-basic-bin-tests
 
 endif()
 
+if(SHREWD_BASIC_FORMAT_INI)
+
+# INI format tests (sections/keys through the shared text layer).
+add_executable(shrewd-basic-ini-tests test_ini.c)
+
+target_link_libraries(shrewd-basic-ini-tests
+        PRIVATE
+            shrewd-basic
+            shrewd-basic-warnings)
+
+add_test(NAME shrewd-basic.ini COMMAND shrewd-basic-ini-tests)
+
+endif()
+
+if(SHREWD_BASIC_FORMAT_ENV)
+
+# env/args tests (twelve-factor configuration mapping).
+add_executable(shrewd-basic-env-tests test_env.c)
+
+target_link_libraries(shrewd-basic-env-tests
+        PRIVATE
+            shrewd-basic
+            shrewd-basic-warnings)
+
+add_test(NAME shrewd-basic.env COMMAND shrewd-basic-env-tests)
+
+endif()
+
+if(SHREWD_BASIC_FORMAT_CSV)
+
+# CSV format tests (RFC 4180 rows through the shared text layer).
+add_executable(shrewd-basic-csv-tests test_csv.c)
+
+target_link_libraries(shrewd-basic-csv-tests
+        PRIVATE
+            shrewd-basic
+            shrewd-basic-warnings)
+
+add_test(NAME shrewd-basic.csv COMMAND shrewd-basic-csv-tests)
+
+endif()
+
+if(SHREWD_BASIC_FORMAT_TOML)
+
+# TOML format tests (TOML 1.0 subset through the shared text layer).
+add_executable(shrewd-basic-toml-tests test_toml.c)
+
+target_link_libraries(shrewd-basic-toml-tests
+        PRIVATE
+            shrewd-basic
+            shrewd-basic-warnings)
+
+add_test(NAME shrewd-basic.toml COMMAND shrewd-basic-toml-tests)
+
+endif()
+
+if(SHREWD_BASIC_FORMAT_MSGPACK)
+
+# MessagePack format tests (binary map/array mapping).
+add_executable(shrewd-basic-msgpack-tests test_msgpack.c)
+
+target_link_libraries(shrewd-basic-msgpack-tests
+        PRIVATE
+            shrewd-basic
+            shrewd-basic-warnings)
+
+add_test(NAME shrewd-basic.msgpack COMMAND shrewd-basic-msgpack-tests)
+
+endif()
+
 # Test binary returns non-zero on failure, so a plain COMMAND run is enough.
 add_test(NAME shrewd-basic.unit COMMAND shrewd-basic-tests)
 add_test(NAME shrewd-basic.ds COMMAND shrewd-basic-ds-tests)

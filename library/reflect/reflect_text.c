@@ -206,9 +206,10 @@ int shrewd_basic_reflect_render_text(const shrewd_basic_reflect_field_t *field,
             & (SHREWD_BASIC_REFLECT_FIELD_F_BITS | SHREWD_BASIC_REFLECT_FIELD_F_PTR))) {
         return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
     }
-    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
-        /* Text buffer: content to the NUL byte (the kind may read as
-           CHAR via the _Generic decay - the flag carries the shape). */
+    if ((0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF))
+        && (1 == field->sb_refl_stride)) {
+        /* Char text buffer: content to the NUL byte (the kind may read
+           as CHAR via the _Generic decay - the flag carries the shape). */
         const char *text = (const char *)value;
         size_t len = reflect_strn_len(text, field->sb_refl_count);
         return text_copy_out(text, len, buf, buf_size, out_len);
@@ -295,8 +296,9 @@ int shrewd_basic_reflect_scan_text(const shrewd_basic_reflect_field_t *field,
             & (SHREWD_BASIC_REFLECT_FIELD_F_BITS | SHREWD_BASIC_REFLECT_FIELD_F_PTR))) {
         return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
     }
-    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
-        /* Text buffer (flag carries the shape - see render_text). */
+    if ((0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF))
+        && (1 == field->sb_refl_stride)) {
+        /* Char text buffer (flag carries the shape - see render_text). */
         if (length > field->sb_refl_count) {
             return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
         }
