@@ -74,7 +74,12 @@ void shrewd_basic_json_text_free(text);
 - `\uXXXX` 解码(代理对合成 UTF-8);串内原始字节原样保留(不做 UTF-8 合法性校验);
 - 可选宽松:`options.allow_comments`(`//` 与 `/* */`)、
   `options.allow_trailing_commas`;
-- `options.max_depth` 限制嵌套(默认 32;按**值的嵌套层级**计数)。
+- `options.max_depth` 限制嵌套(默认 32;按**值的嵌套层级**计数);
+- `options.skip_bom` 剥掉一个文档首 UTF-8 BOM(报错 offset 相对剥除后的文本);
+- `options.jsonl` 接受**连续多文档**(JSON Lines/NDJSON)。`parse` 始终保持
+  单文档契约(尾随文档报错);多文档消费走 pull 循环:`jsonl` 模式下
+  `pull_capture` 以 `(OK, NULL)` 哨兵报流末——
+  `while ((OK == pull_capture(pull, &doc)) && (NULL != doc))` 即文档循环。
 
 **序列化**:紧凑默认,`options.pretty` + `options.indent`(默认 2)缩进输出;
 `options.escape_unicode` 把非 ASCII 全部转义为 `\uXXXX`(BMP 外出代理对);

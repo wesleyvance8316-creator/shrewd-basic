@@ -32,8 +32,16 @@ int shrewd_basic_json_parse(const char *text,
         return status;
     }
     status = shrewd_basic_json_pull_capture(pull, out);
+    if ((SHREWD_BASIC_ERR_OK == status) && (NULL == *out)) {
+        /* jsonl stream end without a document: parse is single-doc. */
+        status = SHREWD_BASIC_ERR_JSON_SYNTAX;
+    }
     if (SHREWD_BASIC_ERR_OK == status) {
         status = shrewd_basic_json_pull_next(pull, &token);
+    }
+    if ((SHREWD_BASIC_ERR_OK == status) && (SHREWD_BASIC_JSON_TOKEN_END != token.kind)) {
+        /* parse stays single-document even with the jsonl option. */
+        status = SHREWD_BASIC_ERR_JSON_SYNTAX;
     }
     if (SHREWD_BASIC_ERR_OK != status) {
         shrewd_basic_json_value_free(*out);

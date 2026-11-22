@@ -748,6 +748,69 @@ static int chunk_read(void *ctx, char *buf, size_t capacity, size_t *out_read) {
     return SHREWD_BASIC_ERR_OK;
 }
 
+static void test_jsonl(void) {
+    shrewd_basic_json_pull_t *pull = NULL;
+    shrewd_basic_json_options_t options = {0};
+    shrewd_basic_json_value_t *doc = NULL;
+    static const char *stream = "{\"a\":1}\n{\"b\":2}\n3\n";
+
+    /* capture-based document loop: (OK, NULL) is the stream-end
+       sentinel between documents. */
+    memset(&options, 0, sizeof(options));
+    options.jsonl = 1;
+    expect_eq_int("jsonl open",
+                  shrewd_basic_json_pull_open(&pull, stream, strlen(stream), &options, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("jsonl doc 1", shrewd_basic_json_pull_capture(pull, &doc), SHREWD_BASIC_ERR_OK);
+    expect_true("jsonl doc 1 shape",
+                (NULL != doc) && (SHREWD_BASIC_JSON_OBJECT == shrewd_basic_json_kind(doc))
+                    && (NULL != shrewd_basic_json_get(doc, "a")));
+    shrewd_basic_json_value_free(doc);
+    doc = NULL;
+    expect_eq_int("jsonl doc 2", shrewd_basic_json_pull_capture(pull, &doc), SHREWD_BASIC_ERR_OK);
+    expect_true("jsonl doc 2 shape", (NULL != doc) && (NULL != shrewd_basic_json_get(doc, "b")));
+    shrewd_basic_json_value_free(doc);
+    doc = NULL;
+    expect_eq_int("jsonl doc 3", shrewd_basic_json_pull_capture(pull, &doc), SHREWD_BASIC_ERR_OK);
+    expect_true("jsonl doc 3 shape",
+                (NULL != doc) && (SHREWD_BASIC_JSON_NUMBER == shrewd_basic_json_kind(doc)));
+    shrewd_basic_json_value_free(doc);
+    doc = NULL;
+    expect_eq_int(
+        "jsonl stream end", shrewd_basic_json_pull_capture(pull, &doc), SHREWD_BASIC_ERR_OK);
+    expect_true("jsonl stream end sentinel", NULL == doc);
+    shrewd_basic_json_pull_close(pull);
+    pull = NULL;
+
+    /* Without the option the same stream is a trailing-characters
+       error after the first document. */
+    expect_eq_int("jsonl strict open",
+                  shrewd_basic_json_pull_open(&pull, stream, strlen(stream), NULL, NULL),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "jsonl strict doc", shrewd_basic_json_pull_capture(pull, &doc), SHREWD_BASIC_ERR_OK);
+    shrewd_basic_json_value_free(doc);
+    doc = NULL;
+    expect_true("jsonl strict trailing",
+                SHREWD_BASIC_ERR_OK != shrewd_basic_json_pull_capture(pull, &doc));
+    shrewd_basic_json_pull_close(pull);
+
+    /* parse keeps its single-document contract regardless. */
+    {
+        shrewd_basic_json_value_t *one = NULL;
+        expect_true("jsonl parse trailing",
+                    SHREWD_BASIC_ERR_OK
+                        != shrewd_basic_json_parse(stream, strlen(stream), &one, &options, NULL));
+        expect_eq_int("jsonl parse single",
+                      shrewd_basic_json_parse("{\"a\":1}", 7, &one, &options, NULL),
+                      SHREWD_BASIC_ERR_OK);
+        shrewd_basic_json_value_free(one);
+        one = NULL;
+        expect_true("jsonl parse empty",
+                    SHREWD_BASIC_ERR_OK != shrewd_basic_json_parse("", 0, &one, &options, NULL));
+    }
+}
+
 static void test_pull(void) {
     shrewd_basic_json_pull_t *pull = NULL;
     shrewd_basic_json_token_t token = {0};
@@ -859,6 +922,7 @@ int main(void) {
     test_pointer();
     test_inline_containers();
     test_pointer_set();
+    test_jsonl();
     test_pull();
     return (0 == g_failures) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

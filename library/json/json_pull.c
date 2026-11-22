@@ -526,11 +526,22 @@ int shrewd_basic_json_pull_next(shrewd_basic_json_pull_t *pull,
             pull->finished = 1;
             return SHREWD_BASIC_ERR_OK;
         }
-        return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "trailing characters");
+        if (0 != pull->options.jsonl) {
+            /* jsonl: the next token starts a fresh document. */
+            pull->root_done = 0;
+            pull->started = 0;
+        } else {
+            return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "trailing characters");
+        }
     }
     if (0 != pull_at_end(pull)) {
         if (0 < pull->depth) {
             return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "unterminated container");
+        }
+        if ((0 != pull->options.jsonl) && (0 == pull->started)) {
+            /* jsonl: clean stream end between documents. */
+            pull->finished = 1;
+            return SHREWD_BASIC_ERR_OK;
         }
         return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "value expected");
     }
@@ -715,6 +726,10 @@ static int json_capture_token(shrewd_basic_json_pull_t *pull,
         shrewd_basic_json_value_free(array);
         return status;
     }
+    case SHREWD_BASIC_JSON_TOKEN_END:
+        /* Clean stream end: the sentinel for the jsonl document loop
+           (capture returns OK with *out == NULL between documents). */
+        return SHREWD_BASIC_ERR_OK;
     default:
         return pull_fail(pull, SHREWD_BASIC_ERR_JSON_SYNTAX, "value expected");
     }
