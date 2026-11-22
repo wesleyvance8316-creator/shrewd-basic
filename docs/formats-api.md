@@ -1,7 +1,7 @@
 # 格式族 API 总览(文本层 + 六格式)
 
-速查手册:公共文本层与 INI/env/CSV/TOML/msgpack/CBOR/bin 七个
-格式模块的接口与语义。json 有专册([json-api](json-api.md));
+速查手册:公共文本层与 INI/env/CSV/TOML/msgpack/CBOR/XML/BSON/bin
+九个格式模块的接口与语义。json 有专册([json-api](json-api.md));
 分类决策与边界见 [requirements](requirements.md) §4–§5;演示程序
 `programs/formats_demo.c` 覆盖全部接口。
 
@@ -108,7 +108,54 @@ int  shrewd_basic_cbor_free(object, type);
 - 形状映射与 msgpack 完全一致(同族二进制格式,共享
   `bin-internal.h` 读写骨架)。
 
-## 7. bin(formats/bin.h)
+## 7. XML(formats/xml.h)
+
+```c
+typedef struct shrewd_basic_xml_policy {
+    const char *field;   /* 成员名 */
+    const char *name;    /* 标签/属性名(NULL = 成员名) */
+    int as_attr;         /* 1 = 写成父元素属性 */
+    uint32_t flags;      /* SHREWD_BASIC_XML_REQUIRED / _HIDDEN */
+} shrewd_basic_xml_policy_t;
+
+int  shrewd_basic_xml_encode(object, type, map, map_count, &out_text, error);
+int  shrewd_basic_xml_decode(text, length, object, type, map, map_count, error);
+void shrewd_basic_xml_text_free(text);
+int  shrewd_basic_xml_free(object, type);
+```
+
+- **映射**:根元素 = 类型名;叶子走文本层(标量/枚举/缓冲/owned 串),
+  默认子元素、`as_attr` → 父元素属性;嵌套 struct 递归、定长数组 →
+  同名重复元素、指针 nil 省略/递归;宽串 ↔ UTF-8(严格);HIDDEN
+  双向跳过、REQUIRED 缺失报错、decode 接受成员名与 `name` 双名;
+- **严格子集(XXE 结构性免疫)**:接受 xml 序言/注释/CDATA/五预定义
+  实体 + 数字字符引用/空元素/单双引号;**拒绝带行号**:`<!DOCTYPE`、
+  `<!ENTITY`、处理指令、外来实体、重复属性、尾随垃圾、坏标签;
+- 多维数组(元素为 ARRAY)与位组/union/柔性/动态/哨兵/BIT_INT/
+  complex 响亮 UNSUPPORTED。
+
+## 8. BSON(formats/bson.h)
+
+```c
+int  shrewd_basic_bson_encode(object, type, &out_bytes, &out_size);
+int  shrewd_basic_bson_decode(bytes, size, object, type);
+void shrewd_basic_bson_bytes_free(bytes);
+int  shrewd_basic_bson_free(object, type);
+```
+
+- **线格式按 BSON 规范全线小端**(bsonspec:与 MongoDB 互通的前提):
+  document = int32 全长 + 元素(类型字节 + cstring 键 + 值)+ 尾
+  0x00;string 长度含结尾 NUL;array = 键为 "0","1",… 的 document
+  (decode 校验下标连续);int 装得下 int32 用 0x10 否则 0x12;
+- 映射与 msgpack 同形(宽串 ↔ UTF-8、long double 精度护栏、
+  complex → `[re, im]`、指针 nil/递归);uint64 超 `INT64_MAX` 拒
+  (BSON 无无符号 64 位);
+- **拒绝清单**:位组/union/柔性/动态/哨兵/BIT_INT/opaque/ops 钩子
+  入口即拒;decode 对 BSON 特有类型(binary/ObjectId/datetime/regex/
+  JS/symbol/timestamp/decimal128)与未知类型字节一律
+  `BIN_UNSUPPORTED`;未知键按类型回跳,重复键首值生效。
+
+## 9. bin(formats/bin.h)
 
 ```c
 int  shrewd_basic_bin_encode(object, type, options, &out_bytes, &out_size);
@@ -128,7 +175,7 @@ void shrewd_basic_bin_bytes_free(bytes);
 - **需求驱动缺口**:`ops->get/set` 与 opaque 字段暂无线格式(触发
   即做,见 [requirements](requirements.md) §4)。
 
-## 8. 使用示例(节选,全量见 programs/formats_demo.c)
+## 10. 使用示例(节选,全量见 programs/formats_demo.c)
 
 ```c
 /* INI 配置往返 */
@@ -151,7 +198,7 @@ shrewd_basic_msgpack_encode(&obj, &obj_reflect, &bytes, &size);
 shrewd_basic_cbor_encode(&obj, &obj_reflect, &bytes, &size);
 ```
 
-## 9. 已知限制
+## 11. 已知限制
 
 - TOML 子集边界见 §4(拒绝清单逐项带行号);CSV 借用串拒绝
   (scan_text 契约);msgpack/CBOR 的 BIT_INT 走 ops 逃生口;

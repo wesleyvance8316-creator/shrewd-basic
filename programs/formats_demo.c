@@ -11,12 +11,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "shrewd-basic/formats/bson.h"
 #include "shrewd-basic/formats/cbor.h"
 #include "shrewd-basic/formats/csv.h"
 #include "shrewd-basic/formats/env.h"
 #include "shrewd-basic/formats/ini.h"
 #include "shrewd-basic/formats/msgpack.h"
 #include "shrewd-basic/formats/toml.h"
+#include "shrewd-basic/formats/xml.h"
 #include "shrewd-basic/platform/memory.h"
 #include "shrewd-basic/reflect/reflect.h"
 
@@ -154,6 +156,32 @@ static void demo_toml(void) {
     shrewd_basic_toml_free(&cfg, &demo_cfg_reflect);
 }
 
+/* --- XML ------------------------------------------------------------------ */
+
+static void demo_xml(void) {
+    static const shrewd_basic_xml_policy_t map[] = {
+        {"name", "id", 1, 0}, /* as attribute */
+    };
+    demo_cfg_t cfg;
+    demo_cfg_t twin;
+    shrewd_basic_xml_error_t error;
+    char *text = NULL;
+    bool same = false;
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.name = "alice"; /* borrowed literal - never freed */
+    cfg.level = DEMO_HIGH;
+    cfg.origin.x = -7;
+    cfg.origin.y = 2.5;
+    memcpy(cfg.tag, "v1", 3);
+    shrewd_basic_xml_encode(&cfg, &demo_cfg_reflect, map, 1, &text, &error);
+    memset(&twin, 0, sizeof(twin));
+    shrewd_basic_xml_decode(text, strlen(text), &twin, &demo_cfg_reflect, map, 1, &error);
+    shrewd_basic_reflect_equal(&cfg, &twin, &demo_cfg_reflect, &same);
+    printf("xml: %s\n", same ? "round trip ok" : "FAILED");
+    shrewd_basic_xml_text_free(text);
+    shrewd_basic_xml_free(&twin, &demo_cfg_reflect);
+}
+
 /* --- msgpack / CBOR ------------------------------------------------------- */
 
 static void demo_binary(
@@ -190,6 +218,7 @@ int main(int argc, char **argv) {
     demo_env_args(argc, argv);
     demo_csv();
     demo_toml();
+    demo_xml();
     demo_binary("msgpack",
                 shrewd_basic_msgpack_encode,
                 shrewd_basic_msgpack_decode,
@@ -200,6 +229,11 @@ int main(int argc, char **argv) {
                 shrewd_basic_cbor_decode,
                 shrewd_basic_cbor_bytes_free,
                 shrewd_basic_cbor_free);
+    demo_binary("bson",
+                shrewd_basic_bson_encode,
+                shrewd_basic_bson_decode,
+                shrewd_basic_bson_bytes_free,
+                shrewd_basic_bson_free);
     printf("formats demo: ok\n");
     return 0;
 }

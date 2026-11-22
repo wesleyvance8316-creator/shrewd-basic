@@ -156,6 +156,34 @@ add_test(NAME shrewd-basic.cbor COMMAND shrewd-basic-cbor-tests)
 
 endif()
 
+if(SHREWD_BASIC_FORMAT_XML)
+
+# XML format tests (strict subset, XXE-safe parser).
+add_executable(shrewd-basic-xml-tests test_xml.c)
+
+target_link_libraries(shrewd-basic-xml-tests
+        PRIVATE
+            shrewd-basic
+            shrewd-basic-warnings)
+
+add_test(NAME shrewd-basic.xml COMMAND shrewd-basic-xml-tests)
+
+endif()
+
+if(SHREWD_BASIC_FORMAT_BSON)
+
+# BSON format tests (little-endian wire, length backfill).
+add_executable(shrewd-basic-bson-tests test_bson.c)
+
+target_link_libraries(shrewd-basic-bson-tests
+        PRIVATE
+            shrewd-basic
+            shrewd-basic-warnings)
+
+add_test(NAME shrewd-basic.bson COMMAND shrewd-basic-bson-tests)
+
+endif()
+
 if(SHREWD_BASIC_DBUS)
 
 # sb_dbus core flow tests (mount/get/peek/set/touch, hooks, notify).

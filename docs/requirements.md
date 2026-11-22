@@ -57,8 +57,8 @@ skip_bom、jsonl、sort_keys)、宽串 UTF-8 互转。——功能面完整。
 
 | 项 | 决策与触发条件 |
 |---|---|
-| **XML** | **需求触发即做**:真实 XML 数据源出现时立项;形态已定——严格子集、`attr/element` 映射注解、DTD/外部实体默认关闭(XXE 防护) |
-| **BSON** | **挂起(需求驱动)**:仅 MongoDB 互操作、受众窄;msgpack/CBOR 骨架届时可复用 |
+| **XML** | **✅ 已实现**:严格子集 + attr/element 映射(policy 行:name/as_attr/REQUIRED/HIDDEN)、DTD/实体拒绝(XXE 结构性免疫)、错误带行号 |
+| **BSON** | **✅ 已实现**:BSON 规范全线小端(int32 全长回填、cstring 键、数组=document);映射同 msgpack;特有类型(ObjectId/datetime/binary…)响亮拒绝 |
 | **YAML** | **不自研**:缩进文法/隐式类型/锚点与"绝不静默出错"冲突,子集必半兼容;真需求 → 引第三方库 + ops/叶子适配 |
 | **protobuf/FlatBuffers/Cap'n Proto** | **不适配**:线格式按字段编号寻址、需 IDL 编译器,与按名映射是两个物种 |
 | TOML 超集余项 | datetime/多行串/内联表/数组表等 22 项拒绝构造——需求触发再逐项放开 |

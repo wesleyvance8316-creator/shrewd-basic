@@ -47,6 +47,22 @@ static int recv_cb(void *ctx, const shrewd_basic_dbus_note_t *note) {
     return SHREWD_BASIC_ERR_OK;
 }
 
+static struct {
+    int calls;
+    int notes;
+} g_batch;
+
+static int recv_batch_cb(void *ctx, const shrewd_basic_dbus_note_t *notes, size_t count) {
+    struct {
+        int calls;
+        int notes;
+    } *acc = ctx;
+    acc->calls += 1;
+    acc->notes += (int)count;
+    (void)notes;
+    return SHREWD_BASIC_ERR_OK;
+}
+
 static int g_pre_set_calls = 0;
 static int pre_set_ok(void *ctx, shrewd_basic_dbus_req_t *req) {
     (void)ctx;
@@ -495,6 +511,23 @@ int main(void) {
         (void)remove(snap);
     }
 
+    /* Transaction sets grow past the old 32-entry cap. */
+    {
+        shrewd_basic_dbus_txn_t *txn = NULL;
+        char paths[40][64];
+        int ok = 1;
+        expect("txn begin", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_txn_begin(bus, &txn));
+        for (int i = 0; (i < 40) && (ok); ++i) {
+            int32_t v = 100 + i;
+            snprintf(paths[i], sizeof(paths[i]), "/config/log.level");
+            /* stage 40 distinct writes through one path repeatedly and
+               40 reads: growth is what matters */
+            ok = (SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_txn_set(txn, paths[i], &v, sizeof(v)));
+        }
+        expect("txn grow sets", ok);
+        expect("txn commit", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_txn_commit(txn));
+    }
+
     /* Argument and routing refusals. */
     {
         int32_t level = 0;
@@ -512,6 +545,62 @@ int main(void) {
 
     expect("unmount", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_unmount(bus, h_cfg));
     h_cfg = NULL;
+    /* Batch subscription: one callback carries a whole drained batch.
+       Gated like the folded test: block the dispatcher on the first
+       note, queue more, then release - the remaining notes arrive in
+       ONE batch call. */
+    {
+        shrewd_basic_dbus_t *b3 = NULL;
+        shrewd_basic_dbus_options_t opt3;
+        shrewd_basic_dbus_mount_t m3;
+        shrewd_basic_dbus_handle_t *hh = NULL;
+        shrewd_basic_dbus_handle_t *ss = NULL;
+        shrewd_basic_dbus_handle_t *sb = NULL;
+        struct timespec ts;
+        int32_t v = 0;
+        memset(&opt3, 0, sizeof(opt3)); /* async dispatcher */
+        memset(&m3, 0, sizeof(m3));
+        m3.type = &g_db_cfg_reflect;
+        m3.store = SHREWD_BASIC_DBUS_STORE_OWNED;
+        g_first_seen = 0;
+        g_release = 0;
+        g_note_count = 0; /* gate: recv_block_first blocks on the first note */
+        g_fold_sum = 0;
+        g_batch.calls = 0;
+        g_batch.notes = 0;
+        expect("batch bus", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_create(&opt3, &b3));
+        expect("batch mount",
+               SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_mount(b3, "/batch", &m3, &hh));
+        expect("batch gate",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_subscribe(b3, "/batch", recv_block_first, NULL, &ss));
+        expect("batch sub",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_subscribe_batch(
+                       b3, "/batch/**", recv_batch_cb, &g_batch, &sb));
+        v = 1;
+        expect("batch set 1",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_set(b3, "/batch.level", &v, sizeof(v), NULL));
+        while (0 == g_first_seen) {
+            ts.tv_sec = 0;
+            ts.tv_nsec = 1000000;
+            (void)nanosleep(&ts, NULL);
+        }
+        for (v = 2; v <= 4; ++v) {
+            expect("batch set next",
+                   SHREWD_BASIC_ERR_OK
+                       == shrewd_basic_dbus_set(b3, "/batch.level", &v, sizeof(v), NULL));
+        }
+        g_release = 1;
+        expect("batch drain", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_drain(b3));
+        expect("batch grouped", (2 == g_batch.calls) && (4 == g_batch.notes));
+        expect("batch unsub", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_unsubscribe(b3, sb));
+        expect("batch unsub gate", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_unsubscribe(b3, ss));
+        expect("batch unmount", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_unmount(b3, hh));
+        shrewd_basic_dbus_destroy(b3);
+    }
+
     expect("drain", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_drain(bus));
     shrewd_basic_dbus_destroy(bus);
 
