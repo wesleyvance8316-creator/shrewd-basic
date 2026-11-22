@@ -3567,6 +3567,187 @@ static void test_wscalar(void) {
                   SHREWD_BASIC_ERR_OK);
 }
 
+/* --- text layer (render/scan) ------------------------------------------- */
+
+typedef enum { TEXT_RED = 1, TEXT_BLUE = 7 } text_color_t;
+
+SHREWD_BASIC_REFLECT_ENUM_DEFINE(g_text_color_reflect,
+                                 text_color_t,
+                                 SHREWD_BASIC_REFLECT_ENUM_VALUE(TEXT_RED),
+                                 SHREWD_BASIC_REFLECT_ENUM_VALUE(TEXT_BLUE));
+
+typedef struct {
+    bool flag;
+    int32_t num;
+    uint16_t unum;
+    double real;
+    float single;
+    text_color_t color;
+    char tag[8];
+    const char *owned;
+    const char *borrowed;
+} text_leaf_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_text_leaf_reflect,
+                                 text_leaf_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(text_leaf_t, flag),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(text_leaf_t, num),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(text_leaf_t, unum),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(text_leaf_t, real),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(text_leaf_t, single),
+                                 SHREWD_BASIC_REFLECT_FIELD_ENUM(text_leaf_t,
+                                                                 color,
+                                                                 g_text_color_reflect),
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING_BUFFER(text_leaf_t, tag),
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING_OWNED(text_leaf_t, owned),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(text_leaf_t, borrowed));
+
+static unsigned char *text_slot(text_leaf_t *obj, const char *name) {
+    const shrewd_basic_reflect_field_t *field = find_or_fail("text", &g_text_leaf_reflect, name);
+    return (NULL != field) ? ((unsigned char *)obj + field->sb_refl_offset) : NULL;
+}
+
+static void test_text_layer(void) {
+    text_leaf_t obj;
+    text_leaf_t back;
+    const shrewd_basic_reflect_field_t *field = NULL;
+    char buf[32];
+    size_t len = 0;
+    memset(&obj, 0, sizeof(obj));
+    memset(&back, 0, sizeof(back));
+
+    /* Render: round-trip safe forms (enum by name, floats at digits). */
+    obj.flag = true;
+    obj.num = -42;
+    obj.unum = 65000;
+    obj.real = 2.5;
+    obj.single = 1.25f;
+    obj.color = TEXT_BLUE;
+    memcpy(obj.tag, "hi", 3);
+    field = find_or_fail("text", &g_text_leaf_reflect, "flag");
+    if (NULL == field) {
+        return;
+    }
+    expect_eq_int(
+        "text render bool",
+        shrewd_basic_reflect_render_text(field, text_slot(&obj, "flag"), buf, sizeof(buf), &len),
+        SHREWD_BASIC_ERR_OK);
+    expect_true("text render bool text", (0 == strcmp(buf, "true")) && (4 == len));
+    expect_eq_int(
+        "text render enum",
+        shrewd_basic_reflect_render_text(find_or_fail("text", &g_text_leaf_reflect, "color"),
+                                         text_slot(&obj, "color"),
+                                         buf,
+                                         sizeof(buf),
+                                         &len),
+        SHREWD_BASIC_ERR_OK);
+    expect_true("text render enum name", 0 == strcmp(buf, "TEXT_BLUE"));
+    expect_eq_int(
+        "text render buffer",
+        shrewd_basic_reflect_render_text(find_or_fail("text", &g_text_leaf_reflect, "tag"),
+                                         text_slot(&obj, "tag"),
+                                         buf,
+                                         sizeof(buf),
+                                         &len),
+        SHREWD_BASIC_ERR_OK);
+    expect_true("text render buffer text", 0 == strcmp(buf, "hi"));
+
+    /* Measure mode and truncation contract. */
+    expect_eq_int(
+        "text render measure",
+        shrewd_basic_reflect_render_text(find_or_fail("text", &g_text_leaf_reflect, "unum"),
+                                         text_slot(&obj, "unum"),
+                                         NULL,
+                                         0,
+                                         &len),
+        SHREWD_BASIC_ERR_OK);
+    expect_true("text render measure len", 5 == len);
+    expect_eq_int(
+        "text render trunc",
+        shrewd_basic_reflect_render_text(find_or_fail("text", &g_text_leaf_reflect, "unum"),
+                                         text_slot(&obj, "unum"),
+                                         buf,
+                                         3,
+                                         &len),
+        SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("text render trunc len", 5 == len);
+
+    /* Scan: strict, round-trip through render. */
+    field = find_or_fail("text", &g_text_leaf_reflect, "num");
+    expect_eq_int("text scan int",
+                  shrewd_basic_reflect_scan_text(field, text_slot(&back, "num"), "-42", 3),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("text scan int value", -42 == back.num);
+    expect_true("text scan int junk",
+                SHREWD_BASIC_ERR_REFLECT_TEXT
+                    == shrewd_basic_reflect_scan_text(field, text_slot(&back, "num"), "42x", 3));
+    expect_true("text scan int sign",
+                SHREWD_BASIC_ERR_REFLECT_TEXT
+                    == shrewd_basic_reflect_scan_text(field, text_slot(&back, "num"), "+42", 3));
+    field = find_or_fail("text", &g_text_leaf_reflect, "unum");
+    expect_true("text scan uint range",
+                SHREWD_BASIC_ERR_REFLECT_TEXT
+                    == shrewd_basic_reflect_scan_text(field, text_slot(&back, "unum"), "70000", 5));
+    expect_true("text scan uint sign",
+                SHREWD_BASIC_ERR_REFLECT_TEXT
+                    == shrewd_basic_reflect_scan_text(field, text_slot(&back, "unum"), "-1", 2));
+    field = find_or_fail("text", &g_text_leaf_reflect, "single");
+    expect_true(
+        "text scan float narrow",
+        SHREWD_BASIC_ERR_REFLECT_TEXT
+            == shrewd_basic_reflect_scan_text(field, text_slot(&back, "single"), "1e300", 5));
+    expect_true("text scan float nonfinite",
+                SHREWD_BASIC_ERR_REFLECT_TEXT
+                    == shrewd_basic_reflect_scan_text(field, text_slot(&back, "single"), "inf", 3));
+    expect_eq_int("text scan float ok",
+                  shrewd_basic_reflect_scan_text(field, text_slot(&back, "single"), "1.25", 4),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("text scan float value", 1.25f == back.single);
+    field = find_or_fail("text", &g_text_leaf_reflect, "color");
+    expect_eq_int("text scan enum name",
+                  shrewd_basic_reflect_scan_text(field, text_slot(&back, "color"), "TEXT_RED", 8),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("text scan enum value", TEXT_RED == back.color);
+    expect_eq_int("text scan enum number",
+                  shrewd_basic_reflect_scan_text(field, text_slot(&back, "color"), "7", 1),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("text scan enum numeric", TEXT_BLUE == back.color);
+
+    /* Strings: buffer bounds and owned allocation. */
+    field = find_or_fail("text", &g_text_leaf_reflect, "tag");
+    expect_true(
+        "text scan buffer long",
+        SHREWD_BASIC_ERR_REFLECT_MISMATCH
+            == shrewd_basic_reflect_scan_text(field, text_slot(&back, "tag"), "0123456789", 10));
+    expect_eq_int("text scan buffer ok",
+                  shrewd_basic_reflect_scan_text(field, text_slot(&back, "tag"), "hello", 5),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("text scan buffer nul", 0 == strcmp(back.tag, "hello"));
+    /* Owned scan allocates; destroy releases contents AND the root, so
+       the root must live on the heap (the graph ownership model). */
+    field = find_or_fail("text", &g_text_leaf_reflect, "owned");
+    {
+        text_leaf_t *heap = NULL;
+        expect_eq_int("text scan owned alloc",
+                      shrewd_basic_platform_calloc((void **)&heap, 1, sizeof(*heap)),
+                      SHREWD_BASIC_ERR_OK);
+        expect_eq_int("text scan owned",
+                      shrewd_basic_reflect_scan_text(field, text_slot(heap, "owned"), "copy me", 7),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("text scan owned value",
+                    (NULL != heap->owned) && (0 == strcmp(heap->owned, "copy me")));
+        expect_eq_int("text scan owned destroy",
+                      shrewd_basic_reflect_destroy(heap, &g_text_leaf_reflect),
+                      SHREWD_BASIC_ERR_OK);
+    }
+
+    /* Refusals: borrowed strings and non-leaves. */
+    field = find_or_fail("text", &g_text_leaf_reflect, "borrowed");
+    expect_true("text scan borrowed refused",
+                SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED
+                    == shrewd_basic_reflect_scan_text(field, text_slot(&back, "borrowed"), "x", 1));
+}
+
 /* int32_t cube[2][2][2]: rows nest (row of rows). */
 typedef struct {
     int32_t cube[2][2][2];
@@ -4869,6 +5050,7 @@ int main(void) {
     test_wstring();
     test_wide_ops();
     test_wscalar();
+    test_text_layer();
     test_multidim();
     test_union();
     test_graph_ops();

@@ -37,6 +37,7 @@ typedef enum shrewd_basic_error {
     SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED = -201, /**< Reflect: operation needs an ops callback. */
     SHREWD_BASIC_ERR_REFLECT_ENCODING
     = -202, /**< Reflect: wide text is not a valid code-unit sequence. */
+    SHREWD_BASIC_ERR_REFLECT_TEXT = -203, /**< Reflect: text does not parse into the field. */
 
     SHREWD_BASIC_ERR_JSON_SYNTAX = -300,        /**< JSON: malformed text (see the error detail). */
     SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH = -301, /**< JSON: value does not fit the expected shape. */

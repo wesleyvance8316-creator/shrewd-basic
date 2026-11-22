@@ -168,6 +168,12 @@ struct shrewd_basic_reflect_ops {
      * without it dump falls back to the pointee value or address.
      */
     int (*render)(const void *pointee, char *buf, size_t buf_size);
+    /**
+     * Parse @p text into @p pointee as its canonical value (the
+     * reverse of @c render; used by the text-layer scan and the text
+     * formats). Length-delimited - no terminator needed.
+     */
+    int (*scan)(void *pointee, const char *text, size_t length);
     /** Deep-copy @p pointee into a new object stored into @p *out. */
     int (*copy)(void **out, const void *pointee);
     /** Release an object produced by @c copy (or an equivalent owner). */
@@ -1262,6 +1268,36 @@ int shrewd_basic_reflect_layout(const shrewd_basic_reflect_type_t *type,
  * nested fields are rendered recursively with indentation. Use the
  * shrewd_basic_reflect_dump() macro to record the call site.
  */
+/* --- text layer (leaf value <-> text; shared by INI/CSV/env/TOML) ------ */
+
+/**
+ * Render a leaf value as text (round-trip safe: floats at decimal-digit
+ * precision, enums by constant name). Leaf kinds with text semantics
+ * only - scalars, ENUM, STRING/STRINGBUF (char); everything else is
+ * REFLECT_NOT_SUPPORTED. @p buf may be NULL to measure; a truncated
+ * buffer returns REFLECT_MISMATCH and @p out_len reports the full need.
+ */
+int shrewd_basic_reflect_render_text(const shrewd_basic_reflect_field_t *field,
+                                     const void *value,
+                                     char *buf,
+                                     size_t buf_size,
+                                     size_t *out_len);
+
+/**
+ * Parse @p text (length-delimited) into a leaf field value. Strict: the
+ * whole text must be consumed and fit the field (no silent narrowing or
+ * truncation); bad text is SHREWD_BASIC_ERR_REFLECT_TEXT. STRINGBUF
+ * copies with NUL-termination when it fits, STRING_OWNED allocates a
+ * copy (release via shrewd_basic_reflect_destroy()); borrowed and wide
+ * strings are REFLECT_NOT_SUPPORTED. A field-level ops->scan hook
+ * replaces the mapping. Enums accept their constant name (else a plain
+ * decimal value).
+ */
+int shrewd_basic_reflect_scan_text(const shrewd_basic_reflect_field_t *field,
+                                   void *value,
+                                   const char *text,
+                                   size_t length);
+
 int shrewd_basic_reflect_dump_write(const shrewd_basic_reflect_type_t *type,
                                     const void *object,
                                     const char *label,
