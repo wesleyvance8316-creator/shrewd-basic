@@ -420,6 +420,31 @@ static void test_serialize(void) {
     expect_streq("serialize compact text", text, "{\"b\":[1,2.5,\"x\\ty\"],\"a\":null,\"c\":true}");
     shrewd_basic_json_text_free(text);
 
+    /* sort_keys: byte-wise ascending key order, stable for duplicates,
+       recursive; the DOM keeps its document order. */
+    {
+        shrewd_basic_json_options_t options = {0};
+        shrewd_basic_json_value_t *dup = NULL;
+        memset(&options, 0, sizeof(options));
+        options.sort_keys = 1;
+        text = NULL;
+        expect_eq_int("serialize sorted",
+                      shrewd_basic_json_serialize(v, &text, &options, NULL),
+                      SHREWD_BASIC_ERR_OK);
+        expect_streq(
+            "serialize sorted text", text, "{\"a\":null,\"b\":[1,2.5,\"x\\ty\"],\"c\":true}");
+        shrewd_basic_json_text_free(text);
+        expect_streq("serialize sorted dom order", shrewd_basic_json_key_at(v, 0), "b");
+        dup = parse_ok("serialize sorted dup", "{\"x\":1,\"a\":2,\"x\":3}");
+        text = NULL;
+        expect_eq_int("serialize sorted dup",
+                      shrewd_basic_json_serialize(dup, &text, &options, NULL),
+                      SHREWD_BASIC_ERR_OK);
+        expect_streq("serialize sorted dup text", text, "{\"a\":2,\"x\":1,\"x\":3}");
+        shrewd_basic_json_text_free(text);
+        shrewd_basic_json_value_free(dup);
+    }
+
     /* Pretty output. */
     {
         shrewd_basic_json_options_t options = {0};

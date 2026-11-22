@@ -80,6 +80,7 @@ typedef struct shrewd_basic_json_options {
     int validate_utf8;         /**< parse: reject invalid UTF-8 in strings. */
     int skip_bom;              /**< parse: ignore one leading UTF-8 BOM (text sources). */
     int jsonl;                 /**< pull: accept concatenated documents (JSON Lines). */
+    int sort_keys;             /**< serialize: object members in ascending key order (byte wise). */
 } shrewd_basic_json_options_t;
 
 /** Key matching strategies for decode. */

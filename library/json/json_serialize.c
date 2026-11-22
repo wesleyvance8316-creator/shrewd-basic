@@ -129,8 +129,33 @@ static int json_write_value(shrewd_basic_json_write_fn write,
         int indent = json_opt_indent(options);
         size_t count = shrewd_basic_json_count(value);
         int is_object = (SHREWD_BASIC_JSON_OBJECT == value->kind);
+        size_t *order = NULL;
+        if ((0 != is_object) && (NULL != options) && (0 != options->sort_keys) && (1 < count)) {
+            /* sort_keys: emit members in ascending key order (byte
+               wise; stable for duplicate keys via the index tie-break).
+               The DOM keeps its document order. */
+            if (SHREWD_BASIC_ERR_OK
+                != shrewd_basic_platform_alloc((void **)&order, count * sizeof(*order))) {
+                return SHREWD_BASIC_ERR_MEM_NOMEM;
+            }
+            for (size_t i = 0; i < count; ++i) {
+                order[i] = i;
+            }
+            for (size_t i = 1; i < count; ++i) {
+                size_t moving = order[i];
+                size_t j = i;
+                while ((0 < j)
+                       && (0 < strcmp(shrewd_basic_json_key_at(value, order[j - 1]),
+                                      shrewd_basic_json_key_at(value, moving)))) {
+                    order[j] = order[j - 1];
+                    --j;
+                }
+                order[j] = moving;
+            }
+        }
         status = json_out_str(write, ctx, is_object ? "{" : "[");
         for (size_t i = 0; (SHREWD_BASIC_ERR_OK == status) && (i < count); ++i) {
+            size_t at = (NULL != order) ? order[i] : i;
             if (0 != i) {
                 status = json_out_str(write, ctx, ",");
             }
@@ -143,7 +168,7 @@ static int json_write_value(shrewd_basic_json_write_fn write,
             if ((SHREWD_BASIC_ERR_OK == status) && (0 != is_object)) {
                 status = json_write_string(write,
                                            ctx,
-                                           shrewd_basic_json_key_at(value, i),
+                                           shrewd_basic_json_key_at(value, at),
                                            (NULL != options) ? options->escape_unicode : 0);
                 if (SHREWD_BASIC_ERR_OK == status) {
                     status = json_out_str(write, ctx, pretty ? ": " : ":");
@@ -151,8 +176,11 @@ static int json_write_value(shrewd_basic_json_write_fn write,
             }
             if (SHREWD_BASIC_ERR_OK == status) {
                 status = json_write_value(
-                    write, ctx, shrewd_basic_json_at(value, i), options, error, depth + 1);
+                    write, ctx, shrewd_basic_json_at(value, at), options, error, depth + 1);
             }
+        }
+        if (NULL != order) {
+            (void)shrewd_basic_platform_free((void **)&order);
         }
         if ((SHREWD_BASIC_ERR_OK == status) && (0 != pretty) && (0 < count)) {
             status = json_out_str(write, ctx, "\n");

@@ -83,8 +83,9 @@ void shrewd_basic_json_text_free(text);
 
 **序列化**:紧凑默认,`options.pretty` + `options.indent`(默认 2)缩进输出;
 `options.escape_unicode` 把非 ASCII 全部转义为 `\uXXXX`(BMP 外出代理对);
-嵌套超限报 `JSON_DEPTH`。`options.validate_utf8` 让解析拒绝串内非法 UTF-8
-(默认原样透传)。
+`options.sort_keys` 按键名**字节序升序**输出对象成员(重复键稳定保序;DOM
+不变;非 JCS 规范形);嵌套超限报 `JSON_DEPTH`。`options.validate_utf8`
+让解析拒绝串内非法 UTF-8(默认原样透传)。
 
 **拉取解析器(pull tokenizer)**:文法的唯一实现在 `shrewd_basic_json_pull_*`
 ——流式分词器(完整缓冲源与 reader 回调源),应用可直接驱动令牌流
