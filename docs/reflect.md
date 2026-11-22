@@ -466,6 +466,9 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
 
 ### 注解语法(严格点名)
 
+> 完整注解手册(按对象分章:类型/成员/联合体/宽形态/json 策略/CLI/构建接线)
+> 见 [annotations.md](annotations.md)。
+
 生成器**只生成注解点名的类型**——头文件里的 struct 不全量收录,
 未标注的不生成。分工原则:事实问编译器(布局/宽度),意图问注释
 (所有权/联合体标签)。
