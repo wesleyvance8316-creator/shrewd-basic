@@ -231,6 +231,61 @@ static void expect_wire(const char *name,
     shrewd_basic_msgpack_bytes_free(bytes);
 }
 
+/* uint8 arrays travel as bin payloads (compact wire form). */
+typedef struct {
+    uint8_t data[4];
+} mp_bin_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_mp_bin_reflect,
+                                 mp_bin_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_ARRAY(mp_bin_t,
+                                                                  data,
+                                                                  shrewd_basic_reflect_uint8));
+
+static void test_bin_array(void) {
+    static const unsigned char wire_bin[]
+        = {0x81, 0xa4, 'd', 'a', 't', 'a', 0xc4, 0x04, 0xde, 0xad, 0xbe, 0xef};
+    static const unsigned char wire_legacy[]
+        = {0x81, 0xa4, 'd', 'a', 't', 'a', 0x94, 0x01, 0x02, 0x03, 0x04};
+    static const unsigned char wire_over[]
+        = {0x81, 0xa4, 'd', 'a', 't', 'a', 0xc4, 0x05, 1, 2, 3, 4, 5};
+    mp_bin_t src;
+    mp_bin_t out;
+
+    memset(&src, 0, sizeof(src));
+    src.data[0] = 0xde;
+    src.data[1] = 0xad;
+    src.data[2] = 0xbe;
+    src.data[3] = 0xef;
+
+    /* Encode pins the bin8 header (0xC4) + raw payload. */
+    expect_wire("wire u8 bin", &src, &g_mp_bin_reflect, wire_bin, sizeof(wire_bin));
+
+    /* Round trip through the compact form. */
+    memset(&out, 0, sizeof(out));
+    expect_eq_int("bin decode",
+                  shrewd_basic_msgpack_decode(wire_bin, sizeof(wire_bin), &out, &g_mp_bin_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("bin decode bytes",
+                (0xde == out.data[0]) && (0xad == out.data[1]) && (0xbe == out.data[2])
+                    && (0xef == out.data[3]));
+
+    /* Legacy array-of-int form still decodes into uint8 arrays. */
+    memset(&out, 0, sizeof(out));
+    expect_eq_int(
+        "bin legacy array",
+        shrewd_basic_msgpack_decode(wire_legacy, sizeof(wire_legacy), &out, &g_mp_bin_reflect),
+        SHREWD_BASIC_ERR_OK);
+    expect_true("bin legacy bytes", (1 == out.data[0]) && (4 == out.data[3]));
+
+    /* Oversized bin refuses cleanly. */
+    memset(&out, 0, sizeof(out));
+    expect_true(
+        "bin overflow",
+        SHREWD_BASIC_ERR_REFLECT_MISMATCH
+            == shrewd_basic_msgpack_decode(wire_over, sizeof(wire_over), &out, &g_mp_bin_reflect));
+}
+
 static void test_wire_pins(void) {
     int32_t one = 1;
     int32_t minus_one = -1;
@@ -525,6 +580,7 @@ static void test_refusals(void) {
 }
 
 int main(void) {
+    test_bin_array();
     test_wire_pins();
     test_roundtrip();
     test_decode_strict();
