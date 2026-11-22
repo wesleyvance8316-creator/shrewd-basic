@@ -223,6 +223,13 @@ encode/decode 的 `info` 参数携带策略(NULL = 纯元数据,行为不变)。
   标志/范围)——JSON Schema、文档、前端类型的生成都从这里走;
 - 策略表是 const 数据(DEFINE/DECLARE 纪律,同 reflect 描述符)。
 
+**注解生成**:上表的行可不手写——`json:` 命名空间注解经
+`tools/reflect_gen.py` 构建期生成 `<output>_json.{c,h}`(一指令一行,
+产出与手写完全一致的宏),见 [reflect.md §10](reflect.md) 的注解语法:
+
+    /* json: type=cfg_t;
+       json: member=cfg_t.name, keys={"full_name", "nameID"}, required; */
+
 ## 7. 所有权(值模型层)
 
 - 解析/创建的值树归调用方,`shrewd_basic_json_value_free()` 释放整树;

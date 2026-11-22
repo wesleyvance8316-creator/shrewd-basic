@@ -77,17 +77,46 @@ grep -q "SHREWD_BASIC_REFLECT_FIELD_UNION(event_t, payload, payload_u_t_reflect,
 compile_smoke "$work/ann" "$here/reflect_gen_ann_smoke.c"
 "$work/ann/smoke"
 
+# --- json policy stubs: one row per directive -----------------------------
+mkdir "$work/json"
+python3 "$here/reflect_gen.py" "$here/reflect_gen_sample_json.h" \
+    -o "$work/json/generated"
+grep -q 'SHREWD_BASIC_JSON_KEY(name, "full_name", "nameID")' "$work/json/generated_json.c"
+grep -q 'SHREWD_BASIC_JSON_REQUIRED(name)' "$work/json/generated_json.c"
+grep -q 'SHREWD_BASIC_JSON_DEFAULT_STR(name, "anonymous")' "$work/json/generated_json.c"
+grep -q 'SHREWD_BASIC_JSON_KEY(level, "lv")' "$work/json/generated_json.c"
+grep -q 'SHREWD_BASIC_JSON_RANGE(level, 0, 5)' "$work/json/generated_json.c"
+grep -q 'SHREWD_BASIC_JSON_DEFAULT_JSON(box, "{\\"w\\":3,\\"h\\":4}")' \
+    "$work/json/generated_json.c"
+grep -q 'SHREWD_BASIC_JSON_UNION_STYLE(payload, SHREWD_BASIC_JSON_UNION_FLAT)' \
+    "$work/json/generated_json.c"
+${CC:-cc} -std=c11 \
+    -I"$root/include" -I"$root/include/shrewd-basic-internal" \
+    -I"$here" -I"$work/json" \
+    "$here/reflect_gen_json_smoke.c" \
+    "$work/json/generated.c" "$work/json/generated_json.c" \
+    $lib_sources "$root"/library/json/*.c \
+    -o "$work/json/smoke"
+"$work/json/smoke"
+
 # --- golden: full-text lock on the sample stubs ---------------------------
 python3 "$here/reflect_gen.py" "$here/reflect_gen_sample.h" -o "$work/golden" --quiet
+mkdir "$work/golden_json"
+python3 "$here/reflect_gen.py" "$here/reflect_gen_sample_json.h" \
+    -o "$work/golden_json/generated" --quiet
 if [ "${1:-}" = "--update-golden" ]; then
     cp "$work/golden.c" "$here/reflect_gen_golden.c"
     cp "$work/golden.h" "$here/reflect_gen_golden.h"
+    cp "$work/golden_json/generated_json.c" "$here/reflect_gen_golden_json.c"
+    cp "$work/golden_json/generated_json.h" "$here/reflect_gen_golden_json.h"
     echo "reflect_gen_check: golden files updated"
     exit 0
 fi
 if [ -f "$here/reflect_gen_golden.c" ]; then
     diff -u "$here/reflect_gen_golden.c" "$work/golden.c"
     diff -u "$here/reflect_gen_golden.h" "$work/golden.h"
+    diff -u "$here/reflect_gen_golden_json.c" "$work/golden_json/generated_json.c"
+    diff -u "$here/reflect_gen_golden_json.h" "$work/golden_json/generated_json.h"
 else
     echo "reflect_gen_check: no golden files (run: tools/reflect_gen_check.sh --update-golden)" >&2
     exit 1

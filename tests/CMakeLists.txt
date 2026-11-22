@@ -133,6 +133,34 @@ if(Python3_FOUND)
                 shrewd-basic-warnings)
     add_test(NAME shrewd-basic.gen-ann COMMAND shrewd-basic-gen-ann-tests)
 
+    # json policy stubs (same lex backend); the smoke exercises the
+    # policy runtime, so it rides with the json format option.
+    if(SHREWD_BASIC_FORMAT_JSON)
+        add_custom_command(
+            OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/gen_json/generated.h
+                   ${CMAKE_CURRENT_BINARY_DIR}/gen_json/generated.c
+                   ${CMAKE_CURRENT_BINARY_DIR}/gen_json/generated_json.h
+                   ${CMAKE_CURRENT_BINARY_DIR}/gen_json/generated_json.c
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/gen_json
+            COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/reflect_gen.py
+                    ${PROJECT_SOURCE_DIR}/tools/reflect_gen_sample_json.h
+                    -o ${CMAKE_CURRENT_BINARY_DIR}/gen_json/generated --quiet
+            DEPENDS ${PROJECT_SOURCE_DIR}/tools/reflect_gen.py
+                    ${PROJECT_SOURCE_DIR}/tools/reflect_gen_sample_json.h
+            COMMENT "reflect_gen: json policy stubs")
+        add_executable(shrewd-basic-gen-json-tests
+                ${PROJECT_SOURCE_DIR}/tools/reflect_gen_json_smoke.c
+                ${CMAKE_CURRENT_BINARY_DIR}/gen_json/generated.c
+                ${CMAKE_CURRENT_BINARY_DIR}/gen_json/generated_json.c)
+        target_include_directories(shrewd-basic-gen-json-tests
+                PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/gen_json ${PROJECT_SOURCE_DIR}/tools)
+        target_link_libraries(shrewd-basic-gen-json-tests
+                PRIVATE
+                    shrewd-basic
+                    shrewd-basic-warnings)
+        add_test(NAME shrewd-basic.gen-json COMMAND shrewd-basic-gen-json-tests)
+    endif()
+
     # Full generator self-test (dwarf backend, golden, layout). Skips
     # with a loud message when python3-pyelftools is absent (exit 77).
     if(NOT WIN32)

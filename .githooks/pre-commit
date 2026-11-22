@@ -16,7 +16,7 @@ fi
 fail=0
 staged=$(git diff --cached --name-only --diff-filter=ACM \
              | grep -E '\.(c|h)$' | grep -v '\.h\.in$' \
-             | grep -v '^tools/reflect_gen_golden\.' || true)  # machine output
+             | grep -v '^tools/reflect_gen_golden' || true)  # machine output
 
 for f in $staged; do
     if ! clang-format --dry-run --Werror "$f" > /dev/null 2>&1; then

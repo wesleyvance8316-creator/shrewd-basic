@@ -188,6 +188,13 @@ MEMBER_FLAGS = {"owned", "stringbuf", "wstringbuf", "skip"}
 MEMBER_VALUES = {"count", "ops", "union_tag", "case"}
 WIDE_NAMES = {"char16_t": "16", "char32_t": "32", "wchar_t": "wchar"}
 
+JSON_TYPE_FLAGS = set()
+JSON_TYPE_VALUES = {"name"}
+JSON_MEMBER_FLAGS = {"omit_empty", "required", "hidden", "borrowed"}
+JSON_MEMBER_VALUES = {"key", "keys", "default", "default_str", "default_json",
+                      "range", "ops", "ops_elem", "format", "pattern",
+                      "union_style"}
+
 # Namespace -> statement spec. "types_attr"/"members_attr" name the
 # Annotations tables the statements land in.
 NAMESPACES = {
@@ -200,6 +207,15 @@ NAMESPACES = {
         "types_attr": "types",
         "members_attr": "members",
     },
+    "json": {
+        "targets": ("type", "member"),
+        "type_flags": JSON_TYPE_FLAGS,
+        "type_values": JSON_TYPE_VALUES,
+        "member_flags": JSON_MEMBER_FLAGS,
+        "member_values": JSON_MEMBER_VALUES,
+        "types_attr": "json_types",
+        "members_attr": "json_members",
+    },
 }
 
 
@@ -211,6 +227,12 @@ class Annotations:
     def __init__(self):
         self.types = {}
         self.members = {}
+        self.json_types = {}
+        self.json_members = {}
+
+    def json_var(self, type_name):
+        """Policy table variable name for a type (json name= override)."""
+        return self.json_types.get(type_name, {}).get("name") or (type_name + "_json")
 
     def for_type(self, name):
         return self.types.get(name, {})
@@ -1243,6 +1265,170 @@ def union_variants(parser, name, members, ann, desc):
     return out
 
 
+def check_member_targets(parser, ann):
+    """Every member= target must name a real member of a known type."""
+    for type_name, member in list(ann.members) + list(ann.json_members):
+        body = parser.structs.get(type_name) or parser.unions.get(type_name)
+        if body is None:
+            raise ParseError("member=%s.%s names an unknown type" % (type_name, member))
+        if member not in [member_parts(m)[2] for m in body]:
+            raise ParseError("member=%s.%s names no member of %s"
+                             % (type_name, member, type_name))
+
+
+# --- JSON policy emission (docs/json.md section 6) ---------------------------
+#
+# The emitter produces the very same row macros a human hand-writes
+# (one row per directive; the runtime merges rows per aspect). Decode
+# always accepts the member name in addition to the listed keys - that
+# is the library invariant, key=/keys= add names and set the canonical
+# encode key (the first listed).
+
+JSON_ROW_ORDER = ("key", "keys", "omit_empty", "required", "hidden", "borrowed",
+                  "default", "default_str", "default_json", "range",
+                  "ops", "ops_elem", "union_style", "format", "pattern")
+JSON_UNION_STYLES = {"nested": "SHREWD_BASIC_JSON_UNION_NESTED",
+                     "flat": "SHREWD_BASIC_JSON_UNION_FLAT",
+                     "unwrap": "SHREWD_BASIC_JSON_UNION_UNWRAP"}
+NUMERIC_RE = re.compile(r"^[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$")
+
+
+def c_str(text):
+    """Raw annotation text -> C string literal (the grammar carries no
+    escapes - escaping happens here)."""
+    out = ['"']
+    for ch in text:
+        if ("\\" == ch) or ('"' == ch):
+            out.append("\\" + ch)
+        elif "\n" == ch:
+            out.append("\\n")
+        elif "\r" == ch:
+            out.append("\\r")
+        elif "\t" == ch:
+            out.append("\\t")
+        else:
+            out.append(ch)
+    out.append('"')
+    return "".join(out)
+
+
+def json_member_rows(member_name, man, label):
+    """One policy row macro per directive, canonical order."""
+    if ("key" in man) and ("keys" in man):
+        raise ParseError("%s: key= and keys= are mutually exclusive" % label)
+    defaults = [k for k in ("default", "default_str", "default_json") if k in man]
+    if 1 < len(defaults):
+        raise ParseError("%s: %s - pick one default form" % (label, "/".join(defaults)))
+    rows = []
+    for key in JSON_ROW_ORDER:
+        if key not in man:
+            continue
+        value = man[key]
+        if "key" == key:
+            rows.append("SHREWD_BASIC_JSON_KEY(%s, %s)" % (member_name, c_str(value)))
+        elif "keys" == key:
+            if isinstance(value, str):
+                value = [value]
+            rows.append("SHREWD_BASIC_JSON_KEY(%s, %s)"
+                        % (member_name, ", ".join(c_str(v) for v in value)))
+        elif key in ("omit_empty", "required", "hidden", "borrowed"):
+            rows.append("SHREWD_BASIC_JSON_%s(%s)" % (key.upper(), member_name))
+        elif "default" == key:
+            if not NUMERIC_RE.match(value):
+                raise ParseError("%s: default=%s is not a numeric literal" % (label, value))
+            rows.append("SHREWD_BASIC_JSON_DEFAULT(%s, %s)" % (member_name, value))
+        elif "default_str" == key:
+            rows.append("SHREWD_BASIC_JSON_DEFAULT_STR(%s, %s)" % (member_name, c_str(value)))
+        elif "default_json" == key:
+            rows.append("SHREWD_BASIC_JSON_DEFAULT_JSON(%s, %s)" % (member_name, c_str(value)))
+        elif "range" == key:
+            lo, sep, hi = value.partition("..")
+            if (not sep) or not (NUMERIC_RE.match(lo) and NUMERIC_RE.match(hi)):
+                raise ParseError("%s: range=%s must be lo..hi numerics" % (label, value))
+            rows.append("SHREWD_BASIC_JSON_RANGE(%s, %s, %s)" % (member_name, lo, hi))
+        elif "ops" == key:
+            rows.append("SHREWD_BASIC_JSON_OPS(%s, %s)" % (member_name, value))
+        elif "ops_elem" == key:
+            rows.append("SHREWD_BASIC_JSON_OPS_ELEM(%s, %s)" % (member_name, value))
+        elif "union_style" == key:
+            if value not in JSON_UNION_STYLES:
+                raise ParseError("%s: union_style=%s (want nested/flat/unwrap)"
+                                 % (label, value))
+            rows.append("SHREWD_BASIC_JSON_UNION_STYLE(%s, %s)"
+                        % (member_name, JSON_UNION_STYLES[value]))
+        elif "format" == key:
+            rows.append("SHREWD_BASIC_JSON_FORMAT(%s, %s)" % (member_name, c_str(value)))
+        elif "pattern" == key:
+            rows.append("SHREWD_BASIC_JSON_PATTERN(%s, %s)" % (member_name, c_str(value)))
+    return rows
+
+
+def check_json_policy(parser, ann, json_selected, selected, external):
+    """Validate json directives and closure. Returns
+    [(type_name, var, [(member, [rows...])])] in member-declaration
+    order (deterministic, matches hand-written convention)."""
+    plan = []
+    for type_name in json_selected:
+        if (type_name not in parser.structs) and (type_name not in parser.unions):
+            raise ParseError("json: type=%s names an unknown type" % type_name)
+        if (type_name not in selected) and (type_name not in external) \
+                and (not ann.for_type(type_name).get("external")):
+            raise ParseError(
+                "json: type=%s has no reflect descriptor\n"
+                "  - to generate it:  /* reflect: type=%s; */ or --type %s\n"
+                "  - to keep it external:  /* reflect: type=%s, external; */ or "
+                "--external %s" % (type_name, type_name, type_name, type_name, type_name))
+        body = parser.structs.get(type_name) or parser.unions.get(type_name)
+        blocks = []
+        for member in body:
+            mname = member_parts(member)[2]
+            man = ann.json_members.get((type_name, mname), {})
+            if not man:
+                continue
+            blocks.append((mname, json_member_rows(mname, man, "json: member=%s.%s"
+                                                   % (type_name, mname))))
+        if not blocks:
+            raise ParseError(
+                "json: type=%s would generate an empty policy table - add "
+                "member= directives or drop the type= annotation" % type_name)
+        plan.append((type_name, ann.json_var(type_name), blocks))
+    for (type_name, mname) in ann.json_members:
+        if type_name not in json_selected:
+            raise ParseError(
+                "json: member=%s.%s has no policy table\n"
+                "  - to generate it:  /* json: type=%s; */ or --json-type %s"
+                % (type_name, mname, type_name, type_name))
+    return plan
+
+
+def json_policy_stub(input_name, ann, plan, stub_base):
+    """(body_c, body_h) for the policy tables: the exact macro rows a
+    human writes for docs/json.md section 6."""
+    header = ["/* Generated by tools/reflect_gen.py from %s - do not edit." % input_name,
+              " */"]
+    lines_c = header + [
+        "",
+        '#include "%s_json.h"' % stub_base,
+        "",
+        '#include "%s"' % input_name,
+        "",
+        '#include "%s.h"' % stub_base,
+        "",
+    ]
+    lines_h = header + [
+        "",
+        "#include \"shrewd-basic/formats/json.h\"",
+        "",
+    ]
+    for type_name, var, blocks in plan:
+        rows = [row for _mname, mrows in blocks for row in mrows]
+        lines_c.append("SHREWD_BASIC_JSON_DEFINE(%s, %s," % (var, ann.desc(type_name)))
+        lines_c.append("    " + ",\n    ".join(rows) + ");")
+        lines_c.append("")
+        lines_h.append("SHREWD_BASIC_JSON_DECLARE(%s);" % var)
+    return "\n".join(lines_c) + "\n", "\n".join(lines_h) + "\n"
+
+
 def generate(parser, input_name, ann, selected, fingerprint=None, layout=None):
     """Emit the stub pair for the selected types (strict opt-in).
     fingerprint (dwarf backend) pins the toolchain in the header;
@@ -1344,15 +1530,6 @@ def generate(parser, input_name, ann, selected, fingerprint=None, layout=None):
                 "SHREWD_BASIC_REFLECT_TYPE_DEFINE(%s, %s,\n    %s);"
                 % (var, name, fields))
         lines_h.append("SHREWD_BASIC_REFLECT_TYPE_DECLARE(%s);" % var)
-        # Optional JSON policy skeleton (docs/json.md section 6).
-        rows = ",\n    ".join(
-            "SHREWD_BASIC_JSON_KEY(%s, \"%s\")" % (member_parts(m)[2], member_parts(m)[2])
-            for m in members if not ann.for_member(name, member_parts(m)[2]).get("skip"))
-        lines_c.append("")
-        lines_c.append("/* Optional JSON policy for %s:" % name)
-        lines_c.append("SHREWD_BASIC_JSON_DEFINE(%s_json, %s," % (name, var))
-        lines_c.append("    %s);" % rows)
-        lines_c.append("*/")
         lines_c.append("")
     return "\n".join(lines_c) + "\n", "\n".join(lines_h) + "\n"
 
@@ -1487,6 +1664,9 @@ def main():
     ap.add_argument("--external", action="append", default=[], metavar="NAME",
                     help="NAME stays hand-written (repeatable; same effect "
                          "as a 'type=NAME external' annotation)")
+    ap.add_argument("--json-type", action="append", default=[], metavar="NAME",
+                    help="also generate NAME's JSON policy table (repeatable; "
+                         "same effect as a 'json: type=NAME;' annotation)")
     ap.add_argument("--layout", action="store_true",
                     help="dwarf backend: print a pahole-lite layout report "
                          "instead of generating stubs")
@@ -1534,14 +1714,29 @@ def main():
         return 1
     try:
         check_closure(parser, ann, selected, external)
+        check_member_targets(parser, ann)
         body_c, body_h = generate(parser, os.path.basename(args.input), ann, selected,
                                   fingerprint=getattr(parser, "fingerprint", None) or None,
                                   layout=getattr(parser, "layout", None) or None)
+        json_selected = list(ann.json_types.keys())
+        for name in args.json_type:
+            if name not in json_selected:
+                json_selected.append(name)
+        plan = []
+        json_c = json_h = None
+        if json_selected:
+            plan = check_json_policy(parser, ann, json_selected, selected, external)
+            json_c, json_h = json_policy_stub(
+                os.path.basename(args.input), ann, plan,
+                os.path.basename(args.output or (os.path.splitext(args.input)[0] + "_reflect")))
     except ParseError as err:
         print("reflect_gen: %s: %s" % (args.input, err), file=sys.stderr)
         return 1
     stub = args.output or (os.path.splitext(args.input)[0] + "_reflect")
-    for path in (stub + ".c", stub + ".h"):
+    outputs = [stub + ".c", stub + ".h"]
+    if plan:
+        outputs += [stub + "_json.c", stub + "_json.h"]
+    for path in outputs:
         if os.path.abspath(path) == os.path.abspath(args.input):
             print("reflect_gen: output %s would overwrite the input header" % path,
                   file=sys.stderr)
@@ -1550,10 +1745,16 @@ def main():
         handle.write(body_c)
     with open(stub + ".h", "w", encoding="utf-8") as handle:
         handle.write(body_h)
+    if plan:
+        with open(stub + "_json.c", "w", encoding="utf-8") as handle:
+            handle.write(json_c)
+        with open(stub + "_json.h", "w", encoding="utf-8") as handle:
+            handle.write(json_h)
     if not args.quiet:
         note = "" if not external else " (%d external)" % len(external)
-        print("reflect_gen: %d type(s) -> %s.h, %s.c%s"
-              % (len(selected), stub, stub, note), file=sys.stderr)
+        policy = "" if not plan else " + %d json table(s)" % len(plan)
+        print("reflect_gen: %d type(s) -> %s.h, %s.c%s%s"
+              % (len(selected), stub, stub, note, policy), file=sys.stderr)
     return 0
 
 

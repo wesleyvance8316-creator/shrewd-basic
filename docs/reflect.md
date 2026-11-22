@@ -513,9 +513,29 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
   否则报错退出——两条出口:生成,或 external。不可改的第三方头用
   `--type NAME` / `--external NAME` 命令行点名。
 
+**`json:` 命名空间**(JSON 策略桩,见 [json.md §6](json.md)):
+`json: type=NAME` 点名生成 `NAME_json` 策略表(仅含带指令的成员,
+稀疏表);`json: member=TYPE.MEMBER, ...` 一指令生成一行宏:
+
+| 指令 | 生成行 |
+|---|---|
+| `key="x"` / `keys={"a","b"}` | `KEY(m, "x")` / `KEY(m, "a", "b")`(首名为规范键;两者互斥) |
+| `omit_empty` / `required` / `hidden` / `borrowed` | 同名 `OMIT_EMPTY/REQUIRED/HIDDEN/BORROWED` 行 |
+| `default=18` / `default_str="s"` / `default_json='{"a":1}'` | `DEFAULT/DEFAULT_STR/DEFAULT_JSON`(三者择一) |
+| `range=0..150` | `RANGE(m, 0, 150)` |
+| `ops=NAME` / `ops_elem=NAME` | `OPS/OPS_ELEM` |
+| `format="date-time"` / `pattern="^\d+$"` | `FORMAT/PATTERN`(仅 schema 标注) |
+| `union_style=nested\|flat\|unwrap` | `UNION_STYLE(m, ...)` |
+
+闭包硬错误:成员指令必须有 `json: type=`(或 `--json-type NAME`);
+type= 必须有 reflect 描述符(生成或 external);空表硬错误。语义注意:
+decode **永远额外接受成员名**(库不变量,`key=`/`keys=` 添加接受名并
+设规范编码键)。
+
 ### 产出与收录
 
-- 默认输出 `<input>_reflect.{c,h}`,拒绝覆盖输入本身;
+- 默认输出 `<input>_reflect.{c,h}`,拒绝覆盖输入本身;有 `json:` 点名时
+  另出 `<output>_json.{c,h}`(策略表,可与构建系统的格式开关共存);
 - 描述符命名约定 `<类型名>_reflect`(如 `shape_t_reflect`);
 - 收录形态:标量/字符串(`FIELD_PRIMITIVE`)、嵌套结构体
   (`FIELD_STRUCT`)、定长数组(`FIELD_ARRAY`)、柔性尾部(`FIELD_FLEX`,含 GNU

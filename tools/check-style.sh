@@ -24,7 +24,7 @@ for f in $(find library include tests programs tools \
                \( -name '*.c' -o -name '*.h' \) | sort); do
     case "$f" in
         *.in) continue ;;
-        tools/reflect_gen_golden.*) continue ;;  # machine output, not hand code
+        tools/reflect_gen_golden*) continue ;;  # machine output, not hand code
     esac
     if ! clang-format --dry-run --Werror "$f" > /dev/null 2>&1; then
         echo "format drift: $f"
@@ -39,7 +39,7 @@ if [ -f "$build/compile_commands.json" ]; then
 fi
 for f in $(find library tests programs tools -name '*.c' | sort); do
     case "$f" in
-        tools/reflect_gen_golden.*) continue ;;  # machine output, not hand code
+        tools/reflect_gen_golden*) continue ;;  # machine output, not hand code
     esac
     out=$(clang-tidy $tidy_args "$f" -- \
               -Iinclude -Iinclude/shrewd-basic-internal -Ilibrary/reflect \
