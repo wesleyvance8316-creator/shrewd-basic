@@ -43,6 +43,19 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_pol_reflect,
 /* Policy table: RANGE 0..5 on `val`. */
 SHREWD_BASIC_JSON_DEFINE(g_pol, g_pol_reflect, SHREWD_BASIC_JSON_RANGE(val, 0, 5));
 
+typedef struct {
+    int32_t secret;
+    int32_t open;
+} hide_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_hide_reflect,
+                                 hide_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(hide_t, secret),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(hide_t, open));
+
+/* Policy table: HIDDEN on `secret`. */
+SHREWD_BASIC_JSON_DEFINE(g_hide_pol, g_hide_reflect, SHREWD_BASIC_JSON_HIDDEN(secret));
+
 /* Caller-side ctx contract for the policy hooks (see dbus_ops.c). */
 typedef struct {
     void *target;
@@ -178,6 +191,44 @@ int main(void) {
 
     expect("unmount policy", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_unmount(bus, h_pol));
     h_pol = NULL;
+
+    /* HIDDEN rows veto their field both ways (docs 12.3). */
+    {
+        static struct {
+            void *target;
+            const shrewd_basic_json_info_t *info;
+        } hctx;
+        static hide_t shadow2;
+        int32_t probe = 7;
+        memset(&shadow2, 0, sizeof(shadow2));
+        hctx.target = &shadow2;
+        hctx.info = &g_hide_pol;
+        expect("hidden ops",
+               SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_make_policy_ops(&g_hide_pol, &pops));
+        memset(&mount, 0, sizeof(mount));
+        mount.type = &g_hide_reflect;
+        mount.ops = &pops;
+        mount.ctx = &hctx;
+        expect("mount hidden",
+               SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_mount(bus, "/hid", &mount, &h_pol));
+        expect("hidden get denied",
+               SHREWD_BASIC_ERR_DBUS_UNADDRESSABLE
+                   == shrewd_basic_dbus_get(bus, "/hid.secret", &probe, sizeof(probe), NULL));
+        expect("hidden set denied",
+               SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED
+                   == shrewd_basic_dbus_set(bus, "/hid.secret", &probe, sizeof(probe), NULL));
+        probe = 5;
+        expect("open set",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_set(bus, "/hid.open", &probe, sizeof(probe), NULL));
+        probe = 0;
+        expect("open get",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_get(bus, "/hid.open", &probe, sizeof(probe), NULL));
+        expect("open value", 5 == probe);
+        expect("unmount hidden", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_unmount(bus, h_pol));
+        h_pol = NULL;
+    }
     expect("unmount base", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_unmount(bus, h_cfg));
     h_cfg = NULL;
     shrewd_basic_dbus_destroy(bus);

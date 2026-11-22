@@ -21,6 +21,10 @@
  * are honored when the request's field selector names the row's
  * field (whole-resource accesses pass through unchecked). Values
  * outside [min, max] are refused with SHREWD_BASIC_ERR_REFLECT_TEXT.
+ * HIDDEN rows veto their field both ways (pre_get -> the request is
+ * denied with ERR_DBUS_UNADDRESSABLE, pre_set with
+ * ERR_REFLECT_NOT_SUPPORTED). Other policy rows (KEY/DEFAULT/
+ * REQUIRED/...) do not map onto bus semantics and are ignored.
  */
 
 #include <stddef.h>
@@ -83,6 +87,38 @@ static int dbus_ops_slot(const dbus_ops_policy_ctx_t *pctx,
         return SHREWD_BASIC_ERR_OK;
     }
     return shrewd_basic_reflect_type_resolve(node_type, field, &desc, out_offset, out_size);
+}
+
+/* HIDDEN row on a field: access is vetoed both ways (docs §12.3). */
+static int dbus_ops_hidden(const shrewd_basic_json_info_t *info, const char *field) {
+    if ((NULL == info) || (NULL == field)) {
+        return 0;
+    }
+    for (size_t i = 0; i < info->field_count; ++i) {
+        if ((0u != (info->fields[i].flags & SHREWD_BASIC_JSON_F_HIDDEN))
+            && (0 == strcmp(info->fields[i].field, field))) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int dbus_ops_policy_pre_get(void *ctx, shrewd_basic_dbus_req_t *req) {
+    const dbus_ops_policy_ctx_t *pctx = (const dbus_ops_policy_ctx_t *)ctx;
+    const char *field = shrewd_basic_dbus_req_field(req);
+    if ((NULL != pctx) && (0 != dbus_ops_hidden(pctx->info, field))) {
+        return shrewd_basic_dbus_req_deny(req, SHREWD_BASIC_ERR_DBUS_UNADDRESSABLE);
+    }
+    return SHREWD_BASIC_ERR_OK;
+}
+
+static int dbus_ops_policy_pre_set(void *ctx, shrewd_basic_dbus_req_t *req) {
+    const dbus_ops_policy_ctx_t *pctx = (const dbus_ops_policy_ctx_t *)ctx;
+    const char *field = shrewd_basic_dbus_req_field(req);
+    if ((NULL != pctx) && (0 != dbus_ops_hidden(pctx->info, field))) {
+        return shrewd_basic_dbus_req_deny(req, SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED);
+    }
+    return SHREWD_BASIC_ERR_OK;
 }
 
 /* Merged RANGE row for a field (later rows win, like the runtime merge). */
@@ -228,7 +264,9 @@ int shrewd_basic_dbus_make_policy_ops(const shrewd_basic_json_info_t *info,
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     memset(out, 0, sizeof(*out));
+    out->pre_get = dbus_ops_policy_pre_get;
     out->get = dbus_ops_policy_get;
+    out->pre_set = dbus_ops_policy_pre_set;
     out->set = dbus_ops_policy_set;
     return SHREWD_BASIC_ERR_OK;
 }

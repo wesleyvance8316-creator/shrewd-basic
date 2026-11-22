@@ -33,7 +33,7 @@
 #include "shrewd-basic/reflect/reflect.h"
 
 #define SHM_MAGIC 0x31424453u /* "SDB1" */
-#define SHM_FORMAT 1u
+#define SHM_FORMAT 2u
 #define SHM_TYPES 64
 #define SHM_SLOTS 128
 #define SHM_RING 64
@@ -71,9 +71,10 @@ typedef struct {
     uint32_t slot_count;
     uint64_t pool_used;
     uint64_t ring_pos;
+    uint64_t ring_cap; /* change-ring capacity, fixed at creation */
     shm_type_t types[SHM_TYPES];
     shm_slot_t slots[SHM_SLOTS];
-    shm_change_t ring[SHM_RING];
+    shm_change_t ring[]; /* ring_cap entries, then the value pool */
 } shm_hdr_t;
 
 typedef struct {
@@ -205,7 +206,7 @@ static void shm_commit(void *vctx, const char *path, const void *value, size_t s
     shm_change_t *slot = NULL;
     (void)value;
     shm_lock(hdr);
-    slot = &hdr->ring[hdr->ring_pos % SHM_RING];
+    slot = &hdr->ring[hdr->ring_pos % hdr->ring_cap];
     memset(slot, 0, sizeof(*slot));
     snprintf(slot->path, sizeof(slot->path), "%s", path);
     slot->seq = seq;
@@ -257,7 +258,7 @@ static void *shm_wake_main(void *arg) {
             return NULL;
         }
         for (uint64_t pos = c->seen; (pos < c->hdr->ring_pos) && (n < SHM_RING); ++pos) {
-            const shm_change_t *slot = &c->hdr->ring[pos % SHM_RING];
+            const shm_change_t *slot = &c->hdr->ring[pos % c->hdr->ring_cap];
             if (slot->writer == (int32_t)getpid()) {
                 continue; /* own changes already notified locally */
             }
@@ -331,12 +332,16 @@ int shrewd_basic_dbus_attach(const char *name,
         shm_close(c);
         return SHREWD_BASIC_ERR_MEM_NOMEM;
     }
-    c->pool = (unsigned char *)c->hdr + sizeof(shm_hdr_t);
-    c->pool_cap = c->map_size - sizeof(shm_hdr_t);
     if (0 != creator) {
         pthread_mutexattr_t ma;
         pthread_condattr_t ca;
-        memset(c->hdr, 0, sizeof(*c->hdr));
+        size_t ring_cap = ((NULL != options) && (0 != options->ring_size)) ? options->ring_size
+                                                                           : (size_t)SHM_RING;
+        if (4096u < ring_cap) {
+            ring_cap = 4096u;
+        }
+        memset(c->hdr, 0, sizeof(*c->hdr) + (ring_cap * sizeof(shm_change_t)));
+        c->hdr->ring_cap = ring_cap;
         (void)pthread_mutexattr_init(&ma);
         (void)pthread_mutexattr_setpshared(&ma, PTHREAD_PROCESS_SHARED);
         (void)pthread_mutexattr_setrobust(&ma, PTHREAD_MUTEX_ROBUST);
@@ -366,6 +371,22 @@ int shrewd_basic_dbus_attach(const char *name,
             shm_close(c);
             return SHREWD_BASIC_ERR_DBUS_CONFLICT;
         }
+        if ((0 == c->hdr->ring_cap) || (4096u < c->hdr->ring_cap)) {
+            shm_close(c);
+            return SHREWD_BASIC_ERR_DBUS_CONFLICT;
+        }
+    }
+    /* The value pool follows the header and its variable-size ring. */
+    {
+        uintptr_t base
+            = (uintptr_t)c->hdr->ring + ((uintptr_t)c->hdr->ring_cap * sizeof(shm_change_t));
+        base = (base + 7u) & ~(uintptr_t)7u;
+        if ((base + 8u) > ((uintptr_t)c->hdr + c->map_size)) {
+            shm_close(c);
+            return SHREWD_BASIC_ERR_ARG_INVALID;
+        }
+        c->pool = (unsigned char *)base;
+        c->pool_cap = (size_t)(((uintptr_t)c->hdr + c->map_size) - base);
     }
     c->running = 1;
     c->seen = c->hdr->ring_pos;

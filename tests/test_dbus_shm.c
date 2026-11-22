@@ -171,6 +171,64 @@ int main(void) {
     shrewd_basic_dbus_destroy(bus);
     (void)shm_unlink(name);
 
+    /* --- non-default change-ring capacity ------------------------------ */
+    {
+        shrewd_basic_dbus_t *rbus = NULL;
+        shrewd_basic_dbus_handle_t *rh = NULL;
+        shrewd_basic_dbus_options_t ropt;
+        shrewd_basic_dbus_mount_t rm;
+        int32_t level = 0;
+        pid_t child = 0;
+        int wstatus = 0;
+        const char *rname = "/sdbus-ring";
+        memset(&ropt, 0, sizeof(ropt));
+        ropt.ring_size = 8;
+        memset(&rm, 0, sizeof(rm));
+        rm.type = &g_shm_cfg_reflect;
+        rm.store = SHREWD_BASIC_DBUS_STORE_OWNED;
+        (void)shm_unlink(rname);
+        expect("ring attach",
+               SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_attach(rname, 1u << 16, &ropt, &rbus));
+        if (NULL != rbus) {
+            expect("ring mount",
+                   SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_mount(rbus, "/cfg/log", &rm, &rh));
+            child = fork();
+            if (0 == child) {
+                shrewd_basic_dbus_t *peer = NULL;
+                shrewd_basic_dbus_handle_t *ph = NULL;
+                shrewd_basic_dbus_mount_t pm;
+                int32_t v = 42;
+                int rc = 1;
+                memset(&pm, 0, sizeof(pm));
+                pm.type = &g_shm_cfg_reflect;
+                pm.store = SHREWD_BASIC_DBUS_STORE_OWNED;
+                if ((SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_attach(rname, 1u << 16, NULL, &peer))
+                    && (NULL != peer)
+                    && (SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_mount(peer, "/cfg/log", &pm, &ph))
+                    && (SHREWD_BASIC_ERR_OK
+                        == shrewd_basic_dbus_set(peer, "/cfg/log.level", &v, sizeof(v), NULL))) {
+                    rc = 0;
+                }
+                if (NULL != peer) {
+                    shrewd_basic_dbus_destroy(peer);
+                }
+                _exit(rc);
+            }
+            if (0 < child) {
+                (void)waitpid(child, &wstatus, 0);
+                expect("ring child ok", (0 != WIFEXITED(wstatus)) && (0 == WEXITSTATUS(wstatus)));
+            }
+            expect(
+                "ring value",
+                SHREWD_BASIC_ERR_OK
+                    == shrewd_basic_dbus_get(rbus, "/cfg/log.level", &level, sizeof(level), NULL));
+            expect("ring value is 42", 42 == level);
+            expect("ring unmount", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_unmount(rbus, rh));
+            shrewd_basic_dbus_destroy(rbus);
+            (void)shm_unlink(rname);
+        }
+    }
+
     if (0 != g_failures) {
         printf("test_dbus_shm: %d failure(s)\n", g_failures);
         return 1;

@@ -61,7 +61,8 @@ typedef struct shrewd_basic_dbus_stamp {
 
 /** Options for shrewd_basic_dbus_create(). Every zero field is default. */
 typedef struct shrewd_basic_dbus_options {
-    int sync_notify; /**< 1: deliver notifications inline (tests); 0: dispatcher thread. */
+    int sync_notify;  /**< 1: deliver notifications inline (tests); 0: dispatcher thread. */
+    size_t ring_size; /**< shm change-ring capacity (0 = default 64). */
 } shrewd_basic_dbus_options_t;
 
 /** Storage lifetime (access style is chosen per call, not here). */
@@ -83,7 +84,8 @@ typedef struct shrewd_basic_dbus_note {
     const void *value; /**< New value snapshot; valid during recv only. */
     size_t size;
     uint64_t version;
-    int kind; /**< SHREWD_BASIC_DBUS_NOTE_*. */
+    size_t folded; /**< Same-path changes folded into this note (coalesce). */
+    int kind;      /**< SHREWD_BASIC_DBUS_NOTE_*. */
 } shrewd_basic_dbus_note_t;
 
 /** Subscriber receive callback (the recv end of notify). */
@@ -231,8 +233,40 @@ int shrewd_basic_dbus_coalesce(shrewd_basic_dbus_t *bus, int on);
 /** Fill @p out with pre_get/pre_set guards denying what the mask omits. */
 int shrewd_basic_dbus_make_guard(uint32_t allow_mask, shrewd_basic_dbus_ops_t *out);
 
-/** Fill @p out with a pre_set hook enforcing the policy's RANGE rows. */
+/**
+ * Fill @p out with hooks enforcing policy rows: RANGE bounds and
+ * HIDDEN (both directions refused). Other rows (KEY/DEFAULT/REQUIRED)
+ * do not map onto bus semantics and are ignored.
+ */
 int shrewd_basic_dbus_make_policy_ops(const shrewd_basic_json_info_t *info,
                                       shrewd_basic_dbus_ops_t *out);
+
+/* --- transactions and persistence ---------------------------------------- */
+
+typedef struct shrewd_basic_dbus_txn shrewd_basic_dbus_txn_t;
+
+/**
+ * Optimistic read-modify-write across resources: txn_get records the
+ * resource version, txn_set stages writes, txn_commit applies the whole
+ * write set atomically (CASA against the recorded versions - any
+ * concurrent change refuses with ERR_DBUS_CONFLICT and commits
+ * nothing). The handle is single-use; commit/abort release it.
+ */
+int shrewd_basic_dbus_txn_begin(shrewd_basic_dbus_t *bus, shrewd_basic_dbus_txn_t **out);
+int shrewd_basic_dbus_txn_get(shrewd_basic_dbus_txn_t *txn,
+                              const char *path,
+                              void *out,
+                              size_t size);
+int shrewd_basic_dbus_txn_set(shrewd_basic_dbus_txn_t *txn,
+                              const char *path,
+                              const void *in,
+                              size_t size);
+int shrewd_basic_dbus_txn_commit(shrewd_basic_dbus_txn_t *txn);
+void shrewd_basic_dbus_txn_abort(shrewd_basic_dbus_txn_t *txn);
+
+/** Persist matching resources as a json snapshot file (export). */
+int shrewd_basic_dbus_save(shrewd_basic_dbus_t *bus, const char *pattern, const char *file);
+/** Load a snapshot back (import semantics: no hooks, no notify). */
+int shrewd_basic_dbus_load(shrewd_basic_dbus_t *bus, const char *pattern, const char *file);
 
 #endif /* SHREWD_BASIC_DBUS_DBUS_H */

@@ -211,6 +211,7 @@ typedef struct dbus_job {
     void *value;
     size_t size;
     uint64_t version;
+    size_t folded; /* same-path changes folded into this job (coalesce) */
     int kind;
     dbus_sub_t **subs;
     size_t sub_count;
@@ -493,6 +494,7 @@ static void dbus_deliver(shrewd_basic_dbus_t *bus, dbus_job_t *job) {
     note.value = job->value;
     note.size = job->size;
     note.version = job->version;
+    note.folded = job->folded;
     note.kind = job->kind;
     for (size_t i = 0; i < job->sub_count; ++i) {
         dbus_sub_t *sub = job->subs[i];
@@ -594,6 +596,7 @@ static void dbus_enqueue(shrewd_basic_dbus_t *bus,
             }
             j->size = size;
             j->version = version;
+            j->folded += 1;
             dbus_unlock(bus);
             return;
         }
@@ -1473,6 +1476,73 @@ int shrewd_basic_dbus_import(shrewd_basic_dbus_t *bus,
     return status;
 }
 
+int shrewd_basic_dbus_save(shrewd_basic_dbus_t *bus, const char *pattern, const char *file) {
+    char *text = NULL;
+    FILE *out = NULL;
+    int status = 0;
+    if ((NULL == bus) || (NULL == file)) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    status = shrewd_basic_dbus_export(bus, pattern, &text);
+    if (SHREWD_BASIC_ERR_OK != status) {
+        return status;
+    }
+    out = fopen(file, "w");
+    if (NULL == out) {
+        shrewd_basic_json_text_free(text);
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    (void)fputs(text, out);
+    (void)fclose(out);
+    shrewd_basic_json_text_free(text);
+    return SHREWD_BASIC_ERR_OK;
+}
+
+int shrewd_basic_dbus_load(shrewd_basic_dbus_t *bus, const char *pattern, const char *file) {
+    FILE *in = NULL;
+    char *text = NULL;
+    size_t cap = 4096;
+    size_t len = 0;
+    int status = 0;
+    if ((NULL == bus) || (NULL == file)) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    in = fopen(file, "r");
+    if (NULL == in) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_alloc((void **)&text, cap)) {
+        (void)fclose(in);
+        return SHREWD_BASIC_ERR_MEM_NOMEM;
+    }
+    for (;;) {
+        size_t got = fread(text + len, 1, cap - len - 1, in);
+        len += got;
+        if (got < (cap - len - 1)) {
+            break; /* short read: eof or error */
+        }
+        {
+            void *old = text;
+            void *bigger = NULL;
+            if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_realloc(&bigger, old, cap * 2)) {
+                (void)fclose(in);
+                (void)shrewd_basic_platform_free(&old);
+                return SHREWD_BASIC_ERR_MEM_NOMEM;
+            }
+            text = bigger;
+            cap *= 2;
+        }
+    }
+    (void)fclose(in);
+    text[len] = '\0';
+    status = shrewd_basic_dbus_import(bus, pattern, text, len);
+    {
+        void *old = text;
+        (void)shrewd_basic_platform_free(&old);
+    }
+    return status;
+}
+
 #else /* !SHREWD_BASIC_FORMAT_JSON */
 
 int shrewd_basic_dbus_export(shrewd_basic_dbus_t *bus, const char *pattern, char **out_json) {
@@ -1493,7 +1563,165 @@ int shrewd_basic_dbus_import(shrewd_basic_dbus_t *bus,
     return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
 }
 
+int shrewd_basic_dbus_save(shrewd_basic_dbus_t *bus, const char *pattern, const char *file) {
+    (void)bus;
+    (void)pattern;
+    (void)file;
+    return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
+}
+
+int shrewd_basic_dbus_load(shrewd_basic_dbus_t *bus, const char *pattern, const char *file) {
+    (void)bus;
+    (void)pattern;
+    (void)file;
+    return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
+}
+
 #endif /* SHREWD_BASIC_FORMAT_JSON */
+
+/* --- transactions (optimistic read-modify-write, docs §12.2) ------------ */
+
+#define DBUS_TXN_MAX 32
+
+struct shrewd_basic_dbus_txn {
+    shrewd_basic_dbus_t *bus;
+    struct {
+        char path[DBUS_PATH_MAX];
+        uint64_t version;
+    } reads[DBUS_TXN_MAX];
+    size_t read_count;
+    struct {
+        char path[DBUS_PATH_MAX];
+        void *value;
+        size_t size;
+    } writes[DBUS_TXN_MAX];
+    size_t write_count;
+};
+
+int shrewd_basic_dbus_txn_begin(shrewd_basic_dbus_t *bus, shrewd_basic_dbus_txn_t **out) {
+    shrewd_basic_dbus_txn_t *txn = NULL;
+    if ((NULL == bus) || (NULL == out)) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    *out = NULL;
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_calloc((void **)&txn, 1, sizeof(*txn))) {
+        return SHREWD_BASIC_ERR_MEM_NOMEM;
+    }
+    txn->bus = bus;
+    *out = txn;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+int shrewd_basic_dbus_txn_get(shrewd_basic_dbus_txn_t *txn,
+                              const char *path,
+                              void *out,
+                              size_t size) {
+    shrewd_basic_dbus_stamp_t stamp;
+    int status = 0;
+    if ((NULL == txn) || (NULL == path) || (NULL == out)) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    if ((txn->read_count >= DBUS_TXN_MAX) || (txn->write_count >= DBUS_TXN_MAX)) {
+        return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED; /* table full */
+    }
+    memset(&stamp, 0, sizeof(stamp));
+    status = shrewd_basic_dbus_get(txn->bus, path, out, size, &stamp);
+    if (SHREWD_BASIC_ERR_OK == status) {
+        snprintf(
+            txn->reads[txn->read_count].path, sizeof(txn->reads[txn->read_count].path), "%s", path);
+        txn->reads[txn->read_count].version = stamp.version;
+        txn->read_count += 1;
+    }
+    return status;
+}
+
+int shrewd_basic_dbus_txn_set(shrewd_basic_dbus_txn_t *txn,
+                              const char *path,
+                              const void *in,
+                              size_t size) {
+    void *copy = NULL;
+    if ((NULL == txn) || (NULL == path) || (NULL == in)) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    if (txn->write_count >= DBUS_TXN_MAX) {
+        return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
+    }
+    /* Replace a staged write for the same path (keep the newest). */
+    for (size_t i = 0; i < txn->write_count; ++i) {
+        if (0 == strcmp(txn->writes[i].path, path)) {
+            void *old = txn->writes[i].value;
+            (void)shrewd_basic_platform_free(&old);
+            txn->writes[i].value = NULL;
+            if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_alloc(&copy, (0 < size) ? size : 1)) {
+                txn->writes[i].size = 0;
+                return SHREWD_BASIC_ERR_MEM_NOMEM;
+            }
+            memcpy(copy, in, size);
+            txn->writes[i].value = copy;
+            txn->writes[i].size = size;
+            return SHREWD_BASIC_ERR_OK;
+        }
+    }
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_alloc(&copy, (0 < size) ? size : 1)) {
+        return SHREWD_BASIC_ERR_MEM_NOMEM;
+    }
+    memcpy(copy, in, size);
+    snprintf(
+        txn->writes[txn->write_count].path, sizeof(txn->writes[txn->write_count].path), "%s", path);
+    txn->writes[txn->write_count].value = copy;
+    txn->writes[txn->write_count].size = size;
+    txn->write_count += 1;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+static void txn_free(shrewd_basic_dbus_txn_t *txn) {
+    for (size_t i = 0; i < txn->write_count; ++i) {
+        void *old = txn->writes[i].value;
+        (void)shrewd_basic_platform_free(&old);
+    }
+    {
+        void *old = txn;
+        (void)shrewd_basic_platform_free(&old);
+    }
+}
+
+int shrewd_basic_dbus_txn_commit(shrewd_basic_dbus_txn_t *txn) {
+    const char *paths[DBUS_TXN_MAX];
+    const void *ins[DBUS_TXN_MAX];
+    size_t sizes[DBUS_TXN_MAX];
+    shrewd_basic_dbus_stamp_t stamps[DBUS_TXN_MAX];
+    int status = 0;
+    if (NULL == txn) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    if (0 == txn->write_count) {
+        txn_free(txn);
+        return SHREWD_BASIC_ERR_OK;
+    }
+    /* CAS base: a written resource read in this txn commits against the
+       observed version; write-only resources are unconditional. */
+    for (size_t i = 0; i < txn->write_count; ++i) {
+        paths[i] = txn->writes[i].path;
+        ins[i] = txn->writes[i].value;
+        sizes[i] = txn->writes[i].size;
+        memset(&stamps[i], 0, sizeof(stamps[i]));
+        for (size_t j = 0; j < txn->read_count; ++j) {
+            if (0 == strcmp(txn->reads[j].path, txn->writes[i].path)) {
+                stamps[i].version = txn->reads[j].version;
+                break;
+            }
+        }
+    }
+    status = shrewd_basic_dbus_set_many(txn->bus, txn->write_count, paths, ins, sizes, stamps);
+    txn_free(txn);
+    return status;
+}
+
+void shrewd_basic_dbus_txn_abort(shrewd_basic_dbus_txn_t *txn) {
+    if (NULL != txn) {
+        txn_free(txn);
+    }
+}
 
 /* --- batch / coalesce / remote notify (phase 3) --------------------------- */
 
