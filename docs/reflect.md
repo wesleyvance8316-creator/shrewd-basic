@@ -81,10 +81,16 @@ person (person_t) {
 ### 3.1 kind(`shrewd_basic_reflect_kind_t`)
 
 `BOOL, CHAR, INT8, UINT8, INT16, UINT16, INT32, UINT32, INT64, UINT64, ENUM,
-FLOAT, DOUBLE, STRING, STRUCT, ARRAY, OPAQUE`
+FLOAT, DOUBLE, STRING, STRUCT, ARRAY, OPAQUE, STRING16, STRING32`
 
 - `ENUM`:枚举值(int 兼容,顺序排在整数族之后、浮点之前),`ENUM_DEFINE` 注册名/值表,dump 按常量名渲染,`enum_find_name/enum_find_value` 双向查表;
 - `STRING`:`char *` / `const char *` 成员,指针即值;
+- `STRING16` / `STRING32`:`char16_t *` / `char32_t *`(或 `wchar_t *`,宽度随
+  平台)宽字符串:值是指向(或本身就是)NUL **码元**结尾的码元序列,
+  equal/diff/hash 按码元到 NUL 单元为止,dump 逐码元转义(`\uXXXX` /
+  `\UXXXXXXXX`);`wchar_t` 用 `FIELD_WSTRING` 系列按 `WCHAR_MAX` 编译期归入
+  16/32。**刻意不做 `_Generic` 自动映射**(char32_t 是 unsigned int 的别名,
+  自动关联会把普通整型指针静默变成字符串),宽字符串一律显式宏;
 - `STRUCT`:有字段表的聚合;
 - `ARRAY`:定长数组值(多维数组的一行),`ARRAY_DEFINE` 注册元素/计数/步长,行可嵌套(3D+);
 - `UNION`:带标签联合,`UNION_DEFINE` + `UNION_VARIANT` 注册变体表,`FIELD_UNION` 联动
@@ -129,6 +135,8 @@ struct shrewd_basic_reflect_type {
 shrewd_basic_reflect_bool / _char / _int8 / _uint8 / _int16 / _uint16
 shrewd_basic_reflect_int32 / _uint32 / _int64 / _uint64 / _float / _double
 shrewd_basic_reflect_string   /* const char * */
+shrewd_basic_reflect_string16 /* char16_t * / 16 位 wchar_t * */
+shrewd_basic_reflect_string32 /* char32_t * / 32 位 wchar_t * */
 shrewd_basic_reflect_void     /* 不透明目标(OPAQUE),size = 0 */
 ```
 
@@ -153,7 +161,12 @@ shrewd_basic_reflect_void     /* 不透明目标(OPAQUE),size = 0 */
 | `FIELD_FLEX(struct_type, member, count_member, ref)` | 柔性尾部(尾部内联 + 计数联动) |
 | `FIELD_STRING_BUFFER(struct_type, member)` | `char[N]` 文本缓冲:按 C 字符串渲染/比较(dump 引号转义、equal/diff/hash 到 NUL 为止、visit 单 LEAF;get/set 仍是原始 N 字节) |
 | `FIELD_STRING_OWNED(struct_type, member)` | 图**拥有**的 `char *`:copy 克隆内容(共享串保持共享)、destroy 释放;NULL 保持 NULL;equal/hash/dump 不变 |
-| `FIELD_BITS(struct_type, unit, name, bit_offset, bit_width)` | 真实整数单元内的位组(寄存器位段/协议头):get/set 读改写单元(值零扩展到单元宽度),equal/diff/hash/dump 只看该组的位;**C 位域成员无法描述**(布局实现定义) |
+| `FIELD_STRING16/32(struct_type, member)` | `char16_t *` / `char32_t *` 宽字符串(借用) |
+| `FIELD_STRING16/32_OWNED(struct_type, member)` | 自有宽字符串:copy 克隆码元内容、destroy 释放 |
+| `FIELD_STRING16/32_BUFFER(struct_type, member)` | `char16_t[N]` / `char32_t[N]` 宽文本缓冲:按码元到 NUL 单元为止 |
+| `FIELD_WSTRING/_OWNED/_BUFFER(struct_type, member)` | `wchar_t` 形态,单元宽度随 `WCHAR_MAX` 编译期归入 16/32 |
+| `FIELD_BITS(struct_type, unit, name, bit_offset, bit_width)` | 真实整数单元内的位组(寄存器位段/协议头):get/set 读改写单元(值零扩展到单元宽度),equal/diff/hash/dump 只看该组的位 |
+| `FIELD_BITS_UNIT(struct_type, name, unit_ref, unit_offset, unit_size, bit_offset, bit_width)` | 显式单元放置的位组(`unit_ref` 不带 `&`):**C 位域成员**用——offsetof 碰不到位域的匿名存储,放置参数取自编译器实际布局(`reflect_gen --backend dwarf` 产出) |
 | `FIELD_UNION(struct_type, member, union_var, tag_member)` | 带标签联合成员:标签在运行时选变体,只有活动变体参与比较/拷贝/释放/渲染 |
 | `FIELD_*_OPS`(全部形态各有变体) | 同上 + 字段级 ops 覆盖 |
 
@@ -297,6 +310,7 @@ member ( '[' index ']' )? ( '.' member ( '[' index ']' )? )*
 ```
 person (person_t) {
   name = "Alice"            字符串:转义 \\ \" \n \r \t 与 \xHH,NULL → (null),256 字节截断
+  title = "café"       宽字符串:同上 ASCII 转义,其余码元 \uXXXX(16 位)/ \UXXXXXXXX(32 位)
   grade = 'A'               char:可打印字符,否则 '\x07'
   small = -7                有符号整数(按真实宽度读)
   big = 5                   无符号整数
@@ -366,7 +380,7 @@ struct shrewd_basic_reflect_ops {
 | 结构体 | `platform_calloc` + 字段递归 | 递归 + `platform_free` |
 | 标量 | `platform_alloc` + 拷值(规范宽度) | `platform_free` |
 | 字符串(槽) | **别名**(借用语义) | 永不触碰 |
-| 字符串(`F_STRING_OWNED`) | **克隆内容**(共享串保持共享) | 释放内容(访问集保证一次) |
+| 字符串(`F_STRING_OWNED`) | **克隆内容**(共享串保持共享;宽字符串按码元克隆) | 释放内容(访问集保证一次) |
 | 不透明 | 拒绝(`ARG_INVALID`) | 跳过(非我方分配) |
 | 超深度钳制 | 别名(防御) | 跳过 |
 
@@ -400,8 +414,9 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
 1. **描述符成员统一带 `sb_refl_` 前缀**(`sb_refl_name` / `sb_refl_type` / `sb_refl_size` ...):C 宏替换会改写 designated initializer 的设计器(未加前缀时,参数 `type` 会毁掉 `.type =`),项目缩写 + `refl_` 双重前缀使设计器与 `type`/`name`/`var`/`size` 等常见标识符彻底隔离——这些词如今可安全用作宏参数或用户包装宏的参数;宏参数仅需避开 `sb_refl_*` 本身。
 2. **`char buf[N]` 必须用 `FIELD_ARRAY(t, buf, shrewd_basic_reflect_char)`**:
    `FIELD_PRIMITIVE` 会因数组退化把 `char[N]` 当 `char *` 误判为字符串(编译器抓不到)。
-3. **多维数组不支持**(元素类型模型是单层),bit-field / 联合体 / 函数指针 /
-   匿名成员不支持。柔性尾部(`T a[]` 与 GNU `T a[0]`)用 `FIELD_FLEX`:成员必须是
+3. **多维数组按行类型嵌套描述**(元素类型模型是单层,`ARRAY_DEFINE` 逐层
+   包装)。函数指针不支持。柔性尾部(`T a[]` 与 GNU `T a[0]`)用
+   `FIELD_FLEX`:成员必须是
    最后一个、含它的结构体不能再内嵌(C 约束);**分配必须含尾部**
    (`platform_calloc(1, sizeof(T) + n * sizeof(T0))`),`sizeof` 只覆盖头部;
    copy 克隆时会按运行时计数补足尾部。
@@ -423,11 +438,17 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
 
 ## 10. 代码生成器(可选)
 
-`tools/reflect_gen.py`(纯 Python3,零依赖)解析头文件的受支持子集,
+`tools/reflect_gen.py`(Python3;词法后端零依赖,dwarf 后端需
+`python3-pyelftools` + C 编译器)解析头文件的受支持子集,
 产出与手写完全一致的宏注解,作为可选的编写辅助——**库本身永远不需要它**,
 生成物可读、可手改、可与手写混用:
 
-    python3 tools/reflect_gen.py input.h -o stub   # 生成 stub.h + stub.c
+    python3 tools/reflect_gen.py input.h -o stub   # 生成 stub.h + stub.c(词法后端)
+    python3 tools/reflect_gen.py input.h -o stub --backend dwarf
+                                   # 编译探针读真实布局:位域 FIELD_BITS_UNIT、
+                                   # _Static_assert(sizeof/offsetof) 指纹防陈旧
+    python3 tools/reflect_gen.py input.h --backend dwarf --layout
+                                   # pahole-lite 布局报告(偏移/填充/packed)
 
 - 收录:`typedef struct/enum`;标量/字符串(`FIELD_PRIMITIVE`)、嵌套结构体
   (`FIELD_STRUCT`)、定长数组(`FIELD_ARRAY`)、柔性尾部(`FIELD_FLEX`,含 GNU
@@ -438,8 +459,11 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
   3D+ 自然嵌套)+ `FIELD_ARRAY`;`char[N]` 默认生成 `FIELD_ARRAY`
   (字节精确);文本缓冲可手工改为 `FIELD_STRING_BUFFER`(C 字符串语义);
 - 描述符命名约定 `<类型名>_reflect`(如 `shape_t_reflect`);
-- 跳过并告警:bit-field、联合体、函数指针;
-- 验证:`tools/reflect_gen_check.sh` 一键自测(生成 → 编译 → 运行 dump/equal/enum 冒烟),样例输入 `tools/reflect_gen_sample.h`;
+- 跳过并告警:联合体、函数指针;bit-field 由 `--backend dwarf` 支持
+  (词法后端跳过);
+- 验证:`tools/reflect_gen_check.sh` 一键自测(双后端生成 → 编译 → 运行
+  dump/equal/enum 冒烟 + 位域双向对账 + `--layout` 报告),样例输入
+  `tools/reflect_gen_sample.h` / `tools/reflect_gen_sample_bits.h`;
 - 基准:`tools/reflect_bench.sh` 输出关键路径的 ns/op 基线(find/resolve/path_get/field_get/equal/copy+destroy/dump),供优化工作对照。
 
 ## 11. 路线图
