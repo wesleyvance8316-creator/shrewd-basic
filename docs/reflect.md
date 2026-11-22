@@ -535,7 +535,7 @@ decode **永远额外接受成员名**(库不变量,`key=`/`keys=` 添加接受�
 ### 产出与收录
 
 - 默认输出 `<input>_reflect.{c,h}`,拒绝覆盖输入本身;有 `json:` 点名时
-  另出 `<output>_json.{c,h}`(策略表,可与构建系统的格式开关共存);
+  另出 `<output>_json.{c,h}`(策略表,可与构建系统的格式开关共存);`--schema-dump` 再出 `<output>_schema_dump.c`(schema 导出程序,构建期运行固化 `schema.json`);
 - 描述符命名约定 `<类型名>_reflect`(如 `shape_t_reflect`);
 - 收录形态:标量/字符串(`FIELD_PRIMITIVE`)、嵌套结构体
   (`FIELD_STRUCT`)、定长数组(`FIELD_ARRAY`)、柔性尾部(`FIELD_FLEX`,含 GNU

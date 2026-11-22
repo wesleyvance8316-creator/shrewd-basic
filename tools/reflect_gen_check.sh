@@ -99,6 +99,27 @@ ${CC:-cc} -std=c11 \
     -o "$work/json/smoke"
 "$work/json/smoke"
 
+# --- schema dump program (runtime exporter, single schema truth) ------
+python3 "$here/reflect_gen.py" "$here/reflect_gen_sample_json.h" \
+    -o "$work/json/generated" --schema-dump --quiet
+printf '%s\n' '#include "shrewd-basic/formats/json.h"' \
+    'const struct shrewd_basic_json_ops g_sample_ops = {0};' > "$work/json/ops_def.c"
+${CC:-cc} -std=c11 \
+    -I"$root/include" -I"$root/include/shrewd-basic-internal" \
+    -I"$here" -I"$work/json" \
+    "$work/json/generated_schema_dump.c" \
+    "$work/json/generated.c" "$work/json/generated_json.c" \
+    "$work/json/ops_def.c" \
+    $lib_sources "$root"/library/json/*.c \
+    -o "$work/json/schema_dump"
+"$work/json/schema_dump" cfg_t "$work/schema.json"
+grep -q '"properties"' "$work/schema.json"
+grep -q '"x-aliases"' "$work/schema.json"
+if "$work/json/schema_dump" no_such_t > /dev/null 2>&1; then
+    echo "reflect_gen_check: schema dump accepted an unknown type" >&2
+    exit 1
+fi
+
 # --- golden: full-text lock on the sample stubs ---------------------------
 python3 "$here/reflect_gen.py" "$here/reflect_gen_sample.h" -o "$work/golden" --quiet
 mkdir "$work/golden_json"
