@@ -7,16 +7,28 @@
  *
  * A loud subset - never half-compatible. Supported: comments, blank
  * lines, `[table]` / `[a.b]` headers (nested structs), `key = value`,
- * basic/literal strings, integers (decimal / 0x hex), floats, booleans
- * and homogeneous scalar arrays. Rejected with a line number: datetime,
- * multi-line strings, inline tables, dotted keys, array tables, quoted
- * keys, mixed arrays and duplicate keys.
+ * basic/literal strings (single- and multi-line `"""` / `'''`, line-ending
+ * backslash continuation, quote runs), integers (decimal / 0x hex),
+ * floats, booleans, homogeneous scalar arrays, inline tables `{k = v}`
+ * (single-line), dotted keys `a.b = v`, array tables `[[items]]`
+ * (fixed or dynamic struct arrays; `[items.x]` descends into the last
+ * element), quoted keys (`"a b"` / `'x'`) and datetime shapes
+ * (offset/local date-time, bare date/time).
+ *
+ * Rejected with a line number: duplicate keys / tables, bad escapes,
+ * lone surrogates, mixed-type arrays, arrays longer than the field,
+ * keys after a table header, subtables of a leaf and unknown keys /
+ * tables.
  *
  * Mapping: top-level keys fill root struct leaves; tables fill nested
- * struct fields; arrays fill fixed scalar arrays (element-wise scan).
- * Pointer / flexible / wide-string / union shapes are refused
- * (SHREWD_BASIC_ERR_JSON_UNSUPPORTED). Leaf conversion goes through the
- * shared text layer (shrewd_basic_reflect_scan_text / _render_text).
+ * struct fields; arrays fill fixed scalar arrays (element-wise scan) or
+ * FIELD_DARRAY vectors (grown per element). Datetime values map to
+ * string fields verbatim (re-encoded as quoted strings); a datetime
+ * aimed at a non-string field is SHREWD_BASIC_ERR_JSON_UNSUPPORTED -
+ * no implicit conversion. Pointer / flexible / wide-string / union
+ * shapes are refused (SHREWD_BASIC_ERR_JSON_UNSUPPORTED). Leaf
+ * conversion goes through the shared text layer
+ * (shrewd_basic_reflect_scan_text / _render_text).
  *
  * Ownership: decode zeroes the target first and fills it (owned strings
  * allocate); release with shrewd_basic_toml_free(), which frees owned
@@ -36,8 +48,11 @@ typedef struct shrewd_basic_toml_error {
 
 /**
  * Encode @p object as TOML text (compact, human-readable). Scalars come
- * before `[table]` sections, floats always carry a fraction/exponent.
- * @p error may be NULL. Release the text with
+ * before `[table]` sections, struct arrays emit one `[[path]]` block per
+ * element (root scalars first - later keys would fall into the last
+ * table), floats always carry a fraction/exponent and owned strings must
+ * be non-NULL (datetimes stored in string fields come back as quoted
+ * strings). @p error may be NULL. Release the text with
  * shrewd_basic_toml_text_free().
  */
 int shrewd_basic_toml_encode(const void *object,
