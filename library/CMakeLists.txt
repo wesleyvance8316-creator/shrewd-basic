@@ -65,6 +65,14 @@ if(SHREWD_BASIC_FORMAT_CBOR)
             "${CMAKE_CURRENT_SOURCE_DIR}/cbor/*.c")
 endif()
 
+set(SHREWD_BASIC_DBUS_SOURCES "")
+set(SHREWD_BASIC_DBUS_LIBS "")
+if(SHREWD_BASIC_DBUS)
+    file(GLOB_RECURSE SHREWD_BASIC_DBUS_SOURCES CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/dbus/*.c")
+    set(SHREWD_BASIC_DBUS_LIBS Threads::Threads)
+endif()
+
 set(SHREWD_BASIC_SOURCES
         ${SHREWD_BASIC_DS_SOURCES}
         ${SHREWD_BASIC_LOG_SOURCES}
@@ -77,7 +85,8 @@ set(SHREWD_BASIC_SOURCES
         ${SHREWD_BASIC_FORMAT_CSV_SOURCES}
         ${SHREWD_BASIC_FORMAT_TOML_SOURCES}
         ${SHREWD_BASIC_FORMAT_MSGPACK_SOURCES}
-        ${SHREWD_BASIC_FORMAT_CBOR_SOURCES})
+        ${SHREWD_BASIC_FORMAT_CBOR_SOURCES}
+        ${SHREWD_BASIC_DBUS_SOURCES})
 
 if(NOT SHREWD_BASIC_BUILD_STATIC AND NOT SHREWD_BASIC_BUILD_SHARED)
     message(FATAL_ERROR
@@ -108,6 +117,7 @@ endfunction()
 
 if(SHREWD_BASIC_BUILD_STATIC)
     add_library(shrewd-basic-static STATIC ${SHREWD_BASIC_SOURCES})
+    target_link_libraries(shrewd-basic-static PUBLIC ${SHREWD_BASIC_DBUS_LIBS})
     shrewd_basic_setup_library(shrewd-basic-static)
     add_library(shrewd-basic::shrewd-basic-static ALIAS shrewd-basic-static)
     set_target_properties(shrewd-basic-static PROPERTIES OUTPUT_NAME "shrewd-basic")
@@ -120,6 +130,7 @@ endif()
 
 if(SHREWD_BASIC_BUILD_SHARED)
     add_library(shrewd-basic-shared SHARED ${SHREWD_BASIC_SOURCES})
+    target_link_libraries(shrewd-basic-shared PUBLIC ${SHREWD_BASIC_DBUS_LIBS})
     shrewd_basic_setup_library(shrewd-basic-shared)
     add_library(shrewd-basic::shrewd-basic-shared ALIAS shrewd-basic-shared)
     set_target_properties(shrewd-basic-shared PROPERTIES OUTPUT_NAME "shrewd-basic")

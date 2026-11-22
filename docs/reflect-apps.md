@@ -112,6 +112,13 @@ free 递归回收)。
 | **YAML** | ❌ 不自研 | 高 | 缩进文法/隐式类型(挪威问题)/锚点别名与"绝不静默出错"正面冲突,子集必然半兼容;真需求 → **引第三方库 + ops/叶子适配层** |
 | **protobuf/FlatBuffers/Cap'n Proto** | ❌ 不适配 | — | 线格式按**字段编号**寻址、需 IDL 编译器与未知字段保留,与 reflect 按名映射是两个物种 |
 
+## 4.5 数据总线(sb_dbus)——已落地
+
+带钩子链的全局命名数据空间(配置 + 事件),reflect 描述符钉类型、
+路径引擎解析字段选择、copy/destroy 管值、dump 出快照;inproc 与
+shm 两种数据面。设计见 [dbus-design](dbus-design.md),API 与示例见
+[dbus-api](dbus-api.md)。
+
 ## 5. 宽字符串互转(json/bin)——已落地
 
 > 状态:**已完成**(2026-11-22,提交 fca96c4)。reflect 层宽字符串
