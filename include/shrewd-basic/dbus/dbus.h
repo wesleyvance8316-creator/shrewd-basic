@@ -92,6 +92,15 @@ typedef struct shrewd_basic_dbus_note {
 typedef int (*shrewd_basic_dbus_recv_fn)(void *ctx, const shrewd_basic_dbus_note_t *note);
 
 /**
+ * Batch receive: the dispatcher drains the pending queue and delivers
+ * every note matching the subscription in ONE call (high-frequency
+ * scenarios). The notes are snapshots valid for the callback only.
+ */
+typedef int (*shrewd_basic_dbus_recv_batch_fn)(void *ctx,
+                                               const shrewd_basic_dbus_note_t *notes,
+                                               size_t count);
+
+/**
  * Hook matrix (docs/dbus-design.md §4). pre_ hooks may deny (return an
  * error) or rewrite (shrewd_basic_dbus_req_rewrite on pre_set); CORE
  * get/set belong to the primary mount (storage or virtual provider) -
@@ -151,6 +160,11 @@ int shrewd_basic_dbus_subscribe(shrewd_basic_dbus_t *bus,
                                 shrewd_basic_dbus_recv_fn recv,
                                 void *ctx,
                                 shrewd_basic_dbus_handle_t **out);
+int shrewd_basic_dbus_subscribe_batch(shrewd_basic_dbus_t *bus,
+                                      const char *pattern,
+                                      shrewd_basic_dbus_recv_batch_fn recv,
+                                      void *ctx,
+                                      shrewd_basic_dbus_handle_t **out);
 int shrewd_basic_dbus_unsubscribe(shrewd_basic_dbus_t *bus, shrewd_basic_dbus_handle_t *handle);
 
 /* --- data --------------------------------------------------------------- */

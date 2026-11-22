@@ -163,6 +163,7 @@ typedef struct dbus_hook {
 typedef struct dbus_sub {
     dbus_pattern_t pattern;
     shrewd_basic_dbus_recv_fn recv;
+    shrewd_basic_dbus_recv_batch_fn recv_batch;
     void *ctx;
     int refs; /* registration + in-flight deliveries */
     int dead;
@@ -487,51 +488,136 @@ int shrewd_basic_dbus_req_rewrite(shrewd_basic_dbus_req_t *req, const void *in, 
 
 /* --- notify pipeline ------------------------------------------------------ */
 
-static void dbus_deliver(shrewd_basic_dbus_t *bus, dbus_job_t *job) {
+/*
+ * Deliver one drained batch of jobs: plain recv per note, then one call
+ * per batch subscription carrying every matching note of the batch
+ * (high-frequency writers coalesce into a single callback).
+ */
+static void dbus_deliver_many(shrewd_basic_dbus_t *bus, dbus_job_t *first) {
     shrewd_basic_dbus_note_t note;
-    memset(&note, 0, sizeof(note));
-    note.path = job->path;
-    note.value = job->value;
-    note.size = job->size;
-    note.version = job->version;
-    note.folded = job->folded;
-    note.kind = job->kind;
-    for (size_t i = 0; i < job->sub_count; ++i) {
-        dbus_sub_t *sub = job->subs[i];
-        if ((0 == sub->dead) && (NULL != sub->recv)) {
-            (void)sub->recv(sub->ctx, &note);
+    dbus_sub_t **batch_subs = NULL;
+    size_t batch_count = 0;
+    size_t slots = 0;
+    for (dbus_job_t *job = first; NULL != job; job = job->next) {
+        slots += job->sub_count;
+        memset(&note, 0, sizeof(note));
+        note.path = job->path;
+        note.value = job->value;
+        note.size = job->size;
+        note.version = job->version;
+        note.folded = job->folded;
+        note.kind = job->kind;
+        for (size_t i = 0; i < job->sub_count; ++i) {
+            dbus_sub_t *sub = job->subs[i];
+            if ((0 == sub->dead) && (NULL != sub->recv)) {
+                (void)sub->recv(sub->ctx, &note);
+            }
         }
     }
-    dbus_lock(bus);
-    for (size_t i = 0; i < job->sub_count; ++i) {
-        dbus_sub_t *sub = job->subs[i];
-        sub->refs -= 1;
-        if ((0 != sub->dead) && (0 >= sub->refs)) {
-            void *old = sub;
+    /* Batch subscriptions: one call per subscriber across the batch. */
+    if ((0 < slots)
+        && (SHREWD_BASIC_ERR_OK
+            == shrewd_basic_platform_calloc((void **)&batch_subs, slots, sizeof(*batch_subs)))) {
+        for (dbus_job_t *job = first; NULL != job; job = job->next) {
+            for (size_t i = 0; i < job->sub_count; ++i) {
+                dbus_sub_t *sub = job->subs[i];
+                size_t seen = 0;
+                if ((0 != sub->dead) || (NULL == sub->recv_batch)) {
+                    continue;
+                }
+                for (seen = 0; seen < batch_count; ++seen) {
+                    if (batch_subs[seen] == sub) {
+                        break;
+                    }
+                }
+                if (seen == batch_count) {
+                    batch_subs[batch_count] = sub;
+                    ++batch_count;
+                }
+            }
+        }
+        for (size_t s = 0; s < batch_count; ++s) {
+            dbus_sub_t *sub = batch_subs[s];
+            size_t n = 0;
+            size_t k = 0;
+            shrewd_basic_dbus_note_t *notes = NULL;
+            for (dbus_job_t *job = first; NULL != job; job = job->next) {
+                for (size_t i = 0; i < job->sub_count; ++i) {
+                    if (job->subs[i] == sub) {
+                        ++n;
+                    }
+                }
+            }
+            if ((0 == n)
+                || (SHREWD_BASIC_ERR_OK
+                    != shrewd_basic_platform_calloc((void **)&notes, n, sizeof(*notes)))) {
+                continue;
+            }
+            for (dbus_job_t *job = first; (NULL != job) && (k < n); job = job->next) {
+                for (size_t i = 0; (i < job->sub_count) && (k < n); ++i) {
+                    if (job->subs[i] != sub) {
+                        continue;
+                    }
+                    notes[k].path = job->path;
+                    notes[k].value = job->value;
+                    notes[k].size = job->size;
+                    notes[k].version = job->version;
+                    notes[k].folded = job->folded;
+                    notes[k].kind = job->kind;
+                    ++k;
+                }
+            }
+            if (0 == sub->dead) {
+                (void)sub->recv_batch(sub->ctx, notes, k);
+            }
+            {
+                void *old = notes;
+                (void)shrewd_basic_platform_free(&old);
+            }
+        }
+        {
+            void *old = batch_subs;
             (void)shrewd_basic_platform_free(&old);
         }
     }
-    bus->active -= 1;
+    /* Release job refs and free the drained batch. */
+    for (dbus_job_t *job = first; NULL != job;) {
+        dbus_job_t *next = job->next;
+        dbus_lock(bus);
+        for (size_t i = 0; i < job->sub_count; ++i) {
+            dbus_sub_t *sub = job->subs[i];
+            sub->refs -= 1;
+            if ((0 != sub->dead) && (0 >= sub->refs)) {
+                void *old = sub;
+                (void)shrewd_basic_platform_free(&old);
+            }
+        }
+        bus->active -= 1;
+        dbus_unlock(bus);
+        {
+            void *old = job->value;
+            (void)shrewd_basic_platform_free(&old);
+            old = job->subs;
+            (void)shrewd_basic_platform_free(&old);
+            old = job->path;
+            (void)shrewd_basic_platform_free(&old);
+            old = job;
+            (void)shrewd_basic_platform_free(&old);
+        }
+        job = next;
+    }
+    dbus_lock(bus);
     if ((NULL == bus->jobs_head) && (0 >= bus->active)) {
         (void)pthread_cond_broadcast(&bus->idle);
     }
     dbus_unlock(bus);
-    {
-        void *old = job->value;
-        (void)shrewd_basic_platform_free(&old);
-        old = job->subs;
-        (void)shrewd_basic_platform_free(&old);
-        old = job->path;
-        (void)shrewd_basic_platform_free(&old);
-        old = job;
-        (void)shrewd_basic_platform_free(&old);
-    }
 }
 
 static void *dbus_dispatch(void *arg) {
     shrewd_basic_dbus_t *bus = (shrewd_basic_dbus_t *)arg;
     for (;;) {
-        dbus_job_t *job = NULL;
+        dbus_job_t *first = NULL;
+        dbus_job_t *last = NULL;
         dbus_lock(bus);
         while ((NULL == bus->jobs_head) && (0 != bus->running)) {
             (void)pthread_cond_wait(&bus->idle, &bus->lock);
@@ -540,13 +626,15 @@ static void *dbus_dispatch(void *arg) {
             dbus_unlock(bus);
             return NULL;
         }
-        job = bus->jobs_head;
-        bus->jobs_head = job->next;
-        if (NULL == bus->jobs_head) {
-            bus->jobs_tail = NULL;
-        }
+        first = bus->jobs_head;
+        last = bus->jobs_tail;
+        bus->jobs_head = NULL;
+        bus->jobs_tail = NULL;
         dbus_unlock(bus);
-        dbus_deliver(bus, job);
+        if (NULL != last) {
+            last->next = NULL; /* detach the drained batch */
+        }
+        dbus_deliver_many(bus, first);
     }
 }
 
@@ -656,8 +744,9 @@ static void dbus_enqueue(shrewd_basic_dbus_t *bus,
         if (NULL == bus->jobs_head) {
             bus->jobs_tail = NULL;
         }
+        head->next = NULL;
         dbus_unlock(bus);
-        dbus_deliver(bus, head);
+        dbus_deliver_many(bus, head);
         return;
     }
     (void)pthread_cond_signal(&bus->idle);
@@ -1031,6 +1120,43 @@ int shrewd_basic_dbus_subscribe(shrewd_basic_dbus_t *bus,
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     sub->recv = recv;
+    sub->ctx = ctx;
+    sub->refs = 1;
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_calloc((void **)&handle, 1, sizeof(*handle))) {
+        void *old = sub;
+        (void)shrewd_basic_platform_free(&old);
+        return SHREWD_BASIC_ERR_MEM_NOMEM;
+    }
+    handle->is_sub = 1;
+    handle->sub = sub;
+    dbus_lock(bus);
+    sub->next = bus->subs;
+    bus->subs = sub;
+    dbus_unlock(bus);
+    *out = handle;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+int shrewd_basic_dbus_subscribe_batch(shrewd_basic_dbus_t *bus,
+                                      const char *pattern,
+                                      shrewd_basic_dbus_recv_batch_fn recv,
+                                      void *ctx,
+                                      shrewd_basic_dbus_handle_t **out) {
+    shrewd_basic_dbus_handle_t *handle = NULL;
+    dbus_sub_t *sub = NULL;
+    if ((NULL == bus) || (NULL == recv) || (NULL == out)) {
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    *out = NULL;
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_calloc((void **)&sub, 1, sizeof(*sub))) {
+        return SHREWD_BASIC_ERR_MEM_NOMEM;
+    }
+    if (SHREWD_BASIC_ERR_OK != dbus_pattern_compile(pattern, &sub->pattern)) {
+        void *old = sub;
+        (void)shrewd_basic_platform_free(&old);
+        return SHREWD_BASIC_ERR_ARG_INVALID;
+    }
+    sub->recv_batch = recv;
     sub->ctx = ctx;
     sub->refs = 1;
     if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_calloc((void **)&handle, 1, sizeof(*handle))) {
@@ -1611,22 +1737,45 @@ int shrewd_basic_dbus_load(shrewd_basic_dbus_t *bus, const char *pattern, const 
 
 /* --- transactions (optimistic read-modify-write, docs §12.2) ------------ */
 
-#define DBUS_TXN_MAX 32
+/* Read/write sets grow on demand (the old 32-entry cap is gone). */
+typedef struct {
+    char path[DBUS_PATH_MAX];
+    uint64_t version;
+} dbus_txn_read_t;
+
+typedef struct {
+    char path[DBUS_PATH_MAX];
+    void *value;
+    size_t size;
+} dbus_txn_write_t;
 
 struct shrewd_basic_dbus_txn {
     shrewd_basic_dbus_t *bus;
-    struct {
-        char path[DBUS_PATH_MAX];
-        uint64_t version;
-    } reads[DBUS_TXN_MAX];
+    dbus_txn_read_t *reads;
     size_t read_count;
-    struct {
-        char path[DBUS_PATH_MAX];
-        void *value;
-        size_t size;
-    } writes[DBUS_TXN_MAX];
+    size_t read_cap;
+    dbus_txn_write_t *writes;
     size_t write_count;
+    size_t write_cap;
 };
+
+static int txn_grow(void **arr, size_t *cap, size_t need, size_t elem) {
+    size_t want = 0;
+    void *block = NULL;
+    if (need <= *cap) {
+        return SHREWD_BASIC_ERR_OK;
+    }
+    want = (0 != *cap) ? *cap : 8;
+    while (want < need) {
+        want *= 2;
+    }
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_realloc(&block, *arr, want * elem)) {
+        return SHREWD_BASIC_ERR_MEM_NOMEM;
+    }
+    *arr = block;
+    *cap = want;
+    return SHREWD_BASIC_ERR_OK;
+}
 
 int shrewd_basic_dbus_txn_begin(shrewd_basic_dbus_t *bus, shrewd_basic_dbus_txn_t **out) {
     shrewd_basic_dbus_txn_t *txn = NULL;
@@ -1651,16 +1800,19 @@ int shrewd_basic_dbus_txn_get(shrewd_basic_dbus_txn_t *txn,
     if ((NULL == txn) || (NULL == path) || (NULL == out)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
-    if ((txn->read_count >= DBUS_TXN_MAX) || (txn->write_count >= DBUS_TXN_MAX)) {
-        return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED; /* table full */
-    }
     memset(&stamp, 0, sizeof(stamp));
     status = shrewd_basic_dbus_get(txn->bus, path, out, size, &stamp);
     if (SHREWD_BASIC_ERR_OK == status) {
-        snprintf(
-            txn->reads[txn->read_count].path, sizeof(txn->reads[txn->read_count].path), "%s", path);
-        txn->reads[txn->read_count].version = stamp.version;
-        txn->read_count += 1;
+        status = txn_grow(
+            (void **)&txn->reads, &txn->read_cap, txn->read_count + 1, sizeof(*txn->reads));
+        if (SHREWD_BASIC_ERR_OK == status) {
+            snprintf(txn->reads[txn->read_count].path,
+                     sizeof(txn->reads[txn->read_count].path),
+                     "%s",
+                     path);
+            txn->reads[txn->read_count].version = stamp.version;
+            txn->read_count += 1;
+        }
     }
     return status;
 }
@@ -1672,9 +1824,6 @@ int shrewd_basic_dbus_txn_set(shrewd_basic_dbus_txn_t *txn,
     void *copy = NULL;
     if ((NULL == txn) || (NULL == path) || (NULL == in)) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
-    }
-    if (txn->write_count >= DBUS_TXN_MAX) {
-        return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
     }
     /* Replace a staged write for the same path (keep the newest). */
     for (size_t i = 0; i < txn->write_count; ++i) {
@@ -1695,6 +1844,13 @@ int shrewd_basic_dbus_txn_set(shrewd_basic_dbus_txn_t *txn,
     if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_alloc(&copy, (0 < size) ? size : 1)) {
         return SHREWD_BASIC_ERR_MEM_NOMEM;
     }
+    if (SHREWD_BASIC_ERR_OK
+        != txn_grow(
+            (void **)&txn->writes, &txn->write_cap, txn->write_count + 1, sizeof(*txn->writes))) {
+        void *old = copy;
+        (void)shrewd_basic_platform_free(&old);
+        return SHREWD_BASIC_ERR_MEM_NOMEM;
+    }
     memcpy(copy, in, size);
     snprintf(
         txn->writes[txn->write_count].path, sizeof(txn->writes[txn->write_count].path), "%s", path);
@@ -1710,16 +1866,20 @@ static void txn_free(shrewd_basic_dbus_txn_t *txn) {
         (void)shrewd_basic_platform_free(&old);
     }
     {
-        void *old = txn;
+        void *old = txn->reads;
+        (void)shrewd_basic_platform_free(&old);
+        old = txn->writes;
+        (void)shrewd_basic_platform_free(&old);
+        old = txn;
         (void)shrewd_basic_platform_free(&old);
     }
 }
 
 int shrewd_basic_dbus_txn_commit(shrewd_basic_dbus_txn_t *txn) {
-    const char *paths[DBUS_TXN_MAX];
-    const void *ins[DBUS_TXN_MAX];
-    size_t sizes[DBUS_TXN_MAX];
-    shrewd_basic_dbus_stamp_t stamps[DBUS_TXN_MAX];
+    const char **paths = NULL;
+    const void **ins = NULL;
+    size_t *sizes = NULL;
+    shrewd_basic_dbus_stamp_t *stamps = NULL;
     int status = 0;
     if (NULL == txn) {
         return SHREWD_BASIC_ERR_ARG_INVALID;
@@ -1727,6 +1887,25 @@ int shrewd_basic_dbus_txn_commit(shrewd_basic_dbus_txn_t *txn) {
     if (0 == txn->write_count) {
         txn_free(txn);
         return SHREWD_BASIC_ERR_OK;
+    }
+    if ((SHREWD_BASIC_ERR_OK
+         != shrewd_basic_platform_calloc((void **)&paths, txn->write_count, sizeof(*paths)))
+        || (SHREWD_BASIC_ERR_OK
+            != shrewd_basic_platform_calloc((void **)&ins, txn->write_count, sizeof(*ins)))
+        || (SHREWD_BASIC_ERR_OK
+            != shrewd_basic_platform_calloc((void **)&sizes, txn->write_count, sizeof(*sizes)))
+        || (SHREWD_BASIC_ERR_OK
+            != shrewd_basic_platform_calloc((void **)&stamps, txn->write_count, sizeof(*stamps)))) {
+        void *old = paths;
+        (void)shrewd_basic_platform_free(&old);
+        old = ins;
+        (void)shrewd_basic_platform_free(&old);
+        old = sizes;
+        (void)shrewd_basic_platform_free(&old);
+        old = stamps;
+        (void)shrewd_basic_platform_free(&old);
+        txn_free(txn);
+        return SHREWD_BASIC_ERR_MEM_NOMEM;
     }
     /* CAS base: a written resource read in this txn commits against the
        observed version; write-only resources are unconditional. */
@@ -1743,6 +1922,16 @@ int shrewd_basic_dbus_txn_commit(shrewd_basic_dbus_txn_t *txn) {
         }
     }
     status = shrewd_basic_dbus_set_many(txn->bus, txn->write_count, paths, ins, sizes, stamps);
+    {
+        void *old = paths;
+        (void)shrewd_basic_platform_free(&old);
+        old = ins;
+        (void)shrewd_basic_platform_free(&old);
+        old = sizes;
+        (void)shrewd_basic_platform_free(&old);
+        old = stamps;
+        (void)shrewd_basic_platform_free(&old);
+    }
     txn_free(txn);
     return status;
 }
