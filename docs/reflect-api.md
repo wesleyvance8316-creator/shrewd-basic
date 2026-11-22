@@ -731,5 +731,4 @@ shrewd_basic_reflect_dump()。
   `_Thread_local` 缓存,多线程安全;`*_list` 家族无共享状态;其余接口只
   读描述符或写调用方内存;
 - 用法指南(数据模型详解、宏约束、路径语法细节)见
-  [reflect reference](reflect.md);支持面总结见
-  [reflect overview](reflect-overview.md)。
+  [reflect reference](reflect.md)。

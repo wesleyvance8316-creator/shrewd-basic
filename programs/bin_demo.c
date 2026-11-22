@@ -147,6 +147,6 @@ int main(void) {
         }
     }
 
-    printf("\nDemo done. See docs/reflect-apps.md for the format spec.\n");
+    printf("\nDemo done. See docs/formats-api.md for the format spec.\n");
     return 0;
 }
