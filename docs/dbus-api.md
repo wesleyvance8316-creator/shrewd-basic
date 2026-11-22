@@ -42,7 +42,9 @@ int  shrewd_basic_dbus_attach(const char *name, size_t size,
 `attach`:打开/创建**共享内存总线**(跨进程)——值在区域(reflect
 原样布局,attach 时 ABI 指纹逐项核对,不符 `ERR_DBUS_CONFLICT`)、
 robust mutex 崩溃回收、变更环 + 共享 cond 跨进程唤醒;本地钩子与
-订阅语义与 inproc 完全一致。
+订阅语义与 inproc 完全一致。**进程契约**:各进程使用资源前须本进程
+`mount`(注册本地视图/钩子;值槽按路径跨进程共享),`attach` 不
+自动导入他进程的挂载。
 
 ## 2. 资源挂载(存储 = 生命周期)
 

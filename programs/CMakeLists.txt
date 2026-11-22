@@ -45,3 +45,29 @@ target_link_libraries(shrewd-basic-bin-demo
             shrewd-basic-warnings)
 
 endif()
+
+# Formats demo: every interface of the text layer and the six formats
+# (built when the whole family is enabled).
+if(SHREWD_BASIC_FORMAT_INI AND SHREWD_BASIC_FORMAT_ENV AND SHREWD_BASIC_FORMAT_CSV
+   AND SHREWD_BASIC_FORMAT_TOML AND SHREWD_BASIC_FORMAT_MSGPACK AND SHREWD_BASIC_FORMAT_CBOR)
+
+add_executable(shrewd-basic-formats-demo formats_demo.c)
+
+target_link_libraries(shrewd-basic-formats-demo
+        PRIVATE
+            shrewd-basic
+            shrewd-basic-warnings)
+
+endif()
+
+# dbus demo: every sb_dbus interface (policy hooks need json).
+if(SHREWD_BASIC_DBUS AND SHREWD_BASIC_FORMAT_JSON)
+
+add_executable(shrewd-basic-dbus-demo dbus_demo.c)
+
+target_link_libraries(shrewd-basic-dbus-demo
+        PRIVATE
+            shrewd-basic
+            shrewd-basic-warnings)
+
+endif()
