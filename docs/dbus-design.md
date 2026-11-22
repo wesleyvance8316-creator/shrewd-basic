@@ -186,8 +186,65 @@ typedef int (*shrewd_basic_dbus_recv_fn)(void *ctx,
 
 ## 9. 分期
 
-1. **一期(建设中)**:§2–§8 全量 inproc——访问族、九宫格钩子、
-   路由、异步分发 + `drain`、export/import/dump、测试与 demo;
-2. **二期**:transport 插件(shm 或 daemon,按负载定)+ ABI 指纹
-   校验 + 线格式;
-3. **三期**:批量/事务、通知合并、权限钩子、json 策略行并入 pre_set。
+1. **一期 ✅(2026-11-22)**:§2–§8 全量 inproc——访问族、九宫格
+   钩子、路由(`*`/`/**`)、异步分发 + `drain`、export/import/dump;
+2. **二期(建设中)**:shm transport + ABI 指纹校验;
+3. **三期(建设中)**:批量/事务、通知合并、权限钩子、json 策略行
+   并入 pre_set。
+
+## 10. 二期:shm transport(契约)
+
+**选型依据**:钩子是**进程内语义**(驱动映射必须在本进程跑)——
+shm 数据面让各进程挂自己的钩子链、读写共享值;daemon 模型会把钩子
+困在服务进程(排除)。transport 以插件形态挂在 core 之下(inproc
+之外的第二种实现)。
+
+```c
+int shrewd_basic_dbus_attach(const char *name, size_t size,
+                             const shrewd_basic_dbus_options_t *opt,
+                             shrewd_basic_dbus_t **out);   /* 打开/创建 shm 总线 */
+```
+
+- **区域布局**:头(magic、格式版本、类型表:名字 + sb_refl_abi +
+  sizeof)+ 节点表(路径、类型索引、值偏移、seq 版本)+ 值池;
+- **ABI 指纹**:attach 时按类型表逐项核对本进程描述符
+  (`sb_refl_abi` + `sizeof` + `check_type`),不符
+  `ERR_DBUS_CONFLICT`,绝不静默共存;
+- **互斥**:POSIX robust mutex(进程崩溃自动回收,EOWNERDEAD
+  走恢复);seq 版本为无锁读优化留位;
+- **通知**:每进程注册 eventfd 进区域表;写方 commit 后对注册
+  fd 广播;本进程订阅匹配照旧(纯本地);
+- **值语义**:区域内为 reflect 原样布局;`set` = 锁内 memcpy;
+  `peek` 直接返回区域地址(零拷贝);OWNED/LINKED 在 shm 下统一为
+  "区域持有"(attach 即共享);
+- 进程内钩子链、订阅、CAS、批量全部复用 core(transport 只换
+  "值从哪来、往哪写、怎么叫醒")。
+
+## 11. 三期:增强(契约)
+
+```c
+/* 批量/事务:全有或全无(CAS 逐个核对,整体提交;失败零提交) */
+int shrewd_basic_dbus_set_many(shrewd_basic_dbus_t *bus, size_t count,
+                               const char *const *paths, const void *const *ins,
+                               const size_t *sizes, shrewd_basic_dbus_stamp_t *stamps);
+int shrewd_basic_dbus_get_many(shrewd_basic_dbus_t *bus, size_t count,
+                               const char *const *paths, void *const *outs,
+                               const size_t *sizes, shrewd_basic_dbus_stamp_t *stamps);
+
+/* 通知合并:options.coalesce(默认 0)——同路径未投递变更折叠为最新快照 */
+int shrewd_basic_dbus_coalesce(shrewd_basic_dbus_t *bus, int on);
+
+/* 权限钩子:按掩码生成 pre_get/pre_set 守卫(挂拦截链即生效) */
+int shrewd_basic_dbus_make_guard(uint32_t allow_mask,
+                                 shrewd_basic_dbus_ops_t *out);
+#define SHREWD_BASIC_DBUS_ALLOW_READ  ((uint32_t)1u)
+#define SHREWD_BASIC_DBUS_ALLOW_WRITE ((uint32_t)2u)
+
+/* json 策略行并入 pre_set:RANGE 校验钩子 */
+int shrewd_basic_dbus_make_policy_ops(const shrewd_basic_json_info_t *info,
+                                      shrewd_basic_dbus_ops_t *out);
+```
+
+- `set_many`:持全局锁跨全部提交(天然原子);任一 CAS/尺寸/守卫
+  失败 → 整体拒绝、零提交;成功才逐个 post_set + 入队;
+- 合并仅作用于**尚未投递**的队列项(已交给 recv 的不撤回)。
