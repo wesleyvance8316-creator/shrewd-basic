@@ -224,6 +224,16 @@ static int dbus_ops_policy_get(void *ctx,
         return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
     }
     memcpy(out, (const unsigned char *)pctx->target + offset, want);
+    if (NULL == shrewd_basic_dbus_req_field(req)) {
+        /* Whole-resource read: hidden fields never surface. */
+        const shrewd_basic_reflect_type_t *type = pctx->info->type;
+        for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
+            const shrewd_basic_reflect_field_t *f = &type->sb_refl_fields[i];
+            if (0 != dbus_ops_hidden(pctx->info, f->sb_refl_name)) {
+                memset((unsigned char *)out + f->sb_refl_offset, 0, f->sb_refl_size);
+            }
+        }
+    }
     *size = want;
     return SHREWD_BASIC_ERR_OK;
 }
@@ -254,7 +264,22 @@ static int dbus_ops_policy_set(void *ctx,
             return SHREWD_BASIC_ERR_REFLECT_TEXT;
         }
     }
-    memcpy((unsigned char *)pctx->target + offset, in, size);
+    if (NULL != shrewd_basic_dbus_req_field(req)) {
+        memcpy((unsigned char *)pctx->target + offset, in, size);
+        return SHREWD_BASIC_ERR_OK;
+    }
+    {
+        /* Whole-resource write: hidden fields keep their current values. */
+        const shrewd_basic_reflect_type_t *type = pctx->info->type;
+        for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
+            const shrewd_basic_reflect_field_t *f = &type->sb_refl_fields[i];
+            if (0 == dbus_ops_hidden(pctx->info, f->sb_refl_name)) {
+                memcpy((unsigned char *)pctx->target + f->sb_refl_offset,
+                       (const unsigned char *)in + f->sb_refl_offset,
+                       f->sb_refl_size);
+            }
+        }
+    }
     return SHREWD_BASIC_ERR_OK;
 }
 

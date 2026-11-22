@@ -162,8 +162,10 @@ int shrewd_basic_dbus_make_policy_ops(const shrewd_basic_json_info_t *info,
 - `note.folded`:coalesce 折叠掉的同路径变更次数;`options.ring_size`
   定 shm 变更环容量(默认 64)。
 
-**HIDDEN 边界(现行语义)**:字段选择器命中才拒;`get("/res")` 整体
-拷贝仍携带隐藏字段字节——收紧策略(整体读清零/拒读)待决策。
+**HIDDEN 语义(定稿)**:隐藏字段端到端不外泄——字段直取双向拒;
+整体读(`get("/res")`)拷贝中**清零**隐藏字段;整体写保留隐藏字段
+现值;通知快照经 get 取值故同样不含隐藏内容;`peek` 整体访问对
+虚拟包装节点本就 `UNADDRESSABLE`。
 
 ## 7. 持久化与观测
 
