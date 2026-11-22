@@ -49,6 +49,7 @@
 /** SHREWD_BASIC_ERR_DBUS_UNADDRESSABLE: peek on a virtual node. */
 
 typedef struct shrewd_basic_dbus shrewd_basic_dbus_t;
+typedef struct shrewd_basic_json_info shrewd_basic_json_info_t;
 typedef struct shrewd_basic_dbus_handle shrewd_basic_dbus_handle_t;
 typedef struct shrewd_basic_dbus_req shrewd_basic_dbus_req_t;
 
@@ -185,5 +186,53 @@ int shrewd_basic_dbus_import(shrewd_basic_dbus_t *bus,
                              size_t length);
 /** Wait until queued notifications are delivered (tests/shutdown). */
 int shrewd_basic_dbus_drain(shrewd_basic_dbus_t *bus);
+
+/* --- phase 2: shm transport ---------------------------------------------- */
+
+/**
+ * Open (or create) a shared-memory bus of @p size bytes named @p name:
+ * values live in the region (reflect layout, ABI fingerprint-checked at
+ * attach), a POSIX robust mutex guards commits and a shared condvar
+ * carries cross-process change notifications. Local hooks and
+ * subscriptions behave exactly like the in-process bus.
+ */
+int shrewd_basic_dbus_attach(const char *name,
+                             size_t size,
+                             const shrewd_basic_dbus_options_t *options,
+                             shrewd_basic_dbus_t **out);
+
+/* --- phase 3: batch/coalesce/guard/policy -------------------------------- */
+
+/**
+ * All-or-nothing batch write: every stamp is checked and every value
+ * committed under one lock, or nothing is (zero commits on any
+ * conflict/mismatch). posts and notifications fire only on success.
+ */
+int shrewd_basic_dbus_set_many(shrewd_basic_dbus_t *bus,
+                               size_t count,
+                               const char *const *paths,
+                               const void *const *ins,
+                               const size_t *sizes,
+                               shrewd_basic_dbus_stamp_t *stamps);
+int shrewd_basic_dbus_get_many(shrewd_basic_dbus_t *bus,
+                               size_t count,
+                               const char *const *paths,
+                               void *const *outs,
+                               const size_t *sizes,
+                               shrewd_basic_dbus_stamp_t *stamps);
+
+/** Fold undelivered notifications per path down to the newest snapshot. */
+int shrewd_basic_dbus_coalesce(shrewd_basic_dbus_t *bus, int on);
+
+/** Allow mask for shrewd_basic_dbus_make_guard(). */
+#define SHREWD_BASIC_DBUS_ALLOW_READ ((uint32_t)1u)
+#define SHREWD_BASIC_DBUS_ALLOW_WRITE ((uint32_t)2u)
+
+/** Fill @p out with pre_get/pre_set guards denying what the mask omits. */
+int shrewd_basic_dbus_make_guard(uint32_t allow_mask, shrewd_basic_dbus_ops_t *out);
+
+/** Fill @p out with a pre_set hook enforcing the policy's RANGE rows. */
+int shrewd_basic_dbus_make_policy_ops(const shrewd_basic_json_info_t *info,
+                                      shrewd_basic_dbus_ops_t *out);
 
 #endif /* SHREWD_BASIC_DBUS_DBUS_H */
