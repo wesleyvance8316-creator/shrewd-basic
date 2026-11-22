@@ -142,6 +142,20 @@ add_test(NAME shrewd-basic.msgpack COMMAND shrewd-basic-msgpack-tests)
 
 endif()
 
+if(SHREWD_BASIC_FORMAT_CBOR)
+
+# CBOR format tests (RFC 8949 subset over the shared binary skeleton).
+add_executable(shrewd-basic-cbor-tests test_cbor.c)
+
+target_link_libraries(shrewd-basic-cbor-tests
+        PRIVATE
+            shrewd-basic
+            shrewd-basic-warnings)
+
+add_test(NAME shrewd-basic.cbor COMMAND shrewd-basic-cbor-tests)
+
+endif()
+
 # Test binary returns non-zero on failure, so a plain COMMAND run is enough.
 add_test(NAME shrewd-basic.unit COMMAND shrewd-basic-tests)
 add_test(NAME shrewd-basic.ds COMMAND shrewd-basic-ds-tests)

@@ -43,6 +43,7 @@ option(SHREWD_BASIC_FORMAT_ENV "Build the env format (formats/env.h)" ON)
 option(SHREWD_BASIC_FORMAT_CSV "Build the csv format (formats/csv.h)" ON)
 option(SHREWD_BASIC_FORMAT_TOML "Build the toml format (formats/toml.h)" ON)
 option(SHREWD_BASIC_FORMAT_MSGPACK "Build the msgpack format (formats/msgpack.h)" ON)
+option(SHREWD_BASIC_FORMAT_CBOR "Build the cbor format (formats/cbor.h)" ON)
 
 # Warnings applied to our own targets only (link against this INTERFACE target).
 add_library(shrewd-basic-warnings INTERFACE)
