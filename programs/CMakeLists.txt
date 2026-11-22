@@ -49,7 +49,8 @@ endif()
 # Formats demo: every interface of the text layer and the six formats
 # (built when the whole family is enabled).
 if(SHREWD_BASIC_FORMAT_INI AND SHREWD_BASIC_FORMAT_ENV AND SHREWD_BASIC_FORMAT_CSV
-   AND SHREWD_BASIC_FORMAT_TOML AND SHREWD_BASIC_FORMAT_MSGPACK AND SHREWD_BASIC_FORMAT_CBOR)
+   AND SHREWD_BASIC_FORMAT_TOML AND SHREWD_BASIC_FORMAT_MSGPACK AND SHREWD_BASIC_FORMAT_CBOR
+   AND SHREWD_BASIC_FORMAT_XML)
 
 add_executable(shrewd-basic-formats-demo formats_demo.c)
 

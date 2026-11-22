@@ -1,7 +1,7 @@
 # 格式族 API 总览(文本层 + 六格式)
 
-速查手册:公共文本层与 INI/env/CSV/TOML/msgpack/CBOR/bin 七个
-格式模块的接口与语义。json 有专册([json-api](json-api.md));
+速查手册:公共文本层与 INI/env/CSV/TOML/msgpack/CBOR/XML/bin
+八个格式模块的接口与语义。json 有专册([json-api](json-api.md));
 分类决策与边界见 [requirements](requirements.md) §4–§5;演示程序
 `programs/formats_demo.c` 覆盖全部接口。
 
@@ -108,7 +108,33 @@ int  shrewd_basic_cbor_free(object, type);
 - 形状映射与 msgpack 完全一致(同族二进制格式,共享
   `bin-internal.h` 读写骨架)。
 
-## 7. bin(formats/bin.h)
+## 7. XML(formats/xml.h)
+
+```c
+typedef struct shrewd_basic_xml_policy {
+    const char *field;   /* 成员名 */
+    const char *name;    /* 标签/属性名(NULL = 成员名) */
+    int as_attr;         /* 1 = 写成父元素属性 */
+    uint32_t flags;      /* SHREWD_BASIC_XML_REQUIRED / _HIDDEN */
+} shrewd_basic_xml_policy_t;
+
+int  shrewd_basic_xml_encode(object, type, map, map_count, &out_text, error);
+int  shrewd_basic_xml_decode(text, length, object, type, map, map_count, error);
+void shrewd_basic_xml_text_free(text);
+int  shrewd_basic_xml_free(object, type);
+```
+
+- **映射**:根元素 = 类型名;叶子走文本层(标量/枚举/缓冲/owned 串),
+  默认子元素、`as_attr` → 父元素属性;嵌套 struct 递归、定长数组 →
+  同名重复元素、指针 nil 省略/递归;宽串 ↔ UTF-8(严格);HIDDEN
+  双向跳过、REQUIRED 缺失报错、decode 接受成员名与 `name` 双名;
+- **严格子集(XXE 结构性免疫)**:接受 xml 序言/注释/CDATA/五预定义
+  实体 + 数字字符引用/空元素/单双引号;**拒绝带行号**:`<!DOCTYPE`、
+  `<!ENTITY`、处理指令、外来实体、重复属性、尾随垃圾、坏标签;
+- 多维数组(元素为 ARRAY)与位组/union/柔性/动态/哨兵/BIT_INT/
+  complex 响亮 UNSUPPORTED。
+
+## 8. bin(formats/bin.h)
 
 ```c
 int  shrewd_basic_bin_encode(object, type, options, &out_bytes, &out_size);
@@ -128,7 +154,7 @@ void shrewd_basic_bin_bytes_free(bytes);
 - **需求驱动缺口**:`ops->get/set` 与 opaque 字段暂无线格式(触发
   即做,见 [requirements](requirements.md) §4)。
 
-## 8. 使用示例(节选,全量见 programs/formats_demo.c)
+## 9. 使用示例(节选,全量见 programs/formats_demo.c)
 
 ```c
 /* INI 配置往返 */
@@ -151,7 +177,7 @@ shrewd_basic_msgpack_encode(&obj, &obj_reflect, &bytes, &size);
 shrewd_basic_cbor_encode(&obj, &obj_reflect, &bytes, &size);
 ```
 
-## 9. 已知限制
+## 10. 已知限制
 
 - TOML 子集边界见 §4(拒绝清单逐项带行号);CSV 借用串拒绝
   (scan_text 契约);msgpack/CBOR 的 BIT_INT 走 ops 逃生口;
