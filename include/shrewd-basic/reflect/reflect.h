@@ -736,6 +736,7 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
 
 /* wchar_t forms: the unit width follows the platform's wchar_t. */
 #if WCHAR_MAX <= 0xFFFF
+#define SHREWD_BASIC_REFLECT_WCHAR_UNIT shrewd_basic_reflect_uint16
 #define SHREWD_BASIC_REFLECT_FIELD_WSTRING(struct_type, member)                                    \
     SHREWD_BASIC_REFLECT_FIELD_STRING16(struct_type, member)
 #define SHREWD_BASIC_REFLECT_FIELD_WSTRING_OWNED(struct_type, member)                              \
@@ -743,6 +744,7 @@ extern const shrewd_basic_reflect_type_t shrewd_basic_reflect_void;
 #define SHREWD_BASIC_REFLECT_FIELD_WSTRING_BUFFER(struct_type, member)                             \
     SHREWD_BASIC_REFLECT_FIELD_STRING16_BUFFER(struct_type, member)
 #else
+#define SHREWD_BASIC_REFLECT_WCHAR_UNIT shrewd_basic_reflect_uint32
 #define SHREWD_BASIC_REFLECT_FIELD_WSTRING(struct_type, member)                                    \
     SHREWD_BASIC_REFLECT_FIELD_STRING32(struct_type, member)
 #define SHREWD_BASIC_REFLECT_FIELD_WSTRING_OWNED(struct_type, member)                              \

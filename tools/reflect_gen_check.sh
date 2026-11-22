@@ -55,4 +55,34 @@ python3 "$here/reflect_gen.py" "$here/reflect_gen_sample_bits.h" \
 grep -q "flags_t: 8 bytes" "$work/layout.txt"
 grep -q "packed .* bytes" "$work/layout.txt"
 
+# --- annotations: owned/wide strings, buffers, count=, tagged unions -----
+mkdir "$work/ann"
+python3 "$here/reflect_gen.py" "$here/reflect_gen_sample_ann.h" \
+    -o "$work/ann/generated"
+grep -q "SHREWD_BASIC_REFLECT_FIELD_STRING_OWNED(doc_t, title)" "$work/ann/generated.c"
+grep -q "SHREWD_BASIC_REFLECT_FIELD_STRING16_BUFFER(doc_t, tagline)" "$work/ann/generated.c"
+grep -q "SHREWD_BASIC_REFLECT_FIELD_WSTRING_OWNED(doc_t, author)" "$work/ann/generated.c"
+grep -q "SHREWD_BASIC_REFLECT_FIELD_FLEX(doc_t, body, words" "$work/ann/generated.c"
+grep -q "SHREWD_BASIC_REFLECT_UNION_DEFINE(payload_u_t_reflect" "$work/ann/generated.c"
+grep -q "SHREWD_BASIC_REFLECT_FIELD_UNION(event_t, payload, payload_u_t_reflect, kind)" \
+    "$work/ann/generated.c"
+compile_smoke "$work/ann" "$here/reflect_gen_ann_smoke.c"
+"$work/ann/smoke"
+
+# --- golden: full-text lock on the sample stubs ---------------------------
+python3 "$here/reflect_gen.py" "$here/reflect_gen_sample.h" -o "$work/golden" --quiet
+if [ "${1:-}" = "--update-golden" ]; then
+    cp "$work/golden.c" "$here/reflect_gen_golden.c"
+    cp "$work/golden.h" "$here/reflect_gen_golden.h"
+    echo "reflect_gen_check: golden files updated"
+    exit 0
+fi
+if [ -f "$here/reflect_gen_golden.c" ]; then
+    diff -u "$here/reflect_gen_golden.c" "$work/golden.c"
+    diff -u "$here/reflect_gen_golden.h" "$work/golden.h"
+else
+    echo "reflect_gen_check: no golden files (run: tools/reflect_gen_check.sh --update-golden)" >&2
+    exit 1
+fi
+
 echo "reflect_gen_check: OK"

@@ -9,13 +9,16 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* reflect: type=color_t */
 typedef enum { COLOR_RED = 0, COLOR_GREEN = 1, COLOR_BLUE = 2 } color_t;
 
+/* reflect: type=geo_point_t */
 typedef struct {
     int32_t x;
     int32_t y;
 } geo_point_t;
 
+/* reflect: type=shape_t */
 typedef struct {
     const char *name;
     color_t color;
@@ -28,6 +31,7 @@ typedef struct {
     uint64_t count;
 } shape_t;
 
+/* reflect: type=packet_t */
 typedef struct {
     size_t len;
     int32_t data[];

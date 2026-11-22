@@ -1,19 +1,36 @@
 #!/usr/bin/env python3
 """Generate shrewd-basic reflect descriptor definitions from a C header.
 
-Parses the supported subset of typedef struct/enum declarations and emits
-the very same SHREWD_BASIC_REFLECT_* macros a human would write, so the
-generated code stays readable and hand-editable. Multi-dimension arrays
-gain ARRAY_DEFINE row types (one per row level, innermost first).
-Unsupported constructs (bit-fields, unions, function pointers) are
-skipped with a warning.
+Emits the very same SHREWD_BASIC_REFLECT_* macros a human would write,
+so the generated code stays readable and hand-editable. Multi-dimension
+arrays gain ARRAY_DEFINE row types (one per row level, innermost first).
+
+Types generate only when named - strict opt-in. Annotate in the header:
+
+    /* reflect: type=packet_t */
+    /* reflect: type=helper_t external */          (referenced, hand-written)
+    /* reflect: member=packet_t.name owned */
+    /* reflect: member=packet_t.data count=len */
+
+or name them on the command line (--type / --external) for headers you
+cannot edit. Member directives: owned, stringbuf, wstringbuf, skip,
+count=, ops=, name=, union_tag=, case=. Targets are fully qualified and
+annotation position carries zero semantics. Wide strings (char16_t /
+char32_t / wchar_t, plus one level of typedef alias) map to the
+FIELD_STRING16/32/WSTRING family. Unions generate UNION_DEFINE from
+case= directives; union-typed members need union_tag= (or skip=).
+
+Fast-fail facts (never silently wrong): lexical backend rejects
+bit-fields and function pointers (--backend dwarf describes bit-fields);
+a referenced in-header type must be generated or marked external.
 
 Usage:
     python3 reflect_gen.py input.h [-o stub] [--quiet]
+    python3 reflect_gen.py input.h --backend dwarf --layout [--json]
 
-Writes stub.h (TYPE_DECLARE for every type) and stub.c (the DEFINEs);
-the stub defaults to the input file's base name. The library itself never
-needs this tool - it is an optional authoring aid.
+Writes stub.h (TYPE_DECLARE for every generated type) and stub.c (the
+DEFINEs); the stub defaults to the input file's base name. The library
+itself never needs this tool - it is an optional authoring aid.
 """
 
 import argparse
@@ -133,24 +150,125 @@ def member_parts(member):
     return base, stars, name, dims, flexible, bits
 
 
+# --- Annotations -------------------------------------------------------------
+#
+# /* reflect: type=NAME ... */ and /* reflect: member=TYPE.MEMBER ... */
+# carry the *intent* the layout cannot express: which types generate,
+# ownership, text-buffer semantics, count pairing, union tags. Targets
+# are named explicitly (fully qualified) and annotation position carries
+# zero semantics - a comment moved by a refactoring tool never changes
+# the output. Facts (offsets, sizes, bit placement) come from the
+# compiler, never from here.
+
+class AnnotationError(Exception):
+    pass
+
+
+ANNOTATION_RE = re.compile(r"/\*\s*reflect:\s*(.*?)\*/", re.S)
+TYPE_FLAGS = {"external"}
+TYPE_VALUES = {"name", "ops"}
+MEMBER_FLAGS = {"owned", "stringbuf", "wstringbuf", "skip"}
+MEMBER_VALUES = {"count", "ops", "union_tag", "case"}
+WIDE_NAMES = {"char16_t": "16", "char32_t": "32", "wchar_t": "wchar"}
+
+
+class Annotations:
+    """Fully-qualified directive tables: types[name] and
+    members[(type, member)], each a {key: value} map. Repeated
+    annotations on one target merge; a conflicting key is a hard error."""
+
+    def __init__(self):
+        self.types = {}
+        self.members = {}
+
+    def for_type(self, name):
+        return self.types.get(name, {})
+
+    def for_member(self, type_name, member):
+        return self.members.get((type_name, member), {})
+
+    def desc(self, type_name):
+        """Descriptor variable name for a type (name= override wins)."""
+        return self.for_type(type_name).get("name") or descriptor_name(type_name)
+
+
+def _annotation_target(token):
+    if "=" not in token:
+        raise AnnotationError("target must be type=NAME or member=TYPE.MEMBER: %r" % token)
+    key, _, ident = token.partition("=")
+    if "type" == key:
+        if not re.match(r"^[A-Za-z_]\w*$", ident):
+            raise AnnotationError("bad type target: %r" % token)
+        return "type", ident
+    if "member" == key:
+        if "." not in ident:
+            raise AnnotationError("member target must be fully qualified TYPE.MEMBER: %r" % token)
+        type_name, _, member = ident.rpartition(".")
+        if not re.match(r"^[A-Za-z_]\w*$", type_name) or not re.match(r"^[A-Za-z_]\w*$", member):
+            raise AnnotationError("bad member target: %r" % token)
+        return "member", (type_name, member)
+    raise AnnotationError("target must start with type= or member=: %r" % token)
+
+
+def scan_annotations(text):
+    """Parse every /* reflect: ... */ comment into one Annotations table.
+
+    Grammar (whitespace separated): the first token names the target,
+    the rest are directives - bare flags (owned, stringbuf, wstringbuf,
+    skip, external) or key=value (name=, ops=, count=, union_tag=,
+    case=). case= takes a comma-separated list of tag constants."""
+    ann = Annotations()
+    for match in ANNOTATION_RE.finditer(text):
+        tokens = match.group(1).split()
+        if not tokens:
+            raise AnnotationError("empty reflect annotation")
+        kind, target = _annotation_target(tokens[0])
+        flags = TYPE_FLAGS if "type" == kind else MEMBER_FLAGS
+        values = TYPE_VALUES if "type" == kind else MEMBER_VALUES
+        table = ann.types if "type" == kind else ann.members
+        store = table.setdefault(target, {})
+        for token in tokens[1:]:
+            if "=" in token:
+                key, _, value = token.partition("=")
+                if key not in values:
+                    raise AnnotationError(
+                        "%s: '%s' is not a %s directive" % (tokens[0], key, kind))
+                if not value:
+                    raise AnnotationError("%s: %s= needs a value" % (tokens[0], key))
+                if key in store:
+                    raise AnnotationError("%s: duplicate %s= directive" % (tokens[0], key))
+                store[key] = value
+            else:
+                if token not in flags:
+                    raise AnnotationError(
+                        "%s: '%s' is not a %s directive" % (tokens[0], token, kind))
+                if token in store:
+                    raise AnnotationError("%s: duplicate '%s' directive" % (tokens[0], token))
+                store[token] = True
+    return ann
+
+
 class HeaderParser:
     def __init__(self, text):
-        self.text = strip_comments(text)
-        self.structs = {}  # typedef name -> [(base, stars, name, array, flexible)]
+        self.text = text
+        self.structs = {}  # typedef name -> [(base, stars, name, dims, flexible)]
+        self.unions = {}   # typedef name -> same member shape as structs
         self.enums = {}    # typedef name -> [constant names]
         self.order = []    # declaration order of type names
+        self.wide_alias = scan_wide_aliases(text)
 
     def parse(self):
-        pattern = re.compile(
-            r"typedef\s+(struct|enum)\s*(\w+)?\s*\{(.*?)\}\s*(\w+)\s*;",
-            re.S)
-        for match in pattern.finditer(self.text):
-            kind, _tag, body, name = match.groups()
-            if kind == "struct":
-                self.structs[name] = self._parse_struct(body)
-            else:
-                self.enums[name] = self._parse_enum(body)
-            self.order.append(name)
+        for kind, body, names in scan_typedefs(self.text):
+            for name in names:
+                if "enum" == kind:
+                    self.enums[name] = self._parse_enum(body)
+                else:
+                    members = self._parse_struct(body)
+                    if "union" == kind:
+                        self.unions[name] = members
+                    else:
+                        self.structs[name] = members
+                self.order.append(name)
         return self
 
     def _parse_struct(self, body):
@@ -194,7 +312,7 @@ def primitive_ref(base):
     return PRIMITIVE_TYPES.get(base)
 
 
-def array_row_defines(struct_name, member, base, dims):
+def array_row_defines(struct_name, member, base, dims, desc):
     """ARRAY_DEFINE lines for the row types of a multi-dimension array.
 
     Returns (defines, outer_ref): the outermost row type is what
@@ -206,71 +324,165 @@ def array_row_defines(struct_name, member, base, dims):
     for level, count in enumerate(dims[1:], start=1):
         name = "%s_%s_row%d" % (struct_name, member, level)
         defines.append("SHREWD_BASIC_REFLECT_ARRAY_DEFINE(%s, %s, %s, %d);"
-                       % (name, ref or primitive_ref(base) or descriptor_name(base),
+                       % (name, ref or primitive_ref(base) or desc(base),
                           elem_type, count))
         ref = name
         elem_type = "%s[%d]" % (elem_type, count)
     return defines, ref
 
 
-def field_macro(parser, struct_name, member, members):
+def wide_unit(base, wide_alias):
+    """Wide-string spelling for a base name ('char16_t'/'char32_t'/'wchar_t')
+    or None. Alias typedefs resolve through the header's wide aliases."""
+    resolved = wide_alias.get(base, base)
+    return resolved if resolved in WIDE_NAMES else None
+
+
+OPS_CAPABLE = ("SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE",
+               "SHREWD_BASIC_REFLECT_FIELD_ARRAY",
+               "SHREWD_BASIC_REFLECT_FIELD_STRING_BUFFER",
+               "SHREWD_BASIC_REFLECT_FIELD_STRING_OWNED")
+
+
+def apply_ops(macro, ops, label):
+    """Suffix a FIELD_* macro into its _OPS twin (ops_ref last). Only the
+    forms with a real _OPS variant accept ops= - anything else is an
+    error, never a silent drop."""
+    for name in OPS_CAPABLE:
+        if macro.startswith(name + "("):
+            return name + "_OPS(" + macro[len(name) + 1:-1] + ", " + ops + ")"
+    raise ParseError("%s: ops= is not supported for this member form" % label)
+
+
+def field_macro(parser, struct_name, member, members, desc, ann):
     """Return (macro, warning, defines); defines are statements that must
-    precede the TYPE_DEFINE of the owning struct."""
+    precede the TYPE_DEFINE of the owning struct. ann is the member's
+    directive dict; desc(base) resolves descriptor variable names."""
     base, stars, name, dims, flexible, bits = member_parts(member)
+    label = "%s.%s" % (struct_name, name)
     if bits is not None:
+        if ann:
+            raise ParseError("%s: bit-group member takes no member directives" % label)
         unit_ref, unit_offset, unit_size, bit_offset, bit_width = bits
         return ("SHREWD_BASIC_REFLECT_FIELD_BITS_UNIT(%s, %s, %s, %d, %d, %d, %d)"
-                % (struct_name, name, unit_ref, unit_offset, unit_size, bit_offset, bit_width),
+                % (struct_name, name, unit_ref, unit_offset, unit_size,
+                   bit_offset, bit_width),
                 None, [])
     base = normalize(base)
-    if flexible:
+    wide = wide_unit(base, parser.wide_alias)
+    if wide is not None:
+        macro, warning, defines = wide_field_macro(struct_name, name, wide, stars, dims, ann)
+    elif flexible:
         if stars != "":
             raise ParseError("pointer flexible array not described: %s" % name)
-        count_member = find_count_member(members, name)
+        for bad in ("stringbuf", "wstringbuf", "owned"):
+            if bad in ann:
+                raise ParseError("%s: %s= needs a fixed array or pointer member" % (label, bad))
+        count_member = ann.get("count") or find_count_member(members, name)
+        if ann.get("count") and (ann["count"] not in [m[2] for m in members]):
+            raise ParseError("%s: count=%s names no member of %s"
+                             % (label, ann["count"], struct_name))
         if count_member is None:
             return None, ("no count member found for flexible array '%s' "
-                          "(expected %s_count/%s_len/count/len) - skipped"
-                          % (name, name, name)), []
+                          "(expected %s_count/%s_len/count/len or a count= "
+                          "directive) - skipped" % (name, name, name)), []
         ref = primitive_ref(base)
         if ref is None:
-            if base in parser.enums or base in parser.structs:
-                ref = descriptor_name(base)
+            if base in parser.enums or base in parser.structs or base in parser.unions:
+                ref = desc(base)
             else:
                 return None, ("unknown element type '%s' of flexible array "
                               "'%s' - skipped" % (base, name)), []
-        return "SHREWD_BASIC_REFLECT_FIELD_FLEX(%s, %s, %s, %s)" % (
-            struct_name, name, count_member, ref), None, []
-    if 2 <= len(dims):
+        macro = "SHREWD_BASIC_REFLECT_FIELD_FLEX(%s, %s, %s, %s)" % (
+            struct_name, name, count_member, ref)
+        warning, defines = None, []
+    elif 2 <= len(dims):
         # Multi-dimension array: rows become array value types.
         if stars != "":
             raise ParseError("pointer multi-dimension array not described: %s" % name)
+        for bad in ("stringbuf", "wstringbuf", "owned", "count", "union_tag", "case"):
+            if bad in ann:
+                raise ParseError("%s: %s= does not apply to a multi-dimension array" % (label, bad))
         if base not in PRIMITIVE_TYPES and base not in parser.enums \
-                and base not in parser.structs:
+                and base not in parser.structs and base not in parser.unions:
             return None, ("unknown element type '%s' of multi-dimension array "
                           "'%s' - skipped" % (base, name)), []
-        defines, ref = array_row_defines(struct_name, name, base, dims)
-        return "SHREWD_BASIC_REFLECT_FIELD_ARRAY(%s, %s, %s)" % (
-            struct_name, name, ref), None, defines
+        defines, ref = array_row_defines(struct_name, name, base, dims, desc)
+        macro = "SHREWD_BASIC_REFLECT_FIELD_ARRAY(%s, %s, %s)" % (struct_name, name, ref)
+        warning = None
+    else:
+        if "count" in ann:
+            raise ParseError("%s: count= only applies to flexible arrays" % label)
+        macro, warning, defines = member_macro(parser, struct_name, member, members, desc, ann)
+    if "ops" in ann:
+        macro = apply_ops(macro, ann["ops"], label)
+    return macro, warning, defines
+
+
+def member_macro(parser, struct_name, member, members, desc, ann):
+    """Scalar / pointer / single-darray / fixed-array member forms."""
+    base, stars, name, dims, flexible, _bits = member_parts(member)
+    label = "%s.%s" % (struct_name, name)
     if stars not in ("", "*"):
         raise ParseError("only single pointers are described: %s" % name)
+    # Union-typed member: FIELD_UNION when tagged, otherwise the user must
+    # choose (union_tag= or skip=) - never guess.
+    if ("" == stars) and (0 == len(dims)) and (normalize(base) in parser.unions):
+        for bad in ("owned", "stringbuf", "wstringbuf"):
+            if bad in ann:
+                raise ParseError("%s: %s= does not apply to a union member" % (label, bad))
+        if "union_tag" in ann:
+            tag = ann["union_tag"]
+            if tag not in [m[2] for m in members]:
+                raise ParseError("%s: union_tag=%s names no member of %s"
+                                 % (label, tag, struct_name))
+            return ("SHREWD_BASIC_REFLECT_FIELD_UNION(%s, %s, %s, %s)"
+                    % (struct_name, name, desc(normalize(base)), tag)), None, []
+        return None, ("union member '%s' needs a union_tag= directive (or "
+                      "skip=) - skipped" % name), []
+    if ("union_tag" in ann) or ("case" in ann):
+        raise ParseError("%s: union_tag=/case= only apply to union members" % label)
+    base = normalize(base)
     is_array = (1 == len(dims))
     ref = None
-    if base == "void" and stars == "*":
+    if (base == "void") and (stars == "*"):
+        if ("owned" in ann) or ("stringbuf" in ann) or ("wstringbuf" in ann):
+            raise ParseError("%s: void* takes no string directives" % label)
         ref = "shrewd_basic_reflect_void"
-    elif base == "char" and stars == "*":
-        return "SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(%s, %s)" % (struct_name, name), None, []
+    elif (base == "char") and (stars == "*"):
+        if ("stringbuf" in ann) or ("wstringbuf" in ann):
+            raise ParseError("%s: text-buffer directives need a fixed array" % label)
+        if "owned" in ann:
+            return "SHREWD_BASIC_REFLECT_FIELD_STRING_OWNED(%s, %s)" % (
+                struct_name, name), None, []
+        return "SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(%s, %s)" % (
+            struct_name, name), None, []
+    elif (base == "char") and is_array and ("stringbuf" in ann):
+        if "owned" in ann:
+            raise ParseError("%s: owned= needs a string pointer member" % label)
+        return "SHREWD_BASIC_REFLECT_FIELD_STRING_BUFFER(%s, %s)" % (
+            struct_name, name), None, []
     elif base in PRIMITIVE_TYPES:
+        if "owned" in ann:
+            raise ParseError("%s: owned= needs a string pointer member" % label)
+        if ("stringbuf" in ann) or ("wstringbuf" in ann):
+            raise ParseError("%s: text-buffer directives need char[] or wide buffers" % label)
         ref = PRIMITIVE_TYPES[base]
-        if stars == "" and not is_array:
-            return "SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(%s, %s)" % (struct_name, name), None, []
+        if (stars == "") and (not is_array):
+            return "SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(%s, %s)" % (
+                struct_name, name), None, []
     elif base in parser.enums:
-        ref = descriptor_name(base)
-        if stars == "" and not is_array:
+        if "owned" in ann:
+            raise ParseError("%s: owned= needs a string pointer member" % label)
+        ref = desc(base)
+        if (stars == "") and (not is_array):
             return "SHREWD_BASIC_REFLECT_FIELD_ENUM(%s, %s, %s)" % (
                 struct_name, name, ref), None, []
     else:
-        ref = descriptor_name(base)
-        if stars == "" and not is_array:
+        if "owned" in ann:
+            raise ParseError("%s: owned= needs a string pointer member" % label)
+        ref = desc(base)
+        if (stars == "") and (not is_array):
             return "SHREWD_BASIC_REFLECT_FIELD_STRUCT(%s, %s, %s)" % (
                 struct_name, name, ref), None, []
     if ref is None:
@@ -283,15 +495,62 @@ def field_macro(parser, struct_name, member, members):
     return "%s(%s, %s, %s)" % (macro, struct_name, name, ref), None, []
 
 
-def collect_references(parser):
+def wide_field_macro(struct_type, name, wide, stars, dims, ann):
+    """Wide-string member forms. Pointer -> FIELD_STRING16/32(_OWNED) or
+    FIELD_WSTRING(_OWNED); fixed array -> the _BUFFER macro under
+    wstringbuf=, a raw code-unit FIELD_ARRAY otherwise."""
+    suffix = {"char16_t": "STRING16", "char32_t": "STRING32", "wchar_t": "WSTRING"}[wide]
+    label = "%s.%s" % (struct_type, name)
+    for bad in ("count", "union_tag", "case"):
+        if bad in ann:
+            raise ParseError("%s: %s= does not apply to a wide string member" % (label, bad))
+    if 2 <= len(dims):
+        raise ParseError("multi-dimension wide arrays not described: %s" % name)
+    if "stringbuf" in ann:
+        raise ParseError("%s: stringbuf is for char[N]; use wstringbuf" % label)
+    if 1 == len(dims):
+        if "owned" in ann:
+            raise ParseError("%s.%s: owned needs a string pointer member" % (struct_type, name))
+        if "wstringbuf" in ann:
+            return ("SHREWD_BASIC_REFLECT_FIELD_%s_BUFFER(%s, %s)"
+                    % (suffix, struct_type, name)), None, []
+        unit_ref = {"char16_t": "shrewd_basic_reflect_uint16",
+                    "char32_t": "shrewd_basic_reflect_uint32",
+                    "wchar_t": "SHREWD_BASIC_REFLECT_WCHAR_UNIT"}[wide]
+        return ("SHREWD_BASIC_REFLECT_FIELD_ARRAY(%s, %s, %s)"
+                % (struct_type, name, unit_ref)), None, []
+    if stars != "*":
+        raise ParseError("unsupported wide member shape: %s %s" % (wide, name))
+    if "wstringbuf" in ann:
+        raise ParseError("%s.%s: wstringbuf needs a fixed array" % (struct_type, name))
+    if "owned" in ann:
+        return ("SHREWD_BASIC_REFLECT_FIELD_%s_OWNED(%s, %s)"
+                % (suffix, struct_type, name)), None, []
+    return ("SHREWD_BASIC_REFLECT_FIELD_%s(%s, %s)" % (suffix, struct_type, name)), None, []
+
+
+def collect_references(parser, selected, desc):
+    """TYPE_DECLARE targets: bases that are neither described here nor
+    primitive-wide. Externally-marked in-header types count as refs."""
     refs = []
-    for struct_name, members in parser.structs.items():
+    seen = set()
+    for struct_name in selected:
+        members = parser.structs.get(struct_name) or parser.unions.get(struct_name) or []
         for member in members:
-            base = normalize(member[0])
-            if (base not in PRIMITIVE_TYPES and base != "void"
-                    and base not in parser.structs and base not in parser.enums
-                    and (descriptor_name(base), base) not in refs):
-                refs.append((descriptor_name(base), base))
+            base, stars, _name, dims, _flexible, bits = member_parts(member)
+            if bits is not None:
+                continue
+            base = normalize(base)
+            if (base in PRIMITIVE_TYPES) or ("void" == base) or (base in parser.wide_alias) \
+                    or (base in WIDE_NAMES):
+                continue
+            if (base in parser.structs) or (base in parser.unions) or (base in parser.enums):
+                if base in selected:
+                    continue
+            var = desc(base)
+            if (var, base) not in seen:
+                seen.add((var, base))
+                refs.append((var, base))
     return refs
 
 
@@ -323,44 +582,62 @@ DWARF_BASE_KEYS = {
 UNIT_SIZES = (1, 2, 4, 8)
 
 
-def scan_typedef_names(text):
-    """Tolerant brace-counting scan for `typedef struct|union|enum {...} name;`
-    declarations - unlike HeaderParser it survives bit-fields and nested
-    braces. Returns [(kind, name)] in declaration order (kind is
-    'struct'/'union'/'enum')."""
+def scan_typedefs(text):
+    """Brace-counting scan for `typedef struct|union|enum {body} names;`.
+    Survives nested braces, bit-fields and multi-name typedefs (the
+    lexical member parser cannot). Yields (kind, body, [names]) in
+    declaration order; kind is 'struct'/'union'/'enum'."""
     text = strip_comments(text)
     results = []
-    depth = 0
-    group_kinds = []  # kind per open brace group (None when not a typedef body)
-    pending = None
+    opener = re.compile(r"typedef\s+(struct|union|enum)\b")
+    closer = re.compile(r"\s*([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)\s*;")
     i = 0
-    n = len(text)
-    while i < n:
-        ch = text[i]
-        if ch == "{":
-            group_kinds.append(pending)
-            pending = None
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            kind = group_kinds.pop() if group_kinds else None
-            if (0 == depth) and (kind is not None):
-                match = re.match(r"\s*([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)\s*;", text[i + 1:])
-                if match is not None:
-                    for nm in re.split(r"\s*,\s*", match.group(1)):
-                        results.append((kind, nm))
-                    i += 1 + match.end()
-                    continue
-        elif 0 == depth:
-            match = re.match(r"typedef\s+(struct|union|enum)\b", text[i:])
-            if match is not None:
-                pending = match.group(1)
-                i += match.end()
-                continue
-            if ch == ";":
-                pending = None
-        i += 1
+    while True:
+        match = opener.search(text, i)
+        if match is None:
+            break
+        j = match.end()
+        head = re.match(r"\s*([A-Za-z_]\w*)?\s*\{", text[j:])
+        if head is None:
+            i = match.end()
+            continue
+        body_start = j + head.end()
+        depth = 1
+        k = body_start
+        while (k < len(text)) and (0 < depth):
+            if "{" == text[k]:
+                depth += 1
+            elif "}" == text[k]:
+                depth -= 1
+            k += 1
+        if 0 != depth:
+            raise ParseError("unterminated typedef body near offset %d" % body_start)
+        names = closer.match(text, k)
+        if names is None:
+            i = k
+            continue
+        results.append((match.group(1),
+                        text[body_start:k - 1],
+                        [nm.strip() for nm in names.group(1).split(",")]))
+        i = names.end()
     return results
+
+
+def scan_typedef_names(text):
+    """[(kind, name)] in declaration order - the name view of
+    scan_typedefs() (kind is 'struct'/'union'/'enum')."""
+    return [(kind, nm) for kind, _body, names in scan_typedefs(text) for nm in names]
+
+
+def scan_wide_aliases(text):
+    """`typedef wchar_t my_wstr;` style aliases -> {alias: wide name}.
+    Lets the lexical backend keep wide-string semantics through one
+    level of typedef sugar (the dwarf backend walks real chains)."""
+    text = strip_comments(text)
+    out = {}
+    for match in re.finditer(r"typedef\s+(char16_t|char32_t|wchar_t)\s+([A-Za-z_]\w*)\s*;", text):
+        out[match.group(2)] = match.group(1)
+    return out
 
 
 class DwarfParser:
@@ -374,20 +651,22 @@ class DwarfParser:
         self.cc = cc or os.environ.get("CC") or "cc"
         self.cflags = list(cflags) if cflags else []
         self.structs = {}
+        self.unions = {}
         self.enums = {}
         self.order = []
+        self.wide_alias = scan_wide_aliases(text)
         self.layout = {}      # name -> {"size", "members": [(member, offset, is_bit)]}
         self.reports = {}     # name -> list of report entries (for --layout)
         self.fingerprint = []
         self.warnings = []
         self._ptr_size = 8
-        self._canonical = {}  # struct/enum DIE offset -> descriptor base name
+        self._canonical = {}  # struct/union/enum DIE offset -> descriptor base name
 
     def parse(self):
         wanted = [(kind, nm) for kind, nm in scan_typedef_names(self.text)
-                  if kind in ("struct", "enum")]
+                  if kind in ("struct", "union", "enum")]
         if not wanted:
-            raise ParseError("no typedef struct/enum found")
+            raise ParseError("no typedef struct/union/enum found")
         obj_path = self._compile_probe([nm for _kind, nm in wanted])
         try:
             self._read_dwarf(obj_path, wanted)
@@ -449,15 +728,17 @@ class DwarfParser:
                 continue
             leaf = self._leaf(self._type_of(die))
             if "DW_TAG_structure_type" == leaf.tag:
-                self._read_struct(name, leaf)
+                self._read_struct(name, leaf, self.structs)
+            elif "DW_TAG_union_type" == leaf.tag:
+                self._read_struct(name, leaf, self.unions)
             elif "DW_TAG_enumeration_type" == leaf.tag:
                 self._read_enum(name, leaf)
             else:
-                self.warnings.append("typedef %s is not a struct/enum - skipped" % name)
+                self.warnings.append("typedef %s is not a struct/union/enum - skipped" % name)
         for warning in self.warnings:
             print("reflect_gen: %s" % warning, file=sys.stderr)
 
-    def _read_struct(self, name, die):
+    def _read_struct(self, name, die, target):
         members = []
         layout_members = []
         report = []
@@ -477,7 +758,7 @@ class DwarfParser:
         if not members:
             self.warnings.append("struct %s: no describable fields - skipped" % name)
             return
-        self.structs[name] = members
+        target[name] = members
         self.order.append(name)
         self.layout[name] = {"size": struct_size, "members": layout_members}
         self.reports[name] = {"size": struct_size, "align": struct_align, "entries": report}
@@ -661,10 +942,19 @@ class DwarfParser:
     def _base_name(self, leaf, spelling):
         if leaf is None:
             return "void"
+        # Spelling first: a typedef'd scalar keeps its written identity
+        # ("size_t" -> uint64 everywhere), so both backends agree on the
+        # descriptor reference regardless of the platform's leaf width.
+        # Wide spellings survive too - they select the string macros.
+        if (spelling is not None) and ((spelling in PRIMITIVE_TYPES)
+                                       or (spelling in WIDE_NAMES)
+                                       or (spelling in self.wide_alias)):
+            return spelling
         if "DW_TAG_base_type" == leaf.tag:
             key = DWARF_BASE_KEYS.get(self._attr_name(leaf))
             return key if key in PRIMITIVE_TYPES else None
-        if leaf.tag in ("DW_TAG_structure_type", "DW_TAG_enumeration_type"):
+        if leaf.tag in ("DW_TAG_structure_type", "DW_TAG_union_type",
+                        "DW_TAG_enumeration_type"):
             return self._canonical.get(leaf.offset) or spelling or self._attr_name(leaf)
         return None
 
@@ -730,11 +1020,85 @@ def offset_or_zero(die):
     return 0 if value is None else value
 
 
-def generate(parser, input_name, fingerprint=None, layout=None):
-    """Emit the stub pair. fingerprint (dwarf backend) is a list of
-    comment lines pinning the toolchain; layout is {name: {"size": N,
-    "members": [(member, offset, is_bit)]}} for the _Static_assert block
-    that fails the build when the described layout drifts."""
+def check_closure(parser, ann, selected, external):
+    """Reference closure: every in-header type named by a generated
+    member must itself be generated or explicitly marked external.
+    Forgetting is a hard error - two exits, never a guess."""
+    chosen = set(selected)
+    for name in selected:
+        members = parser.structs.get(name) or parser.unions.get(name) or []
+        for member in members:
+            base, _stars, _mname, _dims, _flexible, bits = member_parts(member)
+            if bits is not None:
+                continue
+            base = normalize(base)
+            if (base in PRIMITIVE_TYPES) or ("void" == base) or (base in WIDE_NAMES) \
+                    or (base in parser.wide_alias):
+                continue
+            in_header = (base in parser.structs) or (base in parser.unions) \
+                        or (base in parser.enums)
+            if in_header and (base not in chosen) and (base not in external) \
+                    and (not ann.for_type(base).get("external")):
+                raise ParseError(
+                    "%s references %s, but %s is neither generated nor external\n"
+                    "  - to generate it:  /* reflect: type=%s */ or --type %s\n"
+                    "  - to keep it external:  /* reflect: type=%s external */ or "
+                    "--external %s" % (name, base, base, base, base, base, base))
+    for name in selected:
+        if name in parser.unions:
+            for member in parser.unions[name]:
+                man = ann.for_member(name, member_parts(member)[2])
+                if man.get("skip") or man.get("case"):
+                    continue
+                raise ParseError("union %s: member '%s' needs a case= directive"
+                                 % (name, member_parts(member)[2]))
+
+
+def union_variants(parser, name, members, ann, desc):
+    """Group a union's members into UNION_VARIANT lists by their case=
+    directives. case=* lands in every variant; variants appear in order
+    of first mention."""
+    order = []
+    by_tag = {}
+    star = []
+    for member in members:
+        base, stars, mname, dims, flexible, bits = member_parts(member)
+        man = dict(ann.for_member(name, mname))
+        tags = man.pop("case", None)
+        if man.pop("skip", False):
+            continue
+        if tags is None:
+            continue  # check_closure already rejected this
+        macro, warning, defines = field_macro(parser, name, member, members, desc, man)
+        if warning is not None:
+            print("reflect_gen: %s: %s" % (name, warning), file=sys.stderr)
+        if macro is None:
+            continue
+        for tag in tags.split(","):
+            tag = tag.strip()
+            if not tag:
+                raise ParseError("union %s.%s: empty case= entry" % (name, mname))
+            if "*" == tag:
+                star.append(macro)
+            else:
+                if tag not in by_tag:
+                    by_tag[tag] = []
+                    order.append(tag)
+                by_tag[tag].append(macro)
+    if not order:
+        raise ParseError("union %s: no case= directives, no variants" % name)
+    out = []
+    for tag in order:
+        fields = by_tag[tag] + star
+        out.append("SHREWD_BASIC_REFLECT_UNION_VARIANT(%s,\n    %s)"
+                   % (tag, ",\n    ".join(fields)))
+    return out
+
+
+def generate(parser, input_name, ann, selected, fingerprint=None, layout=None):
+    """Emit the stub pair for the selected types (strict opt-in).
+    fingerprint (dwarf backend) pins the toolchain in the header;
+    layout feeds the _Static_assert drift guards."""
     header = ["/* Generated by tools/reflect_gen.py from %s - do not edit." % input_name]
     if fingerprint is not None:
         header.extend(fingerprint)
@@ -756,7 +1120,7 @@ def generate(parser, input_name, fingerprint=None, layout=None):
     if layout is not None:
         lines_c.append("/* Layout guards: regenerate with the same toolchain,")
         lines_c.append("   or update the numbers after an intentional change. */")
-        for name in parser.order:
+        for name in selected:
             info = layout.get(name)
             if info is None:
                 continue
@@ -769,86 +1133,106 @@ def generate(parser, input_name, fingerprint=None, layout=None):
                     "_Static_assert(offsetof(%s, %s) == %d, \"reflect_gen: %s.%s offset drift\");"
                     % (name, member, offset, name, member))
         lines_c.append("")
-    for var, base in collect_references(parser):
+    refs = collect_references(parser, selected, ann.desc)
+    for var, base in refs:
         lines_c.append("SHREWD_BASIC_REFLECT_TYPE_DECLARE(%s);" % var)
         lines_h.append("SHREWD_BASIC_REFLECT_TYPE_DECLARE(%s);" % var)
-    if collect_references(parser):
+    if refs:
         lines_c.append("")
-    for name in parser.order:
+    for name in selected:
+        if ann.for_type(name).get("external"):
+            continue
+        var = ann.desc(name)
         if name in parser.enums:
             entries = ",\n    ".join(
                 "SHREWD_BASIC_REFLECT_ENUM_VALUE(%s)" % c for c in parser.enums[name])
             lines_c.append(
                 "SHREWD_BASIC_REFLECT_ENUM_DEFINE(%s, %s,\n    %s);"
-                % (descriptor_name(name), name, entries))
-            lines_h.append("SHREWD_BASIC_REFLECT_TYPE_DECLARE(%s);"
-                           % descriptor_name(name))
-        else:
-            entries = []
-            pre = []
-            for m in parser.structs[name]:
-                macro, warning, defines = field_macro(parser, name, m,
-                                                      parser.structs[name])
-                if warning is not None:
-                    print("reflect_gen: %s: %s" % (name, warning), file=sys.stderr)
-                if macro is not None:
-                    entries.append(macro)
-                    pre.extend(defines)
-            if not entries:
-                print("reflect_gen: %s: no describable fields - skipped" % name,
-                      file=sys.stderr)
+                % (var, name, entries))
+            lines_h.append("SHREWD_BASIC_REFLECT_TYPE_DECLARE(%s);" % var)
+            lines_c.append("")
+            continue
+        is_union = name in parser.unions
+        members = parser.unions[name] if is_union else parser.structs[name]
+        if is_union:
+            variants = union_variants(parser, name, members, ann, ann.desc)
+            if "ops" in ann.for_type(name):
+                raise ParseError("union %s: ops= has no UNION_DEFINE form" % name)
+            lines_c.append(
+                "SHREWD_BASIC_REFLECT_UNION_DEFINE(%s, %s,\n    %s);"
+                % (var, name, ",\n    ".join(variants)))
+            lines_h.append("SHREWD_BASIC_REFLECT_TYPE_DECLARE(%s);" % var)
+            lines_c.append("")
+            continue
+        entries = []
+        pre = []
+        for member in members:
+            man = dict(ann.for_member(name, member_parts(member)[2]))
+            if man.pop("skip", False):
                 continue
-            for define in pre:
-                lines_c.append(define)
-            if pre:
-                lines_c.append("")
-            fields = ",\n    ".join(entries)
+            macro, warning, defines = field_macro(parser, name, member, members,
+                                                  ann.desc, man)
+            if warning is not None:
+                print("reflect_gen: %s: %s" % (name, warning), file=sys.stderr)
+            if macro is not None:
+                entries.append(macro)
+                pre.extend(defines)
+        if not entries:
+            print("reflect_gen: %s: no describable fields - skipped" % name,
+                  file=sys.stderr)
+            continue
+        for define in pre:
+            lines_c.append(define)
+        if pre:
+            lines_c.append("")
+        fields = ",\n    ".join(entries)
+        type_ann = ann.for_type(name)
+        if "ops" in type_ann:
+            lines_c.append(
+                "SHREWD_BASIC_REFLECT_TYPE_DEFINE_OPS(%s, %s, %s,\n    %s);"
+                % (var, name, type_ann["ops"], fields))
+        else:
             lines_c.append(
                 "SHREWD_BASIC_REFLECT_TYPE_DEFINE(%s, %s,\n    %s);"
-                % (descriptor_name(name), name, fields))
-            lines_h.append("SHREWD_BASIC_REFLECT_TYPE_DECLARE(%s);"
-                           % descriptor_name(name))
-            # Optional JSON policy skeleton (docs/json.md section 6).
-            rows = ",\n    ".join(
-                "SHREWD_BASIC_JSON_KEY(%s, \"%s\")" % (m[2], m[2])
-                for m in parser.structs[name])
-            lines_c.append("")
-            lines_c.append("/* Optional JSON policy for %s:" % name)
-            lines_c.append("SHREWD_BASIC_JSON_DEFINE(%s_json, %s," % (name, descriptor_name(name)))
-            lines_c.append("    %s);" % rows)
-            lines_c.append("*/")
+                % (var, name, fields))
+        lines_h.append("SHREWD_BASIC_REFLECT_TYPE_DECLARE(%s);" % var)
+        # Optional JSON policy skeleton (docs/json.md section 6).
+        rows = ",\n    ".join(
+            "SHREWD_BASIC_JSON_KEY(%s, \"%s\")" % (member_parts(m)[2], member_parts(m)[2])
+            for m in members if not ann.for_member(name, member_parts(m)[2]).get("skip"))
+        lines_c.append("")
+        lines_c.append("/* Optional JSON policy for %s:" % name)
+        lines_c.append("SHREWD_BASIC_JSON_DEFINE(%s_json, %s," % (name, var))
+        lines_c.append("    %s);" % rows)
+        lines_c.append("*/")
         lines_c.append("")
     return "\n".join(lines_c) + "\n", "\n".join(lines_h) + "\n"
 
 
-def render_layout(reports):
-    """pahole-lite: per-field offset/size/align, padding intervals, and
-    the gap between total size and the packed footprint."""
-    out = []
+def layout_analysis(reports):
+    """Per-type pahole facts: entries, padding intervals, packed bytes.
+    Shared by the text and JSON renderers."""
+    out = {}
     for name in reports:
         info = reports[name]
-        out.append("%s: %d bytes, align %d" % (name, info["size"], info["align"]))
+        entries = []
         covered = []  # byte intervals covered by members (units may overlap)
+        gaps = []
         cursor = 0
         for entry in info["entries"]:
             start = entry["offset"]
             end = entry["offset"] + entry["size"]
-            gap = start - cursor
-            if 0 < gap:
-                out.append("  padding [%d..%d)  %d byte(s)" % (cursor, start, gap))
+            if cursor < start:
+                gaps.append((cursor, start))
+            record = {"name": entry["name"], "offset": start, "size": entry["size"],
+                      "align": entry["align"], "type": entry["type"]}
             if entry["bits"] is not None:
-                out.append("  %-12s off=%-5d bits=[%d..%d)  unit %d bytes"
-                           % (entry["name"], entry["offset"], entry["bits"][0],
-                              entry["bits"][0] + entry["bits"][1], entry["size"]))
-            else:
-                out.append("  %-12s off=%-5d size=%-5d align=%-4d %s"
-                           % (entry["name"], entry["offset"], entry["size"],
-                              entry["align"], entry["type"]))
+                record["bits"] = [entry["bits"][0], entry["bits"][0] + entry["bits"][1]]
+            entries.append(record)
             covered.append((start, end))
             cursor = max(cursor, end)
-        gap = info["size"] - cursor
-        if 0 < gap:
-            out.append("  padding [%d..%d)  %d byte(s)" % (cursor, info["size"], gap))
+        if cursor < info["size"]:
+            gaps.append((cursor, info["size"]))
         covered.sort()
         packed = 0
         lo = hi = None
@@ -861,10 +1245,82 @@ def render_layout(reports):
                 hi = max(hi, end)
         if lo is not None:
             packed += hi - lo
-        out.append("  packed %d bytes, %d byte(s) padding"
-                   % (packed, info["size"] - packed))
+        out[name] = {"size": info["size"], "align": info["align"], "entries": entries,
+                     "gaps": gaps, "packed": packed, "padding": info["size"] - packed}
+    return out
+
+
+def render_layout(reports, as_json=False):
+    """pahole-lite: per-field offset/size/align, padding intervals, and
+    the gap between total size and the packed footprint."""
+    facts = layout_analysis(reports)
+    if as_json:
+        import json
+        return json.dumps(facts, indent=2, sort_keys=True) + "\n"
+    out = []
+    for name in facts:
+        info = facts[name]
+        out.append("%s: %d bytes, align %d" % (name, info["size"], info["align"]))
+        pending = list(info["gaps"])
+        for entry in info["entries"]:
+            while pending and (pending[0][1] <= entry["offset"]):
+                lo, hi = pending.pop(0)
+                out.append("  padding [%d..%d)  %d byte(s)" % (lo, hi, hi - lo))
+            if "bits" in entry:
+                out.append("  %-12s off=%-5d bits=[%d..%d)" % (entry["name"], entry["offset"],
+                                                               entry["bits"][0], entry["bits"][1]))
+            else:
+                out.append("  %-12s off=%-5d size=%-5d align=%-4d %s"
+                           % (entry["name"], entry["offset"], entry["size"],
+                              entry["align"], entry["type"]))
+        for lo, hi in pending:
+            out.append("  padding [%d..%d)  %d byte(s)" % (lo, hi, hi - lo))
+        out.append("  packed %d bytes, %d byte(s) padding" % (info["packed"], info["padding"]))
         out.append("")
     return "\n".join(out) + "\n"
+
+
+def select_types(parser, ann, cli_types, cli_external):
+    """Strict opt-in: generate exactly the type=-annotated names plus
+    --type additions. --external / external flag marks in-header types
+    that stay hand-written (satisfies the closure check)."""
+    selected = []
+    external = set(cli_external)
+    for name in parser.order:
+        if name not in ann.types:
+            continue
+        if ann.for_type(name).get("external"):
+            external.add(name)
+        else:
+            selected.append(name)
+    known = set(parser.order)
+    for name in cli_types:
+        if name not in known:
+            raise ParseError("--type %s: no such typedef in the header" % name)
+        if name in external:
+            raise ParseError("%s: marked external and requested with --type" % name)
+        if name not in selected:
+            selected.append(name)
+    for name in cli_external:
+        if name not in known:
+            raise ParseError("--external %s: no such typedef in the header" % name)
+    for name in ann.types:
+        if name not in known:
+            raise ParseError("type=%s: no such typedef in the header" % name)
+    for type_name, member in ann.members:
+        if type_name not in known:
+            raise ParseError("member=%s.%s: no such typedef in the header"
+                             % (type_name, member))
+        if type_name not in selected:
+            print("reflect_gen: member=%s.%s: %s is not generated - annotation ignored"
+                  % (type_name, member, type_name), file=sys.stderr)
+    for name in selected:
+        for member in (parser.structs.get(name) or parser.unions.get(name) or []):
+            man = ann.for_member(name, member_parts(member)[2])
+            if man.get("skip") and (1 < len(man)):
+                raise ParseError("%s.%s: skip= cannot combine with other directives"
+                                 % (name, member_parts(member)[2]))
+    return selected, external
 
 
 def main():
@@ -877,43 +1333,79 @@ def main():
     ap.add_argument("--cc", help="compiler for the dwarf probe (default: $CC or cc)")
     ap.add_argument("--cflags", default="",
                     help="extra flags for the dwarf probe compile")
+    ap.add_argument("--type", action="append", default=[], metavar="NAME",
+                    help="also generate NAME (repeatable; for headers you "
+                         "cannot annotate)")
+    ap.add_argument("--external", action="append", default=[], metavar="NAME",
+                    help="NAME stays hand-written (repeatable; same effect "
+                         "as a 'type=NAME external' annotation)")
     ap.add_argument("--layout", action="store_true",
                     help="dwarf backend: print a pahole-lite layout report "
                          "instead of generating stubs")
+    ap.add_argument("--json", action="store_true",
+                    help="with --layout: emit the report as JSON")
     ap.add_argument("--quiet", action="store_true", help="suppress the summary")
     args = ap.parse_args()
 
     with open(args.input, "r", encoding="utf-8") as handle:
         text = handle.read()
     try:
+        ann = scan_annotations(text)
         if "dwarf" == args.backend:
             parser = DwarfParser(text, args.input, cc=args.cc,
                                  cflags=args.cflags.split() or None).parse()
         else:
             parser = HeaderParser(text).parse()
-    except ParseError as err:
+    except (ParseError, AnnotationError) as err:
         print("reflect_gen: %s: %s" % (args.input, err), file=sys.stderr)
         return 1
     if not parser.order:
-        print("reflect_gen: %s: no typedef struct/enum found" % args.input,
+        print("reflect_gen: %s: no typedef struct/union/enum found" % args.input,
               file=sys.stderr)
         return 1
 
     if args.layout:
-        sys.stdout.write(render_layout(parser.reports))
+        wanted = args.type or sorted(parser.reports)
+        missing = [name for name in wanted if name not in parser.reports]
+        if missing:
+            print("reflect_gen: --layout: no layout for %s" % ", ".join(missing),
+                  file=sys.stderr)
+            return 1
+        sys.stdout.write(render_layout({n: parser.reports[n] for n in wanted}, as_json=args.json))
         return 0
 
-    stub = args.output or os.path.splitext(os.path.basename(args.input))[0]
-    body_c, body_h = generate(parser, os.path.basename(args.input),
-                              fingerprint=getattr(parser, "fingerprint", None) or None,
-                              layout=getattr(parser, "layout", None) or None)
+    try:
+        selected, external = select_types(parser, ann, args.type, args.external)
+    except ParseError as err:
+        print("reflect_gen: %s: %s" % (args.input, err), file=sys.stderr)
+        return 1
+    if not selected:
+        print("reflect_gen: %s: nothing selected - annotate types with "
+              "/* reflect: type=NAME */ or pass --type NAME" % args.input,
+              file=sys.stderr)
+        return 1
+    try:
+        check_closure(parser, ann, selected, external)
+        body_c, body_h = generate(parser, os.path.basename(args.input), ann, selected,
+                                  fingerprint=getattr(parser, "fingerprint", None) or None,
+                                  layout=getattr(parser, "layout", None) or None)
+    except ParseError as err:
+        print("reflect_gen: %s: %s" % (args.input, err), file=sys.stderr)
+        return 1
+    stub = args.output or (os.path.splitext(args.input)[0] + "_reflect")
+    for path in (stub + ".c", stub + ".h"):
+        if os.path.abspath(path) == os.path.abspath(args.input):
+            print("reflect_gen: output %s would overwrite the input header" % path,
+                  file=sys.stderr)
+            return 1
     with open(stub + ".c", "w", encoding="utf-8") as handle:
         handle.write(body_c)
     with open(stub + ".h", "w", encoding="utf-8") as handle:
         handle.write(body_h)
     if not args.quiet:
-        print("reflect_gen: %d type(s) -> %s.h, %s.c"
-              % (len(parser.order), stub, stub), file=sys.stderr)
+        note = "" if not external else " (%d external)" % len(external)
+        print("reflect_gen: %d type(s) -> %s.h, %s.c%s"
+              % (len(selected), stub, stub, note), file=sys.stderr)
     return 0
 
 

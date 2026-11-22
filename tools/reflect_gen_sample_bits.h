@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 /* Classic packed register layout: groups share one unsigned unit. */
+/* reflect: type=flags_t */
 typedef struct {
     uint32_t id;
     unsigned ok : 1;
@@ -18,6 +19,7 @@ typedef struct {
 } flags_t;
 
 /* Mixed declared widths: the dwarf backend derives each unit window. */
+/* reflect: type=mixed_t */
 typedef struct {
     unsigned a : 3;
     unsigned char b : 2;
