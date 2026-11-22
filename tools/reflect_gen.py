@@ -188,6 +188,10 @@ MEMBER_FLAGS = {"owned", "stringbuf", "wstringbuf", "skip"}
 MEMBER_VALUES = {"count", "ops", "union_tag", "case"}
 WIDE_NAMES = {"char16_t": "16", "char32_t": "32", "wchar_t": "wchar"}
 
+DBUS_VALUES = {"path", "store", "flags", "ops", "name"}
+DBUS_FLAGS_MAP = {"event": "SHREWD_BASIC_DBUS_MOUNT_EVENT",
+                  "readonly": "SHREWD_BASIC_DBUS_MOUNT_READONLY"}
+
 JSON_TYPE_FLAGS = set()
 JSON_TYPE_VALUES = {"name"}
 JSON_MEMBER_FLAGS = {"omit_empty", "required", "hidden", "borrowed"}
@@ -216,6 +220,18 @@ NAMESPACES = {
         "types_attr": "json_types",
         "members_attr": "json_members",
     },
+    "dbus": {
+        # Mount statements: lead with type= (storage/virtual/interceptor
+        # mounts) or path= (event topics name no type). Handled by
+        # _apply_dbus_statement - one statement = one mount entry.
+        "targets": ("type", "path"),
+        "type_flags": set(),
+        "type_values": DBUS_VALUES,
+        "member_flags": set(),
+        "member_values": set(),
+        "types_attr": "dbus_mounts",
+        "members_attr": "dbus_mounts",
+    },
 }
 
 
@@ -229,6 +245,8 @@ class Annotations:
         self.members = {}
         self.json_types = {}
         self.json_members = {}
+        self.dbus_mounts = []  # ordered mount entries (one per statement)
+        self.dbus_name = None  # table name override (name=)
 
     def json_var(self, type_name):
         """Policy table variable name for a type (json name= override)."""
@@ -340,6 +358,65 @@ def _parse_items(chunk):
     return items
 
 
+def _apply_dbus_statement(ann, chunk, items):
+    """One dbus statement = one mount entry (keyed by its path)."""
+    entry = {"type": None, "store": "owned", "flags": [], "ops": None}
+    seen = set()
+    for index, (key, value) in enumerate(items):
+        if key in seen:
+            raise AnnotationError("%s: duplicate '%s' directive" % (chunk.strip(), key))
+        seen.add(key)
+        if "type" == key:
+            if 0 != index:
+                raise AnnotationError("%s: type= must lead the statement" % chunk.strip())
+            if (value is None) or isinstance(value, list):
+                raise AnnotationError("%s: type= takes a single name" % chunk.strip())
+            entry["type"] = value
+        elif "path" == key:
+            if (value is None) or isinstance(value, list):
+                raise AnnotationError("%s: path= takes one value" % chunk.strip())
+            if not value.startswith("/"):
+                raise AnnotationError("%s: path must start with '/'" % chunk.strip())
+            entry["path"] = value
+        elif "store" == key:
+            if "linked" == value:
+                raise AnnotationError(
+                    "%s: linked mounts are hand-written (the data pointer lives "
+                    "in your code)" % chunk.strip())
+            if "owned" != value:
+                raise AnnotationError("%s: store=%s (want owned)" % (chunk.strip(), value))
+            entry["store"] = value
+        elif "flags" == key:
+            names = value if isinstance(value, list) else [value]
+            for name in names:
+                if name not in DBUS_FLAGS_MAP:
+                    raise AnnotationError("%s: flags=%s (want event/readonly)" % (chunk.strip(), name))
+                entry["flags"].append(DBUS_FLAGS_MAP[name])
+        elif "ops" == key:
+            if (value is None) or isinstance(value, list):
+                raise AnnotationError("%s: ops= takes a vtable name" % chunk.strip())
+            entry["ops"] = value
+        elif "name" == key:
+            if (value is None) or isinstance(value, list):
+                raise AnnotationError("%s: name= takes a single name" % chunk.strip())
+            if (ann.dbus_name is not None) and (ann.dbus_name != value):
+                raise AnnotationError("%s: name= redefined as %r" % (chunk.strip(), value))
+            ann.dbus_name = value
+        else:
+            raise AnnotationError("'%s' is not a dbus directive" % key)
+    if "path" not in seen:
+        raise AnnotationError("%s: path= is required" % chunk.strip())
+    is_event = "SHREWD_BASIC_DBUS_MOUNT_EVENT" in entry["flags"]
+    if is_event and (entry["type"] is not None):
+        raise AnnotationError("%s: event mounts name no type" % chunk.strip())
+    if (entry["type"] is None) and (0 == is_event) and (entry["ops"] is None):
+        raise AnnotationError("%s: mount needs type= (or flags=event / ops=)" % chunk.strip())
+    for other in ann.dbus_mounts:
+        if other["path"] == entry["path"]:
+            raise AnnotationError("%s: duplicate mount path %s" % (chunk.strip(), entry["path"]))
+    ann.dbus_mounts.append(entry)
+
+
 def _apply_statement(ann, chunk):
     head, sep, rest = chunk.partition(":")
     if not sep:
@@ -355,6 +432,14 @@ def _apply_statement(ann, chunk):
     items = _parse_items(rest)
     if not items:
         raise AnnotationError("empty %s statement" % ns)
+    if "dbus" == ns:
+        if items[0][0] not in ("type", "path"):
+            raise AnnotationError("%s: dbus statement must lead with type= or path= - %r"
+                                  % (chunk.strip(), chunk.strip()))
+        if items[0][1] is None or isinstance(items[0][1], list):
+            raise AnnotationError("%s: %s= takes a single value" % (chunk.strip(), items[0][0]))
+        _apply_dbus_statement(ann, chunk, items)
+        return
     lead = items[0][0]
     if lead not in spec["targets"]:
         raise AnnotationError(
@@ -1429,6 +1514,110 @@ def json_policy_stub(input_name, ann, plan, stub_base):
     return "\n".join(lines_c) + "\n", "\n".join(lines_h) + "\n"
 
 
+def check_dbus_mounts(parser, ann, selected, external):
+    """Validate mount entries and their closure: every named type must
+    carry a reflect descriptor (generated or external)."""
+    for entry in ann.dbus_mounts:
+        type_name = entry["type"]
+        if type_name is None:
+            continue
+        if (type_name not in parser.structs) and (type_name not in parser.unions) \
+                and (type_name not in parser.enums):
+            raise ParseError("dbus: type=%s names an unknown type" % type_name)
+        if (type_name not in selected) and (type_name not in external) \
+                and (not ann.for_type(type_name).get("external")):
+            raise ParseError(
+                "dbus: type=%s has no reflect descriptor\n"
+                "  - to generate it:  /* reflect: type=%s; */ or --type %s\n"
+                "  - to keep it external:  /* reflect: type=%s, external; */ or "
+                "--external %s" % (type_name, type_name, type_name, type_name, type_name))
+
+
+def dbus_table_name(ann):
+    """Table base name: name= override, else the first named type."""
+    if ann.dbus_name:
+        return ann.dbus_name
+    for entry in ann.dbus_mounts:
+        if entry["type"] is not None:
+            return entry["type"]
+    raise ParseError("dbus: mount table needs name= (no type= statement to name it)")
+
+
+def dbus_mount_stub(input_name, ann, stub_base):
+    """(body_c, body_h) for the mount table: one hand-written-style row
+    per statement plus an all-or-nothing mount_all() helper."""
+    name = dbus_table_name(ann)
+    header = ["/* Generated by tools/reflect_gen.py from %s - do not edit." % input_name,
+              " */"]
+    lines_h = header + [
+        "",
+        "#include <stddef.h>",
+        "",
+        "#include \"shrewd-basic/dbus/dbus.h\"",
+        "",
+        "typedef struct {",
+        "    const char *path;",
+        "    shrewd_basic_dbus_mount_t mount;",
+        "} shrewd_basic_dbus_entry_t;",
+        "",
+        "extern const shrewd_basic_dbus_entry_t %s_dbus_mounts[];" % name,
+        "extern const size_t %s_dbus_mounts_count;" % name,
+        "",
+        "/* Mount every entry (all-or-nothing); handles needs room for count. */",
+        "int %s_dbus_mount_all(shrewd_basic_dbus_t *bus, shrewd_basic_dbus_handle_t **handles);"
+        % name,
+    ]
+    lines_c = header + [
+        "",
+        '#include "%s_dbus.h"' % stub_base,
+        "",
+        '#include "%s"' % input_name,
+        "",
+        '#include "%s.h"' % stub_base,
+        "",
+        "const shrewd_basic_dbus_entry_t %s_dbus_mounts[] = {" % name,
+    ]
+    for entry in ann.dbus_mounts:
+        parts = []
+        if entry["type"] is not None:
+            parts.append(".type = &%s" % ann.desc(entry["type"]))
+            if entry["ops"] is None:
+                parts.append(".store = SHREWD_BASIC_DBUS_STORE_OWNED")
+        if entry["ops"] is not None:
+            parts.append(".ops = &%s" % entry["ops"])
+        if entry["flags"]:
+            parts.append(".flags = %s"
+                         % (" | ".join(entry["flags"]) if 1 < len(entry["flags"])
+                            else entry["flags"][0]))
+        body = ", ".join(parts) if parts else ".store = SHREWD_BASIC_DBUS_STORE_OWNED"
+        lines_c.append('    {"%s", {%s}},' % (entry["path"], body))
+    lines_c += [
+        "};",
+        "",
+        "const size_t %s_dbus_mounts_count = sizeof(%s_dbus_mounts) / sizeof(%s_dbus_mounts[0]);"
+        % (name, name, name),
+        "",
+        "int %s_dbus_mount_all(shrewd_basic_dbus_t *bus, shrewd_basic_dbus_handle_t **handles) {"
+        % name,
+        "    for (size_t i = 0; i < %s_dbus_mounts_count; ++i) {" % name,
+        "        int status = shrewd_basic_dbus_mount(",
+        "            bus, %s_dbus_mounts[i].path, &%s_dbus_mounts[i].mount, &handles[i]);"
+        % (name, name),
+        "        if (SHREWD_BASIC_ERR_OK != status) {",
+        "            for (size_t j = i; 0 < j; --j) {",
+        "                (void)shrewd_basic_dbus_unmount(bus, handles[j - 1]);",
+        "                handles[j - 1] = NULL;",
+        "            }",
+        "            return status;",
+        "        }",
+        "    }",
+        "    return SHREWD_BASIC_ERR_OK;",
+        "}",
+        "",
+    ]
+    return "\n".join(lines_c) + "\n", "\n".join(lines_h) + "\n"
+
+
 def schema_dump_stub(input_name, ann, selected, plan, stub_base):
     """Body for <output>_schema_dump.c: a ready-to-build program that
     prints one type's JSON Schema via the runtime exporter (the single
@@ -1813,6 +2002,12 @@ def main():
             json_c, json_h = json_policy_stub(
                 os.path.basename(args.input), ann, plan,
                 os.path.basename(args.output or (os.path.splitext(args.input)[0] + "_reflect")))
+        dbus_c = dbus_h = None
+        if ann.dbus_mounts:
+            check_dbus_mounts(parser, ann, selected, external)
+            dbus_c, dbus_h = dbus_mount_stub(
+                os.path.basename(args.input), ann,
+                os.path.basename(args.output or (os.path.splitext(args.input)[0] + "_reflect")))
         schema_c = None
         if args.schema_dump:
             schema_c = schema_dump_stub(
@@ -1825,6 +2020,8 @@ def main():
     outputs = [stub + ".c", stub + ".h"]
     if plan:
         outputs += [stub + "_json.c", stub + "_json.h"]
+    if ann.dbus_mounts:
+        outputs += [stub + "_dbus.c", stub + "_dbus.h"]
     if args.schema_dump:
         outputs += [stub + "_schema_dump.c"]
     for path in outputs:
@@ -1841,14 +2038,20 @@ def main():
             handle.write(json_c)
         with open(stub + "_json.h", "w", encoding="utf-8") as handle:
             handle.write(json_h)
+    if ann.dbus_mounts:
+        with open(stub + "_dbus.c", "w", encoding="utf-8") as handle:
+            handle.write(dbus_c)
+        with open(stub + "_dbus.h", "w", encoding="utf-8") as handle:
+            handle.write(dbus_h)
     if args.schema_dump:
         with open(stub + "_schema_dump.c", "w", encoding="utf-8") as handle:
             handle.write(schema_c)
     if not args.quiet:
         note = "" if not external else " (%d external)" % len(external)
         policy = "" if not plan else " + %d json table(s)" % len(plan)
-        print("reflect_gen: %d type(s) -> %s.h, %s.c%s%s"
-              % (len(selected), stub, stub, note, policy), file=sys.stderr)
+        mounts = "" if not ann.dbus_mounts else " + %d dbus mount(s)" % len(ann.dbus_mounts)
+        print("reflect_gen: %d type(s) -> %s.h, %s.c%s%s%s"
+              % (len(selected), stub, stub, note, policy, mounts), file=sys.stderr)
     return 0
 
 
