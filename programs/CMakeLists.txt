@@ -21,6 +21,9 @@ target_link_libraries(shrewd-basic-reflect-demo
             shrewd-basic
             shrewd-basic-warnings)
 
+# Data-format demos: built only for the enabled formats.
+if(SHREWD_BASIC_FORMAT_JSON)
+
 # JSON demo: value model (parse/query/modify/serialize) and struct mapping.
 add_executable(shrewd-basic-json-demo json_demo.c)
 
@@ -28,3 +31,17 @@ target_link_libraries(shrewd-basic-json-demo
         PRIVATE
             shrewd-basic
             shrewd-basic-warnings)
+
+endif()
+
+if(SHREWD_BASIC_FORMAT_BIN)
+
+# Bin demo: wire bytes, round trip, flexible tails via value_size.
+add_executable(shrewd-basic-bin-demo bin_demo.c)
+
+target_link_libraries(shrewd-basic-bin-demo
+        PRIVATE
+            shrewd-basic
+            shrewd-basic-warnings)
+
+endif()

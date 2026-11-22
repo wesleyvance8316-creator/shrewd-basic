@@ -58,8 +58,7 @@ typedef int (*shrewd_basic_btree_visit_fn)(void *data, void *ctx);
  * Create an empty tree ordered by @p cmp (must not be NULL) and store it
  * into @p *out.
  */
-int shrewd_basic_btree_create(shrewd_basic_btree_cmp_fn cmp, void *ctx,
-                              shrewd_basic_btree_t **out);
+int shrewd_basic_btree_create(shrewd_basic_btree_cmp_fn cmp, void *ctx, shrewd_basic_btree_t **out);
 
 /** Free all nodes (not the payloads). */
 int shrewd_basic_btree_destroy(shrewd_basic_btree_t *tree);
@@ -74,15 +73,13 @@ int shrewd_basic_btree_insert(shrewd_basic_btree_t *tree, void *data);
  * Store the payload matching @p key into @p *out.
  * Returns SHREWD_BASIC_ERR_KEY_NOTFOUND when no key matches.
  */
-int shrewd_basic_btree_search(const shrewd_basic_btree_t *tree, const void *key,
-                              void **out);
+int shrewd_basic_btree_search(const shrewd_basic_btree_t *tree, const void *key, void **out);
 
 /**
  * Remove the node matching @p key and store its payload into @p *out
  * (NULL discards). Returns SHREWD_BASIC_ERR_KEY_NOTFOUND when no key matches.
  */
-int shrewd_basic_btree_remove(shrewd_basic_btree_t *tree, const void *key,
-                              void **out);
+int shrewd_basic_btree_remove(shrewd_basic_btree_t *tree, const void *key, void **out);
 
 /**
  * Store the smallest payload into @p *out.
@@ -98,7 +95,8 @@ int shrewd_basic_btree_max(const shrewd_basic_btree_t *tree, void **out);
 
 /** Visit payloads in ascending key order until @p visit returns non-OK. */
 int shrewd_basic_btree_foreach(const shrewd_basic_btree_t *tree,
-                               shrewd_basic_btree_visit_fn visit, void *ctx);
+                               shrewd_basic_btree_visit_fn visit,
+                               void *ctx);
 
 /** Store the payload count into @p *out. */
 int shrewd_basic_btree_size(const shrewd_basic_btree_t *tree, size_t *out);

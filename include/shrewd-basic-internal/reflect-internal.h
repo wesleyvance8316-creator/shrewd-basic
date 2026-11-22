@@ -19,14 +19,11 @@
 
 /* Effective ops of a field: the field-level override wins over type ops. */
 static inline const shrewd_basic_reflect_ops_t *reflect_field_ops(
-        const shrewd_basic_reflect_field_t *field)
-{
-    return (NULL != field->sb_refl_ops) ? field->sb_refl_ops
-                                        : field->sb_refl_type->sb_refl_ops;
+    const shrewd_basic_reflect_field_t *field) {
+    return (NULL != field->sb_refl_ops) ? field->sb_refl_ops : field->sb_refl_type->sb_refl_ops;
 }
 
-static inline int64_t reflect_load_i64(const unsigned char *bytes, size_t nbytes)
-{
+static inline int64_t reflect_load_i64(const unsigned char *bytes, size_t nbytes) {
     switch (nbytes) {
     case 1: {
         int8_t value = 0;
@@ -53,8 +50,7 @@ static inline int64_t reflect_load_i64(const unsigned char *bytes, size_t nbytes
     }
 }
 
-static inline uint64_t reflect_load_u64(const unsigned char *bytes, size_t nbytes)
-{
+static inline uint64_t reflect_load_u64(const unsigned char *bytes, size_t nbytes) {
     switch (nbytes) {
     case 1: {
         uint8_t value = 0;
@@ -81,8 +77,7 @@ static inline uint64_t reflect_load_u64(const unsigned char *bytes, size_t nbyte
     }
 }
 
-static inline double reflect_load_f64(const unsigned char *bytes, size_t nbytes)
-{
+static inline double reflect_load_f64(const unsigned char *bytes, size_t nbytes) {
     if (4 == nbytes) {
         float value = 0.0f;
         memcpy(&value, bytes, sizeof(value));
@@ -96,15 +91,50 @@ static inline double reflect_load_f64(const unsigned char *bytes, size_t nbytes)
     return 0.0;
 }
 
-static inline void *reflect_load_ptr(const unsigned char *bytes)
-{
+/* Long double load (value semantics; padding bits never enter a compare). */
+static inline long double reflect_load_ld(const unsigned char *bytes, size_t nbytes) {
+    if (nbytes == sizeof(long double)) {
+        long double value = 0.0L;
+        memcpy(&value, bytes, sizeof(value));
+        return value;
+    }
+    return 0.0L;
+}
+
+/* One complex component (half of a complex member) as long double. */
+static inline long double reflect_load_cpart(const unsigned char *bytes, size_t nbytes) {
+    if (4 == nbytes) {
+        return (long double)reflect_load_f64(bytes, nbytes);
+    }
+    if (8 == nbytes) {
+        return (long double)reflect_load_f64(bytes, nbytes);
+    }
+    return reflect_load_ld(bytes, nbytes);
+}
+
+/* Canonical hash fold shared by float/double/long double and complex parts. */
+static inline uint64_t reflect_ld_hash_bits(long double number) {
+    if (number != number) {
+        return UINT64_C(0x7ff8000000000000); /* NaN marker */
+    }
+    if (0.0L == number) {
+        number = 0.0L; /* fold -0.0 into +0.0 (they compare equal) */
+    }
+    {
+        double folded = (double)number;
+        uint64_t bits = 0;
+        memcpy(&bits, &folded, sizeof(bits));
+        return bits;
+    }
+}
+
+static inline void *reflect_load_ptr(const unsigned char *bytes) {
     void *pointer = NULL;
     memcpy(&pointer, bytes, sizeof(pointer));
     return pointer;
 }
 
-static inline const char *reflect_load_str(const unsigned char *bytes)
-{
+static inline const char *reflect_load_str(const unsigned char *bytes) {
     return (const char *)reflect_load_ptr(bytes);
 }
 
@@ -112,8 +142,7 @@ static inline const char *reflect_load_str(const unsigned char *bytes)
  * Bounded strlen for string buffers (strnlen is POSIX, not C11): scans
  * at most @p max bytes and stops at the first NUL.
  */
-static inline size_t reflect_strn_len(const char *text, size_t max)
-{
+static inline size_t reflect_strn_len(const char *text, size_t max) {
     size_t n = 0;
     while ((n < max) && ('\0' != text[n])) {
         ++n;
@@ -121,10 +150,81 @@ static inline size_t reflect_strn_len(const char *text, size_t max)
     return n;
 }
 
+/* Code-unit width of a string kind in bytes (0 for non-strings). */
+static inline size_t reflect_string_unit(shrewd_basic_reflect_kind_t kind) {
+    switch (kind) {
+    case SHREWD_BASIC_REFLECT_KIND_STRING:
+        return 1;
+    case SHREWD_BASIC_REFLECT_KIND_STRING16:
+        return 2;
+    case SHREWD_BASIC_REFLECT_KIND_STRING32:
+        return 4;
+    default:
+        return 0;
+    }
+}
+
+/* Non-zero for the three string kinds (char / char16 / char32). */
+static inline int reflect_kind_is_string(shrewd_basic_reflect_kind_t kind) {
+    return (0 != reflect_string_unit(kind)) ? 1 : 0;
+}
+
+/*
+ * Bounded strlen in code units for wide strings: scans at most
+ * @p max_units units of @p unit bytes each and stops at the first
+ * all-zero unit (the NUL code unit). reflect_strn_len() is the
+ * unit == 1 case.
+ */
+static inline size_t reflect_wstrn_len(const void *text, size_t unit, size_t max_units) {
+    const unsigned char *bytes = (const unsigned char *)text;
+    size_t n = 0;
+    while (n < max_units) {
+        size_t zero = 1;
+        for (size_t b = 0; b < unit; ++b) {
+            if (0 != bytes[(n * unit) + b]) {
+                zero = 0;
+                break;
+            }
+        }
+        if (0 != zero) {
+            break;
+        }
+        ++n;
+    }
+    return n;
+}
+
+/*
+ * Code-unit-semantic string comparison: equal when both sides carry the
+ * same code units up to the NUL unit. @p max_units bounds the scan
+ * (SIZE_MAX for unbounded pointer strings).
+ */
+static inline int reflect_wstrn_eq(const void *a, const void *b, size_t unit, size_t max_units) {
+    size_t len_a = reflect_wstrn_len(a, unit, max_units);
+    size_t len_b = reflect_wstrn_len(b, unit, max_units);
+    return ((len_a == len_b) && (0 == memcmp(a, b, len_a * unit))) ? 1 : 0;
+}
+
+/*
+ * Strict UTF conversions between NUL-unit-terminated wide strings and
+ * UTF-8 (reflect_utf.c). Both directions are strict: invalid UTF-8,
+ * truncated sequences, lone UTF-16 surrogates and out-of-range code
+ * points fail with SHREWD_BASIC_ERR_REFLECT_ENCODING - never
+ * replacement characters. Measure first (dst NULL), then convert into
+ * an exact buffer; no terminator is written (callers own layout).
+ * unit is the code-unit width in bytes (2 or 4).
+ */
+int reflect_utf8_from_units(
+    const void *src, size_t unit, size_t max_units, char *dst, size_t dst_cap, size_t *out_len);
+int reflect_units_from_utf8(const char *src,
+                            size_t src_len,
+                            size_t unit,
+                            void *dst,
+                            size_t dst_cap_units,
+                            size_t *out_units);
+
 /* Width-matched store: the write-side twin of reflect_load_u64(). */
-static inline void reflect_store_u64(unsigned char *bytes, size_t nbytes,
-                                     uint64_t value)
-{
+static inline void reflect_store_u64(unsigned char *bytes, size_t nbytes, uint64_t value) {
     switch (nbytes) {
     case 1: {
         uint8_t narrowed = (uint8_t)value;
@@ -154,9 +254,7 @@ static inline void reflect_store_u64(unsigned char *bytes, size_t nbytes,
  * author input) extract as 0 and leave the unit untouched on insert -
  * defined behavior either way.
  */
-static inline uint64_t reflect_bits_extract(uint64_t unit, size_t offset,
-                                            size_t width)
-{
+static inline uint64_t reflect_bits_extract(uint64_t unit, size_t offset, size_t width) {
     uint64_t mask = 0;
     if ((0 == width) || (64 < width) || (64 <= offset) || (64 < (offset + width))) {
         return 0;
@@ -165,9 +263,10 @@ static inline uint64_t reflect_bits_extract(uint64_t unit, size_t offset,
     return (unit >> offset) & mask;
 }
 
-static inline void reflect_bits_insert(uint64_t *unit, size_t offset,
-                                       size_t width, uint64_t value)
-{
+static inline void reflect_bits_insert(uint64_t *unit,
+                                       size_t offset,
+                                       size_t width,
+                                       uint64_t value) {
     uint64_t mask = 0;
     if ((0 == width) || (64 < width) || (64 <= offset) || (64 < (offset + width))) {
         return;
@@ -182,10 +281,8 @@ static inline void reflect_bits_insert(uint64_t *unit, size_t offset,
  * displacement from it. NULL means the tag names no known variant.
  */
 static inline const shrewd_basic_reflect_variant_t *reflect_union_variant(
-        const shrewd_basic_reflect_field_t *field, const unsigned char *storage)
-{
-    int64_t tag = reflect_load_i64(storage - field->sb_refl_offset
-                                   + field->sb_refl_limit_offset,
+    const shrewd_basic_reflect_field_t *field, const unsigned char *storage) {
+    int64_t tag = reflect_load_i64(storage - field->sb_refl_offset + field->sb_refl_limit_offset,
                                    field->sb_refl_limit_size);
     const shrewd_basic_reflect_type_t *type = field->sb_refl_type;
     for (size_t i = 0; i < type->sb_refl_variant_count; ++i) {
@@ -211,15 +308,14 @@ typedef struct reflect_array_view {
 } reflect_array_view_t;
 
 static inline reflect_array_view_t reflect_array_view(const unsigned char *object,
-        const shrewd_basic_reflect_field_t *field)
-{
+                                                      const shrewd_basic_reflect_field_t *field) {
     reflect_array_view_t view;
     view.base = NULL;
     view.count = 0;
     view.stride = field->sb_refl_stride;
     if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_DARRAY)) {
-        const unsigned char *table =
-                (const unsigned char *)reflect_load_ptr(object + field->sb_refl_offset);
+        const unsigned char *table
+            = (const unsigned char *)reflect_load_ptr(object + field->sb_refl_offset);
         if (NULL == table) {
             return view;
         }
@@ -229,16 +325,16 @@ static inline reflect_array_view_t reflect_array_view(const unsigned char *objec
                 ++view.count;
             }
         } else {
-            view.count = (size_t)reflect_load_u64(
-                    object + field->sb_refl_limit_offset, field->sb_refl_limit_size);
+            view.count = (size_t)reflect_load_u64(object + field->sb_refl_limit_offset,
+                                                  field->sb_refl_limit_size);
         }
         return view;
     }
     if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_FLEX)) {
         /* Flexible tail: inline storage, run-time bound. */
         view.base = object + field->sb_refl_offset;
-        view.count = (size_t)reflect_load_u64(
-                object + field->sb_refl_limit_offset, field->sb_refl_limit_size);
+        view.count = (size_t)reflect_load_u64(object + field->sb_refl_limit_offset,
+                                              field->sb_refl_limit_size);
         return view;
     }
     view.base = object + field->sb_refl_offset;
@@ -253,8 +349,7 @@ static inline reflect_array_view_t reflect_array_view(const unsigned char *objec
  * never be embedded in another struct.
  */
 static inline size_t reflect_object_size(const unsigned char *object,
-        const shrewd_basic_reflect_type_t *type)
-{
+                                         const shrewd_basic_reflect_type_t *type) {
     size_t size = type->sb_refl_size;
     for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
         const shrewd_basic_reflect_field_t *field = &type->sb_refl_fields[i];

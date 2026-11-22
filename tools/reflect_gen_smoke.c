@@ -15,9 +15,8 @@
 #include "generated.h"
 #include "reflect_gen_sample.h"
 
-int main(void)
-{
-    shape_t s;
+int main(void) {
+    shape_t s = {0};
     memset(&s, 0, sizeof(s));
     s.name = "shape";
     s.color = COLOR_GREEN;
@@ -29,7 +28,7 @@ int main(void)
     s.count = 3;
     (void)shrewd_basic_reflect_dump(&shape_t_reflect, &s, "shape");
 
-    shape_t t;
+    shape_t t = {0};
     memset(&t, 0, sizeof(t));
     t.name = "shape";
     t.color = COLOR_GREEN;
@@ -41,13 +40,12 @@ int main(void)
     t.count = 3;
     bool same = false;
     if ((SHREWD_BASIC_ERR_OK != shrewd_basic_reflect_equal(&s, &t, &shape_t_reflect, &same))
-            || !same) {
+        || (!same)) {
         printf("reflect_gen_smoke: equal FAILED\n");
         return 1;
     }
     const char *name = NULL;
-    if (SHREWD_BASIC_ERR_OK
-            != shrewd_basic_reflect_enum_find_name(&color_t_reflect, 1, &name)) {
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_reflect_enum_find_name(&color_t_reflect, 1, &name)) {
         printf("reflect_gen_smoke: enum FAILED\n");
         return 1;
     }
@@ -55,11 +53,10 @@ int main(void)
     void *block_a = NULL;
     void *block_b = NULL;
     if ((SHREWD_BASIC_ERR_OK
-                != shrewd_basic_platform_calloc(&block_a, 1,
-                                                sizeof(packet_t) + (2 * sizeof(int32_t))))
-            || (SHREWD_BASIC_ERR_OK
-                != shrewd_basic_platform_calloc(&block_b, 1,
-                                                sizeof(packet_t) + (2 * sizeof(int32_t))))) {
+         != shrewd_basic_platform_calloc(&block_a, 1, sizeof(packet_t) + (2 * sizeof(int32_t))))
+        || (SHREWD_BASIC_ERR_OK
+            != shrewd_basic_platform_calloc(
+                &block_b, 1, sizeof(packet_t) + (2 * sizeof(int32_t))))) {
         printf("reflect_gen_smoke: flex setup FAILED\n");
         return 1;
     }
@@ -71,8 +68,8 @@ int main(void)
     pb->len = 2;
     pb->data[0] = 4;
     pb->data[1] = 5;
-    if (SHREWD_BASIC_ERR_OK != shrewd_basic_reflect_equal(pa, pb, &packet_t_reflect, &same)
-            || !same) {
+    if ((SHREWD_BASIC_ERR_OK != shrewd_basic_reflect_equal(pa, pb, &packet_t_reflect, &same))
+        || (!same)) {
         printf("reflect_gen_smoke: flex equal FAILED\n");
         return 1;
     }

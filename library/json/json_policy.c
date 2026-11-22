@@ -15,8 +15,7 @@ SHREWD_BASIC_LOG_MODULE_DECLARE(shrewd_basic_json_log);
 
 void json_policy_view(const shrewd_basic_json_info_t *info,
                       const shrewd_basic_reflect_field_t *field,
-                      shrewd_basic_json_key_info_t *out)
-{
+                      shrewd_basic_json_key_info_t *out) {
     out->field = field->sb_refl_name;
     out->keys = &field->sb_refl_name;
     out->key_count = 1;
@@ -73,24 +72,29 @@ void json_policy_view(const shrewd_basic_json_info_t *info,
 
 int shrewd_basic_json_keys(const shrewd_basic_reflect_type_t *type,
                            const shrewd_basic_json_info_t *info,
-                           shrewd_basic_json_keys_fn fn, void *ctx)
-{
+                           shrewd_basic_json_keys_fn fn,
+                           void *ctx) {
     if ((NULL == type) || (NULL == fn)) {
-        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_json_log,
-                         "policy", "keys: type or fn is NULL\n");
+        shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                         shrewd_basic_json_log,
+                         "policy",
+                         "keys: type or fn is NULL\n");
         return SHREWD_BASIC_ERR_ARG_INVALID;
     }
     if (NULL != info) {
         if (info->type != type) {
-            shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN, shrewd_basic_json_log,
-                             "policy", "keys: info describes \"%s\", not \"%s\"\n",
-                             info->type->sb_refl_name, type->sb_refl_name);
+            shrewd_basic_log(SHREWD_BASIC_LOG_LEVEL_WARN,
+                             shrewd_basic_json_log,
+                             "policy",
+                             "keys: info describes \"%s\", not \"%s\"\n",
+                             info->type->sb_refl_name,
+                             type->sb_refl_name);
             return SHREWD_BASIC_ERR_ARG_INVALID;
         }
         type = info->type;
     }
     for (size_t i = 0; i < type->sb_refl_field_count; ++i) {
-        shrewd_basic_json_key_info_t view;
+        shrewd_basic_json_key_info_t view = {0};
         json_policy_view(info, &type->sb_refl_fields[i], &view);
         if (0 != fn(ctx, &view)) {
             return SHREWD_BASIC_ERR_OK;

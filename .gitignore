@@ -1,35 +1,48 @@
-# ---> C
+# ---------------------------------------------------------------------------
 # Prerequisites
+# ---------------------------------------------------------------------------
 *.d
 
+# ---------------------------------------------------------------------------
 # Object files
+# ---------------------------------------------------------------------------
 *.o
 *.ko
 *.obj
 *.elf
 
+# ---------------------------------------------------------------------------
 # Linker output
+# ---------------------------------------------------------------------------
 *.ilk
 *.map
 *.exp
 
-# Precompiled Headers
+# ---------------------------------------------------------------------------
+# Precompiled headers
+# ---------------------------------------------------------------------------
 *.gch
 *.pch
 
+# ---------------------------------------------------------------------------
 # Libraries
+# ---------------------------------------------------------------------------
 *.lib
 *.a
 *.la
 *.lo
 
+# ---------------------------------------------------------------------------
 # Shared objects (inc. Windows DLLs)
+# ---------------------------------------------------------------------------
 *.dll
 *.so
 *.so.*
 *.dylib
 
+# ---------------------------------------------------------------------------
 # Executables
+# ---------------------------------------------------------------------------
 *.exe
 *.out
 *.app
@@ -37,13 +50,17 @@
 *.x86_64
 *.hex
 
+# ---------------------------------------------------------------------------
 # Debug files
+# ---------------------------------------------------------------------------
 *.dSYM/
 *.su
 *.idb
 *.pdb
 
-# Kernel Module Compile Results
+# ---------------------------------------------------------------------------
+# Kernel module compile results
+# ---------------------------------------------------------------------------
 *.mod*
 *.cmd
 .tmp_versions/
@@ -52,67 +69,59 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-# ---> C++
-# Prerequisites
-*.d
-
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
-
-# ---> JetBrains IDEs
-
-
-# ---> VisualStudioCode
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-!.vscode/*.code-snippets
-
-# Local History for Visual Studio Code
-.history/
-
-# Built Visual Studio Code Extensions
-*.vsix
-
-
-# ---> CMake
-build/
+# ---------------------------------------------------------------------------
+# CMake
+# ---------------------------------------------------------------------------
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+CTestTestfile.cmake
+CMakeUserPresets.cmake
+Testing/
+install_manifest.txt
+compile_commands.json
+_MCPs/
 cmake-build-*/
+
+# ---------------------------------------------------------------------------
+# Build directories (in-source and out-of-source)
+# ---------------------------------------------------------------------------
+build/
+build-*/
 out/
+dist/
 
-
-# Demo output (programs/log_demo.c)
-shrewd-basic-log-demo.txt
-shrewd-basic-log-demo-global.txt
-
-# Doxygen output
+# ---------------------------------------------------------------------------
+# Documentation output (doxygen/Doxyfile)
+# ---------------------------------------------------------------------------
 doxygen/html/
+doxygen/latex/
+doxygen/xml/
+doxygen/man/
+
+# ---------------------------------------------------------------------------
+# IDE and editor settings
+# ---------------------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.vs/
+
+# ---------------------------------------------------------------------------
+# Test litter (created next to the test run)
+# ---------------------------------------------------------------------------
+shrewd-basic-log-*.txt
+
+# ---------------------------------------------------------------------------
+# OS generated files
+# ---------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

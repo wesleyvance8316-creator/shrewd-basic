@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <uchar.h>
 
 #include "shrewd-basic/log/log.h"
 #include "shrewd-basic/platform/memory.h"
@@ -13,16 +14,14 @@
 
 static int g_failures = 0;
 
-static void expect_eq_int(const char *name, int actual, int expected)
-{
+static void expect_eq_int(const char *name, int actual, int expected) {
     if (actual != expected) {
         fprintf(stderr, "FAIL %s: got %d, want %d\n", name, actual, expected);
         ++g_failures;
     }
 }
 
-static void expect_true(const char *name, int condition)
-{
+static void expect_true(const char *name, int condition) {
     if (0 == condition) {
         fprintf(stderr, "FAIL %s\n", name);
         ++g_failures;
@@ -50,11 +49,14 @@ typedef struct {
     point_t pair[2];
 } person_t;
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_point_reflect, point_t,
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, x),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, y));
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_point_reflect,
+                                 point_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, x),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, y));
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_person_reflect, person_t,
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(
+    g_person_reflect,
+    person_t,
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, active),
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, grade),
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(person_t, small),
@@ -73,8 +75,11 @@ typedef struct {
     int32_t wide[40];
 } wide_t;
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_wide_reflect, wide_t,
-    SHREWD_BASIC_REFLECT_FIELD_ARRAY(wide_t, wide, shrewd_basic_reflect_int32));
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_wide_reflect,
+                                 wide_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_ARRAY(wide_t,
+                                                                  wide,
+                                                                  shrewd_basic_reflect_int32));
 
 /* Oversized object: exercises the 1 MiB dump body cap (struct arrays
    render one block each, so this one really is megabytes of output). */
@@ -82,8 +87,9 @@ typedef struct {
     point_t points[100000];
 } huge_t;
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_huge_reflect, huge_t,
-    SHREWD_BASIC_REFLECT_FIELD_ARRAY(huge_t, points, g_point_reflect));
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_huge_reflect,
+                                 huge_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_ARRAY(huge_t, points, g_point_reflect));
 
 /* Self-referential type: DEFINE forward-declares the descriptor, so it
  * can appear inside its own field table. */
@@ -92,9 +98,10 @@ typedef struct node {
     struct node *next;
 } node_t;
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_node_reflect, node_t,
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(node_t, data),
-    SHREWD_BASIC_REFLECT_FIELD_PTR(node_t, next, g_node_reflect));
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_node_reflect,
+                                 node_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(node_t, data),
+                                 SHREWD_BASIC_REFLECT_FIELD_PTR(node_t, next, g_node_reflect));
 
 /* Pointer members of every flavor. */
 typedef struct {
@@ -104,7 +111,9 @@ typedef struct {
     point_t *team[2];
 } refs_t;
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_refs_reflect, refs_t,
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(
+    g_refs_reflect,
+    refs_t,
     SHREWD_BASIC_REFLECT_FIELD_PTR(refs_t, p_str, shrewd_basic_reflect_string),
     SHREWD_BASIC_REFLECT_FIELD_PTR(refs_t, ctx, shrewd_basic_reflect_void),
     SHREWD_BASIC_REFLECT_FIELD_PTR(refs_t, counter, shrewd_basic_reflect_int32),
@@ -115,23 +124,20 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_refs_reflect, refs_t,
 static int g_type_ops_calls = 0;
 static int g_override_ops_calls = 0;
 
-static int ops_get(const void *pointee, void *out_value, size_t value_size)
-{
+static int ops_get(const void *pointee, void *out_value, size_t value_size) {
     ++g_type_ops_calls;
     memcpy(out_value, pointee, value_size);
     return SHREWD_BASIC_ERR_OK;
 }
 
-static int ops_set(void *pointee, const void *value, size_t value_size)
-{
+static int ops_set(void *pointee, const void *value, size_t value_size) {
     ++g_type_ops_calls;
     memcpy(pointee, value, value_size);
     return SHREWD_BASIC_ERR_OK;
 }
 
 /* Field-level override: rounds the value up by one so its use is visible. */
-static int ops_get_override(const void *pointee, void *out_value, size_t value_size)
-{
+static int ops_get_override(const void *pointee, void *out_value, size_t value_size) {
     int32_t value = 0;
     ++g_override_ops_calls;
     memcpy(&value, pointee, sizeof(value));
@@ -141,8 +147,7 @@ static int ops_get_override(const void *pointee, void *out_value, size_t value_s
     return SHREWD_BASIC_ERR_OK;
 }
 
-static int ops_set_override(void *pointee, const void *value, size_t value_size)
-{
+static int ops_set_override(void *pointee, const void *value, size_t value_size) {
     int32_t rounded = 0;
     ++g_override_ops_calls;
     memcpy(&rounded, value, sizeof(rounded));
@@ -152,21 +157,19 @@ static int ops_set_override(void *pointee, const void *value, size_t value_size)
     return SHREWD_BASIC_ERR_OK;
 }
 
-static const shrewd_basic_reflect_ops_t g_type_ops = {
-    .value_size = sizeof(int32_t),
-    .get = ops_get,
-    .set = ops_set,
-    .check = NULL,
-    .copy = NULL,
-    .destroy = NULL };
+static const shrewd_basic_reflect_ops_t g_type_ops = {.value_size = sizeof(int32_t),
+                                                      .get = ops_get,
+                                                      .set = ops_set,
+                                                      .check = NULL,
+                                                      .copy = NULL,
+                                                      .destroy = NULL};
 
-static const shrewd_basic_reflect_ops_t g_override_ops = {
-    .value_size = sizeof(int32_t),
-    .get = ops_get_override,
-    .set = ops_set_override,
-    .check = NULL,
-    .copy = NULL,
-    .destroy = NULL };
+static const shrewd_basic_reflect_ops_t g_override_ops = {.value_size = sizeof(int32_t),
+                                                          .get = ops_get_override,
+                                                          .set = ops_set_override,
+                                                          .check = NULL,
+                                                          .copy = NULL,
+                                                          .destroy = NULL};
 
 /* An opaque handle whose layout only the application knows (an int32 here). */
 SHREWD_BASIC_REFLECT_OPAQUE_DEFINE(g_handle_reflect, "handle", g_type_ops);
@@ -179,49 +182,44 @@ typedef struct {
     int32_t arr_ops[2];
 } ops_refs_t;
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_ops_refs_reflect, ops_refs_t,
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(
+    g_ops_refs_reflect,
+    ops_refs_t,
     SHREWD_BASIC_REFLECT_FIELD_PTR(ops_refs_t, type_ops_slot, g_handle_reflect),
-    SHREWD_BASIC_REFLECT_FIELD_PTR_OPS(ops_refs_t, field_ops_slot, g_handle_reflect,
-                                       g_override_ops),
-    SHREWD_BASIC_REFLECT_FIELD_PTR_ARRAY_OPS(ops_refs_t, many, g_handle_reflect,
-                                             g_override_ops),
+    SHREWD_BASIC_REFLECT_FIELD_PTR_OPS(
+        ops_refs_t, field_ops_slot, g_handle_reflect, g_override_ops),
+    SHREWD_BASIC_REFLECT_FIELD_PTR_ARRAY_OPS(ops_refs_t, many, g_handle_reflect, g_override_ops),
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE_OPS(ops_refs_t, prim_ops, g_type_ops),
-    SHREWD_BASIC_REFLECT_FIELD_ARRAY_OPS(ops_refs_t, arr_ops, shrewd_basic_reflect_int32,
-                                         g_override_ops));
+    SHREWD_BASIC_REFLECT_FIELD_ARRAY_OPS(
+        ops_refs_t, arr_ops, shrewd_basic_reflect_int32, g_override_ops));
 
 static int g_check_calls = 0;
 
-static int ops_check(const void *pointee)
-{
+static int ops_check(const void *pointee) {
     (void)pointee;
     ++g_check_calls;
     return SHREWD_BASIC_ERR_OK;
 }
 
 static const shrewd_basic_reflect_ops_t g_point_ops = {
-    .value_size = 0,
-    .get = NULL,
-    .set = NULL,
-    .check = ops_check,
-    .copy = NULL,
-    .destroy = NULL };
+    .value_size = 0, .get = NULL, .set = NULL, .check = ops_check, .copy = NULL, .destroy = NULL};
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE_OPS(g_point_ops_reflect, point_t, g_point_ops,
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, x),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, y));
+SHREWD_BASIC_REFLECT_TYPE_DEFINE_OPS(g_point_ops_reflect,
+                                     point_t,
+                                     g_point_ops,
+                                     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, x),
+                                     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, y));
 
 /* --- graph ops fixtures ---------------------------------------------- */
 
-static int ops_handle_check(const void *pointee)
-{
+static int ops_handle_check(const void *pointee) {
     int32_t value = 0;
     ++g_check_calls;
     memcpy(&value, pointee, sizeof(value));
     return (0 > value) ? SHREWD_BASIC_ERR_KEY_EXISTS : SHREWD_BASIC_ERR_OK;
 }
 
-static int ops_handle_copy(void **out, const void *pointee)
-{
+static int ops_handle_copy(void **out, const void *pointee) {
     void *block = NULL;
     int status = shrewd_basic_platform_alloc(&block, sizeof(int32_t));
     if (SHREWD_BASIC_ERR_OK != status) {
@@ -232,27 +230,24 @@ static int ops_handle_copy(void **out, const void *pointee)
     return SHREWD_BASIC_ERR_OK;
 }
 
-static void ops_handle_destroy(void *pointee)
-{
+static void ops_handle_destroy(void *pointee) {
     (void)shrewd_basic_platform_free(&pointee);
 }
 
-static int ops_handle_render(const void *pointee, char *buf, size_t buf_size)
-{
+static int ops_handle_render(const void *pointee, char *buf, size_t buf_size) {
     int32_t value = 0;
     memcpy(&value, pointee, sizeof(value));
     (void)snprintf(buf, buf_size, "handle#%d", value);
     return SHREWD_BASIC_ERR_OK;
 }
 
-static const shrewd_basic_reflect_ops_t g_handle_ops = {
-    .value_size = sizeof(int32_t),
-    .get = NULL,
-    .set = NULL,
-    .check = ops_handle_check,
-    .copy = ops_handle_copy,
-    .render = ops_handle_render,
-    .destroy = ops_handle_destroy };
+static const shrewd_basic_reflect_ops_t g_handle_ops = {.value_size = sizeof(int32_t),
+                                                        .get = NULL,
+                                                        .set = NULL,
+                                                        .check = ops_handle_check,
+                                                        .copy = ops_handle_copy,
+                                                        .render = ops_handle_render,
+                                                        .destroy = ops_handle_destroy};
 
 SHREWD_BASIC_REFLECT_OPAQUE_DEFINE(g_full_handle_reflect, "handle", g_handle_ops);
 
@@ -263,7 +258,9 @@ typedef struct {
     int32_t *handle;
 } graph_t;
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_graph_reflect, graph_t,
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(
+    g_graph_reflect,
+    graph_t,
     SHREWD_BASIC_REFLECT_FIELD_PTR(graph_t, home, g_point_reflect),
     SHREWD_BASIC_REFLECT_FIELD_PTR(graph_t, counter, shrewd_basic_reflect_int32),
     SHREWD_BASIC_REFLECT_FIELD_PTR(graph_t, p_str, shrewd_basic_reflect_string),
@@ -272,21 +269,18 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_graph_reflect, graph_t,
 /* find_field wrapper that reports failures as test failures. */
 static const shrewd_basic_reflect_field_t *find_or_fail(const char *test_name,
                                                         const shrewd_basic_reflect_type_t *type,
-                                                        const char *field_name)
-{
+                                                        const char *field_name) {
     const shrewd_basic_reflect_field_t *field = NULL;
     int status = shrewd_basic_reflect_type_find_field(type, field_name, &field);
     if (SHREWD_BASIC_ERR_OK != status) {
-        fprintf(stderr, "FAIL %s: find_field(%s) returned %d\n",
-                test_name, field_name, status);
+        fprintf(stderr, "FAIL %s: find_field(%s) returned %d\n", test_name, field_name, status);
         ++g_failures;
         return NULL;
     }
     return field;
 }
 
-static void test_describe(void)
-{
+static void test_describe(void) {
     expect_true("describe type name", 0 == strcmp(g_person_reflect.sb_refl_name, "person_t"));
     expect_true("describe type kind",
                 SHREWD_BASIC_REFLECT_KIND_STRUCT == g_person_reflect.sb_refl_kind);
@@ -295,7 +289,7 @@ static void test_describe(void)
     expect_true("describe fields table", NULL != g_person_reflect.sb_refl_fields);
     expect_true("describe primitive has no fields",
                 (0 == shrewd_basic_reflect_int32.sb_refl_field_count)
-                && (NULL == shrewd_basic_reflect_int32.sb_refl_fields));
+                    && (NULL == shrewd_basic_reflect_int32.sb_refl_fields));
 
     const shrewd_basic_reflect_field_t *f = find_or_fail("describe", &g_person_reflect, "age");
     if (NULL != f) {
@@ -315,15 +309,14 @@ static void test_describe(void)
         expect_true("describe tag type", &shrewd_basic_reflect_char == f->sb_refl_type);
         expect_true("describe tag array shape",
                     ((size_t)4 == f->sb_refl_count) && ((size_t)4 == f->sb_refl_size)
-                    && (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY == f->sb_refl_flags));
+                        && (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY == f->sb_refl_flags));
     }
     f = find_or_fail("describe", &g_person_reflect, "scores");
     if (NULL != f) {
         expect_true("describe scores type", &shrewd_basic_reflect_int32 == f->sb_refl_type);
         expect_true("describe scores array shape",
-                    ((size_t)3 == f->sb_refl_count)
-                    && (3 * sizeof(int32_t) == f->sb_refl_size)
-                    && (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY == f->sb_refl_flags));
+                    ((size_t)3 == f->sb_refl_count) && (3 * sizeof(int32_t) == f->sb_refl_size)
+                        && (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY == f->sb_refl_flags));
     }
     f = find_or_fail("describe", &g_person_reflect, "home");
     if (NULL != f) {
@@ -340,29 +333,28 @@ static void test_describe(void)
         expect_true("describe big type", &shrewd_basic_reflect_uint64 == f->sb_refl_type);
     }
 
-    expect_true("describe kind name int32",
-                0 == strcmp(shrewd_basic_reflect_kind_name(SHREWD_BASIC_REFLECT_KIND_INT32),
-                            "int32"));
-    expect_true("describe kind name struct",
-                0 == strcmp(shrewd_basic_reflect_kind_name(SHREWD_BASIC_REFLECT_KIND_STRUCT),
-                            "struct"));
-    expect_true("describe kind name unknown",
-                0 == strcmp(shrewd_basic_reflect_kind_name((shrewd_basic_reflect_kind_t)99),
-                            "unknown"));
+    expect_true(
+        "describe kind name int32",
+        0 == strcmp(shrewd_basic_reflect_kind_name(SHREWD_BASIC_REFLECT_KIND_INT32), "int32"));
+    expect_true(
+        "describe kind name struct",
+        0 == strcmp(shrewd_basic_reflect_kind_name(SHREWD_BASIC_REFLECT_KIND_STRUCT), "struct"));
+    expect_true(
+        "describe kind name unknown",
+        0 == strcmp(shrewd_basic_reflect_kind_name((shrewd_basic_reflect_kind_t)99), "unknown"));
 
     /* Traversal accessors. */
     expect_true("field count accessor",
                 (size_t)12 == shrewd_basic_reflect_type_field_count(&g_person_reflect));
-    expect_true("field at accessor",
-                0 == strcmp(shrewd_basic_reflect_type_field_at(&g_person_reflect, 3)
-                            ->sb_refl_name, "age"));
+    expect_true(
+        "field at accessor",
+        0 == strcmp(shrewd_basic_reflect_type_field_at(&g_person_reflect, 3)->sb_refl_name, "age"));
     expect_true("field at range",
                 NULL == shrewd_basic_reflect_type_field_at(&g_person_reflect, 12));
     expect_true("field count on NULL", 0 == shrewd_basic_reflect_type_field_count(NULL));
 }
 
-static void test_find_field(void)
-{
+static void test_find_field(void) {
     const shrewd_basic_reflect_field_t *field = NULL;
     expect_eq_int("find_field hit",
                   shrewd_basic_reflect_type_find_field(&g_person_reflect, "age", &field),
@@ -382,9 +374,8 @@ static void test_find_field(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
-static void test_get_set_scalars(void)
-{
-    person_t person;
+static void test_get_set_scalars(void) {
+    person_t person = {0};
     memset(&person, 0, sizeof(person));
 
     const shrewd_basic_reflect_field_t *f = find_or_fail("scalars", &g_person_reflect, "age");
@@ -392,10 +383,12 @@ static void test_get_set_scalars(void)
         return;
     }
     int32_t v32 = 42;
-    expect_eq_int("set age", shrewd_basic_reflect_field_set(&person, f, &v32, sizeof(v32)),
+    expect_eq_int("set age",
+                  shrewd_basic_reflect_field_set(&person, f, &v32, sizeof(v32)),
                   SHREWD_BASIC_ERR_OK);
     int32_t r32 = 0;
-    expect_eq_int("get age", shrewd_basic_reflect_field_get(&person, f, &r32, sizeof(r32)),
+    expect_eq_int("get age",
+                  shrewd_basic_reflect_field_get(&person, f, &r32, sizeof(r32)),
                   SHREWD_BASIC_ERR_OK);
     expect_true("age round-trip", (42 == r32) && (42 == person.age));
 
@@ -410,28 +403,32 @@ static void test_get_set_scalars(void)
     char ch = 'A';
     f = find_or_fail("scalars", &g_person_reflect, "grade");
     if (NULL != f) {
-        expect_eq_int("set grade", shrewd_basic_reflect_field_set(&person, f, &ch, sizeof(ch)),
+        expect_eq_int("set grade",
+                      shrewd_basic_reflect_field_set(&person, f, &ch, sizeof(ch)),
                       SHREWD_BASIC_ERR_OK);
         expect_true("grade round-trip", 'A' == person.grade);
     }
     int8_t s8 = -7;
     f = find_or_fail("scalars", &g_person_reflect, "small");
     if (NULL != f) {
-        expect_eq_int("set small", shrewd_basic_reflect_field_set(&person, f, &s8, sizeof(s8)),
+        expect_eq_int("set small",
+                      shrewd_basic_reflect_field_set(&person, f, &s8, sizeof(s8)),
                       SHREWD_BASIC_ERR_OK);
         expect_true("small round-trip", -7 == person.small);
     }
     uint64_t u64 = UINT64_C(0x1122334455667788);
     f = find_or_fail("scalars", &g_person_reflect, "big");
     if (NULL != f) {
-        expect_eq_int("set big", shrewd_basic_reflect_field_set(&person, f, &u64, sizeof(u64)),
+        expect_eq_int("set big",
+                      shrewd_basic_reflect_field_set(&person, f, &u64, sizeof(u64)),
                       SHREWD_BASIC_ERR_OK);
         expect_true("big round-trip", u64 == person.big);
     }
     float f32 = 1.5f;
     f = find_or_fail("scalars", &g_person_reflect, "ratio");
     if (NULL != f) {
-        expect_eq_int("set ratio", shrewd_basic_reflect_field_set(&person, f, &f32, sizeof(f32)),
+        expect_eq_int("set ratio",
+                      shrewd_basic_reflect_field_set(&person, f, &f32, sizeof(f32)),
                       SHREWD_BASIC_ERR_OK);
         expect_true("ratio round-trip", 1.5f == person.ratio);
     }
@@ -465,9 +462,8 @@ static void test_get_set_scalars(void)
     }
 }
 
-static void test_get_set_string(void)
-{
-    person_t person;
+static void test_get_set_string(void) {
+    person_t person = {0};
     memset(&person, 0, sizeof(person));
 
     const shrewd_basic_reflect_field_t *f = find_or_fail("string", &g_person_reflect, "name");
@@ -475,11 +471,13 @@ static void test_get_set_string(void)
         return;
     }
     const char *text = "hello";
-    expect_eq_int("set name", shrewd_basic_reflect_field_set(&person, f, &text, sizeof(text)),
+    expect_eq_int("set name",
+                  shrewd_basic_reflect_field_set(&person, f, &text, sizeof(text)),
                   SHREWD_BASIC_ERR_OK);
     expect_true("name pointer lands", text == person.name);
     const char *read = NULL;
-    expect_eq_int("get name", shrewd_basic_reflect_field_get(&person, f, &read, sizeof(read)),
+    expect_eq_int("get name",
+                  shrewd_basic_reflect_field_get(&person, f, &read, sizeof(read)),
                   SHREWD_BASIC_ERR_OK);
     expect_true("name round-trip", (text == read) && (0 == strcmp(read, "hello")));
 
@@ -495,13 +493,11 @@ static void test_get_set_string(void)
     expect_true("name NULL round-trip", NULL == read);
 }
 
-static void test_nested(void)
-{
-    person_t person;
+static void test_nested(void) {
+    person_t person = {0};
     memset(&person, 0, sizeof(person));
 
-    const shrewd_basic_reflect_field_t *home =
-        find_or_fail("nested", &g_person_reflect, "home");
+    const shrewd_basic_reflect_field_t *home = find_or_fail("nested", &g_person_reflect, "home");
     if (NULL == home) {
         return;
     }
@@ -531,13 +527,11 @@ static void test_nested(void)
     expect_true("nested blob lands", (11 == person.home.x) && (22 == person.home.y));
 }
 
-static void test_array(void)
-{
-    person_t person;
+static void test_array(void) {
+    person_t person = {0};
     memset(&person, 0, sizeof(person));
 
-    const shrewd_basic_reflect_field_t *scores =
-        find_or_fail("array", &g_person_reflect, "scores");
+    const shrewd_basic_reflect_field_t *scores = find_or_fail("array", &g_person_reflect, "scores");
     if (NULL == scores) {
         return;
     }
@@ -558,16 +552,16 @@ static void test_array(void)
     const shrewd_basic_reflect_field_t *tag = find_or_fail("array", &g_person_reflect, "tag");
     if (NULL != tag) {
         char text[4] = {'t', 'a', 'g', '\0'};
-        expect_eq_int("set tag", shrewd_basic_reflect_field_set(&person, tag, text, sizeof(text)),
+        expect_eq_int("set tag",
+                      shrewd_basic_reflect_field_set(&person, tag, text, sizeof(text)),
                       SHREWD_BASIC_ERR_OK);
         expect_true("tag lands", 0 == memcmp(person.tag, text, sizeof(text)));
     }
 }
 
 /* Read a stream's whole content into buf (NUL-terminated). */
-static void slurp(FILE *stream, char *buf, size_t size)
-{
-    size_t n;
+static void slurp(FILE *stream, char *buf, size_t size) {
+    size_t n = 0;
     rewind(stream);
     n = fread(buf, 1, size - 1, stream);
     buf[n] = '\0';
@@ -575,60 +569,58 @@ static void slurp(FILE *stream, char *buf, size_t size)
 
 /* --- enum fixtures --------------------------------------------------- */
 
-typedef enum {
-    MODE_OFF = 0,
-    MODE_ON = 1,
-    MODE_AUTO = 2
-} mode_t;
+typedef enum { MODE_OFF = 0, MODE_ON = 1, MODE_AUTO = 2 } mode_t;
 
-SHREWD_BASIC_REFLECT_ENUM_DEFINE(g_mode_reflect, mode_t,
-    SHREWD_BASIC_REFLECT_ENUM_VALUE(MODE_OFF),
-    SHREWD_BASIC_REFLECT_ENUM_VALUE(MODE_ON),
-    SHREWD_BASIC_REFLECT_ENUM_VALUE(MODE_AUTO));
+SHREWD_BASIC_REFLECT_ENUM_DEFINE(g_mode_reflect,
+                                 mode_t,
+                                 SHREWD_BASIC_REFLECT_ENUM_VALUE(MODE_OFF),
+                                 SHREWD_BASIC_REFLECT_ENUM_VALUE(MODE_ON),
+                                 SHREWD_BASIC_REFLECT_ENUM_VALUE(MODE_AUTO));
 
 typedef struct {
     mode_t mode;
     mode_t *mode_ptr;
 } config_t;
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_config_reflect, config_t,
-    SHREWD_BASIC_REFLECT_FIELD_ENUM(config_t, mode, g_mode_reflect),
-    SHREWD_BASIC_REFLECT_FIELD_PTR(config_t, mode_ptr, g_mode_reflect));
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_config_reflect,
+                                 config_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_ENUM(config_t, mode, g_mode_reflect),
+                                 SHREWD_BASIC_REFLECT_FIELD_PTR(config_t,
+                                                                mode_ptr,
+                                                                g_mode_reflect));
 /* --- equal fixtures --------------------------------------------------- */
 
 /* Field-level ops that always report inequality (visible override). */
-static int ops_equal_always(const void *a, const void *b, bool *out_equal)
-{
+static int ops_equal_always(const void *a, const void *b, bool *out_equal) {
     (void)a;
     (void)b;
     *out_equal = false;
     return SHREWD_BASIC_ERR_OK;
 }
 
-static const shrewd_basic_reflect_ops_t g_equal_ops = {
-    .value_size = 0,
-    .get = NULL,
-    .set = NULL,
-    .check = NULL,
-    .equal = ops_equal_always,
-    .copy = NULL,
-    .destroy = NULL };
+static const shrewd_basic_reflect_ops_t g_equal_ops = {.value_size = 0,
+                                                       .get = NULL,
+                                                       .set = NULL,
+                                                       .check = NULL,
+                                                       .equal = ops_equal_always,
+                                                       .copy = NULL,
+                                                       .destroy = NULL};
 
 typedef struct {
     int32_t *p;
 } wrap_t;
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_wrap_reflect, wrap_t,
-    SHREWD_BASIC_REFLECT_FIELD_PTR_OPS(wrap_t, p, shrewd_basic_reflect_int32,
-                                       g_equal_ops));
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(
+    g_wrap_reflect,
+    wrap_t,
+    SHREWD_BASIC_REFLECT_FIELD_PTR_OPS(wrap_t, p, shrewd_basic_reflect_int32, g_equal_ops));
 
-static void test_equal(void)
-{
+static void test_equal(void) {
     bool same = false;
 
     /* Scalars and strings compare by value, not by pointer. */
-    person_t a;
-    person_t b;
+    person_t a = {0};
+    person_t b = {0};
     memset(&a, 0, sizeof(a));
     memset(&b, 0, sizeof(b));
     a.age = 30;
@@ -664,8 +656,8 @@ static void test_equal(void)
     expect_true("equal string null no", !same);
 
     /* Enums compare numerically. */
-    config_t ca;
-    config_t cb;
+    config_t ca = {0};
+    config_t cb = {0};
     memset(&ca, 0, sizeof(ca));
     memset(&cb, 0, sizeof(cb));
     ca.mode = MODE_ON;
@@ -681,16 +673,16 @@ static void test_equal(void)
     expect_true("equal enum differs no", !same);
 
     /* Pointer targets compare deeply, whatever their addresses. */
-    point_t pa;
-    point_t pb;
+    point_t pa = {0};
+    point_t pb = {0};
     memset(&pa, 0, sizeof(pa));
     memset(&pb, 0, sizeof(pb));
     pa.x = 1;
     pa.y = 2;
     pb.x = 1;
     pb.y = 2;
-    graph_t ga;
-    graph_t gb;
+    graph_t ga = {0};
+    graph_t gb = {0};
     memset(&ga, 0, sizeof(ga));
     memset(&gb, 0, sizeof(gb));
     ga.home = &pa;
@@ -716,8 +708,8 @@ static void test_equal(void)
     expect_true("equal pointer both null yes", same);
 
     /* Cycles terminate and compare coinductively. */
-    node_t ra;
-    node_t rb;
+    node_t ra = {0};
+    node_t rb = {0};
     memset(&ra, 0, sizeof(ra));
     memset(&rb, 0, sizeof(rb));
     ra.data = 3;
@@ -737,8 +729,8 @@ static void test_equal(void)
     /* Field-level ops override the comparison. */
     int32_t nine_a = 9;
     int32_t nine_b = 9;
-    wrap_t wa;
-    wrap_t wb;
+    wrap_t wa = {0};
+    wrap_t wb = {0};
     memset(&wa, 0, sizeof(wa));
     memset(&wb, 0, sizeof(wb));
     wa.p = &nine_a;
@@ -749,8 +741,8 @@ static void test_equal(void)
     expect_true("equal ops override no", !same);
 
     /* Opaque targets fall back to identity. */
-    refs_t oa;
-    refs_t ob;
+    refs_t oa = {0};
+    refs_t ob = {0};
     memset(&oa, 0, sizeof(oa));
     memset(&ob, 0, sizeof(ob));
     oa.ctx = &pa;
@@ -770,8 +762,7 @@ static void test_equal(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
-static void test_dump_body_cap(void)
-{
+static void test_dump_body_cap(void) {
     static huge_t huge; /* 800 KB: too big for the stack */
     memset(&huge, 0, sizeof(huge));
     shrewd_basic_log_module_t *module = NULL;
@@ -810,40 +801,39 @@ typedef struct {
     char **argv; /* NULL-terminated pointer table (argv style) */
 } dyn_t;
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_dyn_reflect, dyn_t,
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(
+    g_dyn_reflect,
+    dyn_t,
     SHREWD_BASIC_REFLECT_FIELD_PTR_DARRAY(dyn_t, points, point_count, g_point_reflect),
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dyn_t, point_count),
-    SHREWD_BASIC_REFLECT_FIELD_DARRAY(dyn_t, values, value_count,
-                                      shrewd_basic_reflect_int32),
+    SHREWD_BASIC_REFLECT_FIELD_DARRAY(dyn_t, values, value_count, shrewd_basic_reflect_int32),
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(dyn_t, value_count),
     SHREWD_BASIC_REFLECT_FIELD_SENTINEL(dyn_t, argv, shrewd_basic_reflect_string));
 
-static void test_dynamic_arrays(void)
-{
+static void test_dynamic_arrays(void) {
     /* Descriptor shapes. */
-    const shrewd_basic_reflect_field_t *field =
-        find_or_fail("dyn", &g_dyn_reflect, "points");
+    const shrewd_basic_reflect_field_t *field = find_or_fail("dyn", &g_dyn_reflect, "points");
     if (NULL == field) {
         return;
     }
     expect_true("dyn points shape",
                 ((SHREWD_BASIC_REFLECT_FIELD_F_DARRAY | SHREWD_BASIC_REFLECT_FIELD_F_PTR)
-                        == field->sb_refl_flags)
-                && (sizeof(point_t *) == field->sb_refl_stride)
-                && ((size_t)1 == field->sb_refl_count)
-                && (sizeof(size_t) == field->sb_refl_limit_size));
+                 == field->sb_refl_flags)
+                    && (sizeof(point_t *) == field->sb_refl_stride)
+                    && ((size_t)1 == field->sb_refl_count)
+                    && (sizeof(size_t) == field->sb_refl_limit_size));
     field = find_or_fail("dyn", &g_dyn_reflect, "values");
     if (NULL != field) {
         expect_true("dyn values shape",
                     (SHREWD_BASIC_REFLECT_FIELD_F_DARRAY == field->sb_refl_flags)
-                    && (sizeof(int32_t) == field->sb_refl_stride));
+                        && (sizeof(int32_t) == field->sb_refl_stride));
     }
     field = find_or_fail("dyn", &g_dyn_reflect, "argv");
     if (NULL != field) {
         expect_true("dyn argv shape",
-                    ((SHREWD_BASIC_REFLECT_FIELD_F_DARRAY
-                      | SHREWD_BASIC_REFLECT_FIELD_F_SENTINEL) == field->sb_refl_flags)
-                    && ((size_t)0 == field->sb_refl_limit_size));
+                    ((SHREWD_BASIC_REFLECT_FIELD_F_DARRAY | SHREWD_BASIC_REFLECT_FIELD_F_SENTINEL)
+                     == field->sb_refl_flags)
+                        && ((size_t)0 == field->sb_refl_limit_size));
     }
 
     /* A heap-owned graph (copy/destroy own what they touch, the root
@@ -887,9 +877,8 @@ static void test_dynamic_arrays(void)
 
     /* dump renders all three flavors and NULL tables. */
     shrewd_basic_log_module_t *module = NULL;
-    expect_eq_int("dyn find module",
-                  shrewd_basic_log_module_find("reflect", &module),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "dyn find module", shrewd_basic_log_module_find("reflect", &module), SHREWD_BASIC_ERR_OK);
     FILE *stream = tmpfile();
     expect_true("dyn tmpfile", NULL != stream);
     if (NULL == stream) {
@@ -897,10 +886,9 @@ static void test_dynamic_arrays(void)
         return;
     }
     shrewd_basic_log_module_set_stream(module, stream);
-    expect_eq_int("dyn dump",
-                  shrewd_basic_reflect_dump(&g_dyn_reflect, src, "dyn"),
-                  SHREWD_BASIC_ERR_OK);
-    dyn_t empty;
+    expect_eq_int(
+        "dyn dump", shrewd_basic_reflect_dump(&g_dyn_reflect, src, "dyn"), SHREWD_BASIC_ERR_OK);
+    dyn_t empty = {0};
     memset(&empty, 0, sizeof(empty));
     expect_eq_int("dyn dump empty",
                   shrewd_basic_reflect_dump(&g_dyn_reflect, &empty, "dyn"),
@@ -908,17 +896,13 @@ static void test_dynamic_arrays(void)
     char buf[8192] = {0};
     slurp(stream, buf, sizeof(buf));
     expect_true("dyn dump pointer table",
-                (NULL != strstr(buf, "points[0] = {"))
-                && (NULL != strstr(buf, "points[1] = {"))
-                && (NULL != strstr(buf, "    x = 3")));
-    expect_true("dyn dump value vector",
-                NULL != strstr(buf, "values = [ 7, 8, 9 ]"));
-    expect_true("dyn dump sentinel table",
-                NULL != strstr(buf, "argv = [ \"ls\", \"-l\" ]"));
+                (NULL != strstr(buf, "points[0] = {")) && (NULL != strstr(buf, "points[1] = {"))
+                    && (NULL != strstr(buf, "    x = 3")));
+    expect_true("dyn dump value vector", NULL != strstr(buf, "values = [ 7, 8, 9 ]"));
+    expect_true("dyn dump sentinel table", NULL != strstr(buf, "argv = [ \"ls\", \"-l\" ]"));
     expect_true("dyn dump null tables",
-                (NULL != strstr(buf, "points = (null)"))
-                && (NULL != strstr(buf, "values = (null)"))
-                && (NULL != strstr(buf, "argv = (null)")));
+                (NULL != strstr(buf, "points = (null)")) && (NULL != strstr(buf, "values = (null)"))
+                    && (NULL != strstr(buf, "argv = (null)")));
     shrewd_basic_log_module_set_stream(module, stderr);
     fclose(stream);
 
@@ -935,8 +919,8 @@ static void test_dynamic_arrays(void)
     expect_true("dyn equal deep yes", same);
     expect_true("dyn clone independent",
                 (NULL != twin) && (twin != src) && (twin->points != src->points)
-                && (twin->points[0] != src->points[0])
-                && (1 == twin->points[0]->x) && (9 == twin->values[2]));
+                    && (twin->points[0] != src->points[0]) && (1 == twin->points[0]->x)
+                    && (9 == twin->values[2]));
     expect_true("dyn clone strings aliased", twin->argv[0] == src->argv[0]);
     twin->values[0] = 70;
     expect_eq_int("dyn equal differs",
@@ -956,9 +940,8 @@ static void test_dynamic_arrays(void)
     expect_eq_int("dyn destroy clone",
                   shrewd_basic_reflect_destroy(twin, &g_dyn_reflect),
                   SHREWD_BASIC_ERR_OK);
-    expect_eq_int("dyn destroy src",
-                  shrewd_basic_reflect_destroy(src, &g_dyn_reflect),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "dyn destroy src", shrewd_basic_reflect_destroy(src, &g_dyn_reflect), SHREWD_BASIC_ERR_OK);
 }
 
 /* --- flexible tail fixtures ------------------------------------------- */
@@ -968,7 +951,9 @@ typedef struct {
     int32_t data[];
 } flex_t;
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_flex_reflect, flex_t,
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(
+    g_flex_reflect,
+    flex_t,
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(flex_t, len),
     SHREWD_BASIC_REFLECT_FIELD_FLEX(flex_t, data, len, shrewd_basic_reflect_int32));
 
@@ -986,35 +971,33 @@ typedef struct {
 #pragma GCC diagnostic pop
 #endif
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_zflex_reflect, zflex_t,
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(
+    g_zflex_reflect,
+    zflex_t,
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(zflex_t, len),
     SHREWD_BASIC_REFLECT_FIELD_FLEX(zflex_t, zero, len, shrewd_basic_reflect_int32));
 
-static void test_flex(void)
-{
+static void test_flex(void) {
     /* Descriptor shape. */
-    const shrewd_basic_reflect_field_t *field =
-        find_or_fail("flex", &g_flex_reflect, "data");
+    const shrewd_basic_reflect_field_t *field = find_or_fail("flex", &g_flex_reflect, "data");
     if (NULL == field) {
         return;
     }
     expect_true("flex shape",
                 ((SHREWD_BASIC_REFLECT_FIELD_F_ARRAY | SHREWD_BASIC_REFLECT_FIELD_F_FLEX)
-                        == field->sb_refl_flags)
-                && (sizeof(int32_t) == field->sb_refl_stride)
-                && ((size_t)0 == field->sb_refl_count)
-                && ((size_t)0 == field->sb_refl_size)
-                && (sizeof(size_t) == field->sb_refl_limit_size));
+                 == field->sb_refl_flags)
+                    && (sizeof(int32_t) == field->sb_refl_stride)
+                    && ((size_t)0 == field->sb_refl_count) && ((size_t)0 == field->sb_refl_size)
+                    && (sizeof(size_t) == field->sb_refl_limit_size));
     field = find_or_fail("flex", &g_zflex_reflect, "zero");
     if (NULL != field) {
-        expect_true("flex zero-length shape",
-                    sizeof(int32_t) == field->sb_refl_stride);
+        expect_true("flex zero-length shape", sizeof(int32_t) == field->sb_refl_stride);
     }
 
     /* A heap-owned object sized struct + tail. */
     void *block = NULL;
-    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_calloc(
-                &block, 1, sizeof(flex_t) + (3 * sizeof(int32_t)))) {
+    if (SHREWD_BASIC_ERR_OK
+        != shrewd_basic_platform_calloc(&block, 1, sizeof(flex_t) + (3 * sizeof(int32_t)))) {
         return;
     }
     flex_t *src = block;
@@ -1025,9 +1008,8 @@ static void test_flex(void)
 
     /* dump renders the tail as an inline array. */
     shrewd_basic_log_module_t *module = NULL;
-    expect_eq_int("flex find module",
-                  shrewd_basic_log_module_find("reflect", &module),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "flex find module", shrewd_basic_log_module_find("reflect", &module), SHREWD_BASIC_ERR_OK);
     FILE *stream = tmpfile();
     expect_true("flex tmpfile", NULL != stream);
     if (NULL == stream) {
@@ -1035,14 +1017,13 @@ static void test_flex(void)
         return;
     }
     shrewd_basic_log_module_set_stream(module, stream);
-    expect_eq_int("flex dump",
-                  shrewd_basic_reflect_dump(&g_flex_reflect, src, "flex"),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "flex dump", shrewd_basic_reflect_dump(&g_flex_reflect, src, "flex"), SHREWD_BASIC_ERR_OK);
     /* A FAM struct must be allocated with room for its tail: sizeof()
        covers the header only. */
     void *zblock = NULL;
-    if (SHREWD_BASIC_ERR_OK == shrewd_basic_platform_calloc(
-                &zblock, 1, sizeof(zflex_t) + (2 * sizeof(int32_t)))) {
+    if (SHREWD_BASIC_ERR_OK
+        == shrewd_basic_platform_calloc(&zblock, 1, sizeof(zflex_t) + (2 * sizeof(int32_t)))) {
         zflex_t *zero = zblock;
         zero->len = 2;
         zero->zero[0] = 5;
@@ -1064,38 +1045,37 @@ static void test_flex(void)
     expect_eq_int("flex field_get tail",
                   shrewd_basic_reflect_field_get(src, field, tail, sizeof(tail)),
                   SHREWD_BASIC_ERR_OK);
-    expect_true("flex field_get values",
-                (7 == tail[0]) && (8 == tail[1]) && (9 == tail[2]));
+    expect_true("flex field_get values", (7 == tail[0]) && (8 == tail[1]) && (9 == tail[2]));
     expect_eq_int("flex field_get size rule",
                   shrewd_basic_reflect_field_get(src, field, tail, (size_t)8),
                   SHREWD_BASIC_ERR_REFLECT_MISMATCH);
     int32_t value = 0;
-    expect_eq_int("flex path_get",
-                  shrewd_basic_reflect_path_get(src, &g_flex_reflect, "data[2]",
-                                                &value, sizeof(value)),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "flex path_get",
+        shrewd_basic_reflect_path_get(src, &g_flex_reflect, "data[2]", &value, sizeof(value)),
+        SHREWD_BASIC_ERR_OK);
     expect_true("flex path_get value", 9 == value);
     value = 80;
-    expect_eq_int("flex path_set",
-                  shrewd_basic_reflect_path_set(src, &g_flex_reflect, "data[1]",
-                                                &value, sizeof(value)),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "flex path_set",
+        shrewd_basic_reflect_path_set(src, &g_flex_reflect, "data[1]", &value, sizeof(value)),
+        SHREWD_BASIC_ERR_OK);
     expect_true("flex path_set lands", 80 == src->data[1]);
     src->data[1] = 8;
-    expect_eq_int("flex path_get out of range",
-                  shrewd_basic_reflect_path_get(src, &g_flex_reflect, "data[5]",
-                                                &value, sizeof(value)),
-                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int(
+        "flex path_get out of range",
+        shrewd_basic_reflect_path_get(src, &g_flex_reflect, "data[5]", &value, sizeof(value)),
+        SHREWD_BASIC_ERR_KEY_NOTFOUND);
     const shrewd_basic_reflect_field_t *resolved = NULL;
     size_t offset = 0;
     size_t size = 0;
-    expect_eq_int("flex resolve",
-                  shrewd_basic_reflect_type_resolve(&g_flex_reflect, "data[2]",
-                                                    &resolved, &offset, &size),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "flex resolve",
+        shrewd_basic_reflect_type_resolve(&g_flex_reflect, "data[2]", &resolved, &offset, &size),
+        SHREWD_BASIC_ERR_OK);
     expect_true("flex resolve shape",
                 (offsetof(flex_t, data) + (2 * sizeof(int32_t)) == offset)
-                && (sizeof(int32_t) == size));
+                    && (sizeof(int32_t) == size));
 
     /* copy allocates struct + tail; equal is count-aware; destroy frees
        the whole block (valgrind asserts the accounting). */
@@ -1109,8 +1089,8 @@ static void test_flex(void)
                   SHREWD_BASIC_ERR_OK);
     expect_true("flex equal yes", same);
     expect_true("flex clone independent",
-                (NULL != clone) && (clone->data != src->data)
-                && (3 == clone->len) && (9 == clone->data[2]));
+                (NULL != clone) && (clone->data != src->data) && (3 == clone->len)
+                    && (9 == clone->data[2]));
     clone->data[0] = 70;
     expect_eq_int("flex equal differs",
                   shrewd_basic_reflect_equal(src, clone, &g_flex_reflect, &same),
@@ -1130,8 +1110,7 @@ static void test_flex(void)
                   SHREWD_BASIC_ERR_OK);
 }
 
-static void test_logging_policy(void)
-{
+static void test_logging_policy(void) {
     FILE *stream = tmpfile();
     expect_true("logging tmpfile", NULL != stream);
     if (NULL == stream) {
@@ -1139,13 +1118,13 @@ static void test_logging_policy(void)
     }
     shrewd_basic_log_module_t *module = NULL;
     expect_eq_int("logging find module",
-                  shrewd_basic_log_module_find("reflect", &module), SHREWD_BASIC_ERR_OK);
+                  shrewd_basic_log_module_find("reflect", &module),
+                  SHREWD_BASIC_ERR_OK);
     expect_true("logging module found", NULL != module);
     shrewd_basic_log_module_set_stream(module, stream);
 
-    const shrewd_basic_reflect_field_t *f =
-        find_or_fail("logging", &g_person_reflect, "age");
-    person_t person;
+    const shrewd_basic_reflect_field_t *f = find_or_fail("logging", &g_person_reflect, "age");
+    person_t person = {0};
     memset(&person, 0, sizeof(person));
     person.age = 7;
     int32_t value = 0;
@@ -1163,29 +1142,25 @@ static void test_logging_policy(void)
     char buf[2048] = {0};
     slurp(stream, buf, sizeof(buf));
     expect_true("logging WARN emitted",
-                (NULL != strstr(buf, "[WARN]"))
-                && (NULL != strstr(buf, "field_get: object")));
+                (NULL != strstr(buf, "[WARN]")) && (NULL != strstr(buf, "field_get: object")));
     expect_true("logging TRACE emitted",
-                (NULL != strstr(buf, "[TRACE]"))
-                && (NULL != strstr(buf, "field_get ok")));
+                (NULL != strstr(buf, "[TRACE]")) && (NULL != strstr(buf, "field_get ok")));
     expect_true("logging query silent", NULL == strstr(buf, "find_field"));
 
     shrewd_basic_log_module_set_stream(module, stderr);
     fclose(stream);
 }
 
-static void test_dump(void)
-{
+static void test_dump(void) {
     shrewd_basic_log_module_t *module = NULL;
-    expect_eq_int("dump find module",
-                  shrewd_basic_log_module_find("reflect", &module),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "dump find module", shrewd_basic_log_module_find("reflect", &module), SHREWD_BASIC_ERR_OK);
     expect_true("dump module found", NULL != module);
     if (NULL == module) {
         return;
     }
 
-    person_t person;
+    person_t person = {0};
     memset(&person, 0, sizeof(person));
     person.active = true;
     person.grade = 'A';
@@ -1231,30 +1206,25 @@ static void test_dump(void)
     expect_true("dump float", NULL != strstr(buf, "  ratio = 1.5"));
     expect_true("dump double", NULL != strstr(buf, "  precise = 2.25"));
     expect_true("dump string", NULL != strstr(buf, "  name = \"Alice\""));
-    expect_true("dump char array",
-                NULL != strstr(buf, "  tag = [ 't', 'a', 'g', '\\x00' ]"));
+    expect_true("dump char array", NULL != strstr(buf, "  tag = [ 't', 'a', 'g', '\\x00' ]"));
     expect_true("dump int array", NULL != strstr(buf, "  scores = [ 1, 2, 3 ]"));
     expect_true("dump struct field",
-                (NULL != strstr(buf, "  home = {"))
-                && (NULL != strstr(buf, "    x = 4"))
-                && (NULL != strstr(buf, "    y = 5")));
+                (NULL != strstr(buf, "  home = {")) && (NULL != strstr(buf, "    x = 4"))
+                    && (NULL != strstr(buf, "    y = 5")));
     expect_true("dump struct array",
-                (NULL != strstr(buf, "  pair[0] = {"))
-                && (NULL != strstr(buf, "  pair[1] = {"))
-                && (NULL != strstr(buf, "    x = 8"))
-                && (NULL != strstr(buf, "    y = 9")));
+                (NULL != strstr(buf, "  pair[0] = {")) && (NULL != strstr(buf, "  pair[1] = {"))
+                    && (NULL != strstr(buf, "    x = 8")) && (NULL != strstr(buf, "    y = 9")));
     /* One log record: only the first line carries the prefix, the body
        starts on the next line, and the prefix points at the dump call
        site (the macro) rather than reflect_dump.c. */
-    expect_true("dump single record",
-                NULL != strstr(buf, "[dump] \nperson (person_t) {"));
+    expect_true("dump single record", NULL != strstr(buf, "[dump] \nperson (person_t) {"));
     expect_true("dump call site", NULL != strstr(buf, "test_reflect.c:"));
     expect_true("dump nested close", NULL != strstr(buf, "    y = 5\n  }\n"));
     expect_true("dump top close", NULL != strstr(buf, "  }\n}\n"));
     fclose(stream);
 
     /* Phase 2: escapes and the label-free header. */
-    person_t weird;
+    person_t weird = {0};
     memset(&weird, 0, sizeof(weird));
     weird.name = "a\"b\nc";
     stream = tmpfile();
@@ -1283,7 +1253,7 @@ static void test_dump(void)
     expect_eq_int("dump null string",
                   shrewd_basic_reflect_dump(&g_person_reflect, &weird, NULL),
                   SHREWD_BASIC_ERR_OK);
-    char huge[300];
+    char huge[300] = {0};
     memset(huge, 'x', sizeof(huge) - 1);
     huge[sizeof(huge) - 1] = '\0';
     weird.name = huge;
@@ -1297,7 +1267,7 @@ static void test_dump(void)
     fclose(stream);
 
     /* Phase 4: array element cap and error paths. */
-    wide_t wide;
+    wide_t wide = {0};
     memset(&wide, 0, sizeof(wide));
     wide.wide[39] = 9;
     stream = tmpfile();
@@ -1320,39 +1290,34 @@ static void test_dump(void)
                   shrewd_basic_reflect_dump(&g_person_reflect, NULL, "person"),
                   SHREWD_BASIC_ERR_ARG_INVALID);
     expect_eq_int("dump non-struct",
-                  shrewd_basic_reflect_dump(&shrewd_basic_reflect_int32,
-                                            &person.age, NULL),
+                  shrewd_basic_reflect_dump(&shrewd_basic_reflect_int32, &person.age, NULL),
                   SHREWD_BASIC_ERR_ARG_INVALID);
 
     shrewd_basic_log_module_set_stream(module, stderr);
     fclose(stream);
 }
 
-static void test_cross_tu(void)
-{
+static void test_cross_tu(void) {
     /* The foreign translation unit must see the very same descriptor. */
-    point_t point;
+    point_t point = {0};
     memset(&point, 0, sizeof(point));
-    expect_eq_int("cross_tu set_x",
-                  shrewd_test_reflect_ext_set_x(&point, 17), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("cross_tu set_x", shrewd_test_reflect_ext_set_x(&point, 17), SHREWD_BASIC_ERR_OK);
     expect_true("cross_tu set lands", 17 == point.x);
     int32_t value = 0;
-    expect_eq_int("cross_tu get_x",
-                  shrewd_test_reflect_ext_get_x(&point, &value), SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "cross_tu get_x", shrewd_test_reflect_ext_get_x(&point, &value), SHREWD_BASIC_ERR_OK);
     expect_true("cross_tu round-trip", 17 == value);
     expect_true("cross_tu field count", 2 == shrewd_test_reflect_ext_field_count());
 }
 
-static void test_pointer_fields(void)
-{
+static void test_pointer_fields(void) {
     /* Descriptor shape. */
-    const shrewd_basic_reflect_field_t *f =
-        find_or_fail("pointer", &g_node_reflect, "next");
+    const shrewd_basic_reflect_field_t *f = find_or_fail("pointer", &g_node_reflect, "next");
     if (NULL != f) {
         expect_true("pointer self target", &g_node_reflect == f->sb_refl_type);
         expect_true("pointer shape",
                     ((size_t)1 == f->sb_refl_count) && (sizeof(node_t *) == f->sb_refl_size)
-                    && (SHREWD_BASIC_REFLECT_FIELD_F_PTR == f->sb_refl_flags));
+                        && (SHREWD_BASIC_REFLECT_FIELD_F_PTR == f->sb_refl_flags));
     }
     f = find_or_fail("pointer", &g_refs_reflect, "p_str");
     if (NULL != f) {
@@ -1362,28 +1327,27 @@ static void test_pointer_fields(void)
     if (NULL != f) {
         expect_true("pointer opaque target",
                     (&shrewd_basic_reflect_void == f->sb_refl_type)
-                    && (SHREWD_BASIC_REFLECT_KIND_OPAQUE == f->sb_refl_type->sb_refl_kind));
+                        && (SHREWD_BASIC_REFLECT_KIND_OPAQUE == f->sb_refl_type->sb_refl_kind));
     }
     f = find_or_fail("pointer", &g_refs_reflect, "team");
     if (NULL != f) {
         expect_true("pointer array shape",
-                    (&g_point_reflect == f->sb_refl_type)
-                    && ((size_t)2 == f->sb_refl_count)
-                    && (2 * sizeof(point_t *) == f->sb_refl_size)
-                    && ((SHREWD_BASIC_REFLECT_FIELD_F_PTR
-                         | SHREWD_BASIC_REFLECT_FIELD_F_ARRAY) == f->sb_refl_flags));
+                    (&g_point_reflect == f->sb_refl_type) && ((size_t)2 == f->sb_refl_count)
+                        && (2 * sizeof(point_t *) == f->sb_refl_size)
+                        && ((SHREWD_BASIC_REFLECT_FIELD_F_PTR | SHREWD_BASIC_REFLECT_FIELD_F_ARRAY)
+                            == f->sb_refl_flags));
     }
-    expect_true("pointer kind name opaque",
-                0 == strcmp(shrewd_basic_reflect_kind_name(SHREWD_BASIC_REFLECT_KIND_OPAQUE),
-                            "opaque"));
+    expect_true(
+        "pointer kind name opaque",
+        0 == strcmp(shrewd_basic_reflect_kind_name(SHREWD_BASIC_REFLECT_KIND_OPAQUE), "opaque"));
 
     /* get/set copy the pointer value, never the pointee. */
-    refs_t refs;
+    refs_t refs = {0};
     memset(&refs, 0, sizeof(refs));
     int32_t value = 9;
     int32_t other = 11;
-    const shrewd_basic_reflect_field_t *counter =
-        find_or_fail("pointer", &g_refs_reflect, "counter");
+    const shrewd_basic_reflect_field_t *counter
+        = find_or_fail("pointer", &g_refs_reflect, "counter");
     if (NULL == counter) {
         return;
     }
@@ -1403,16 +1367,15 @@ static void test_pointer_fields(void)
                   SHREWD_BASIC_ERR_OK);
     expect_true("pointer re-point lands", &other == refs.counter);
     expect_eq_int("pointer size mismatch",
-                  shrewd_basic_reflect_field_set(&refs, counter, &link, (size_t)4),
+                  shrewd_basic_reflect_field_set(&refs, counter, &link, sizeof(link) + 1u),
                   SHREWD_BASIC_ERR_REFLECT_MISMATCH);
 
     /* Self-referential pointer through the shared descriptor. */
-    node_t tail;
+    node_t tail = {0};
     memset(&tail, 0, sizeof(tail));
-    node_t head;
+    node_t head = {0};
     memset(&head, 0, sizeof(head));
-    const shrewd_basic_reflect_field_t *next =
-        find_or_fail("pointer", &g_node_reflect, "next");
+    const shrewd_basic_reflect_field_t *next = find_or_fail("pointer", &g_node_reflect, "next");
     if (NULL != next) {
         node_t *link_node = &tail;
         expect_eq_int("pointer self set",
@@ -1422,8 +1385,7 @@ static void test_pointer_fields(void)
     }
 }
 
-static void test_dump_pointers(void)
-{
+static void test_dump_pointers(void) {
     shrewd_basic_log_module_t *module = NULL;
     expect_eq_int("dump_ptr find module",
                   shrewd_basic_log_module_find("reflect", &module),
@@ -1436,11 +1398,11 @@ static void test_dump_pointers(void)
     /* Phase 1: followed pointers of every flavor. */
     const char *text = "hi";
     int32_t counter = 7;
-    point_t point;
+    point_t point = {0};
     memset(&point, 0, sizeof(point));
     point.x = 1;
     point.y = 2;
-    refs_t refs;
+    refs_t refs = {0};
     memset(&refs, 0, sizeof(refs));
     refs.p_str = &text;
     refs.ctx = &counter; /* any address: opaque targets show 0x... */
@@ -1462,9 +1424,8 @@ static void test_dump_pointers(void)
     expect_true("dump_ptr scalar followed", NULL != strstr(buf, "counter = 7"));
     expect_true("dump_ptr opaque address", NULL != strstr(buf, "ctx = 0x"));
     expect_true("dump_ptr array follows",
-                (NULL != strstr(buf, "team[0] = {"))
-                && (NULL != strstr(buf, "    x = 1"))
-                && (NULL != strstr(buf, "team[1] = (null)")));
+                (NULL != strstr(buf, "team[0] = {")) && (NULL != strstr(buf, "    x = 1"))
+                    && (NULL != strstr(buf, "team[1] = (null)")));
 
     /* NULL pointer shows (null) instead of following. */
     refs.p_str = NULL;
@@ -1479,10 +1440,10 @@ static void test_dump_pointers(void)
     fclose(stream);
 
     /* Phase 2: self-referential chain terminates via the depth cap. */
-    node_t tail;
+    node_t tail = {0};
     memset(&tail, 0, sizeof(tail));
     tail.data = 2;
-    node_t head;
+    node_t head = {0};
     memset(&head, 0, sizeof(head));
     head.data = 1;
     head.next = &tail;
@@ -1498,12 +1459,11 @@ static void test_dump_pointers(void)
     memset(buf, 0, sizeof(buf));
     slurp(stream, buf, sizeof(buf));
     expect_true("dump_ptr chain nested",
-                (NULL != strstr(buf, "  next = {"))
-                && (NULL != strstr(buf, "    data = 2"))
-                && (NULL != strstr(buf, "    next = (null)")));
+                (NULL != strstr(buf, "  next = {")) && (NULL != strstr(buf, "    data = 2"))
+                    && (NULL != strstr(buf, "    next = (null)")));
     fclose(stream);
 
-    node_t loop;
+    node_t loop = {0};
     memset(&loop, 0, sizeof(loop));
     loop.next = &loop;
     stream = tmpfile();
@@ -1521,7 +1481,7 @@ static void test_dump_pointers(void)
     expect_true("dump_ptr cycle no spam", NULL == strstr(buf, "...(max depth)"));
 
     /* A deep but finite chain still hits the depth cap. */
-    node_t chain[20];
+    node_t chain[20] = {0};
     memset(chain, 0, sizeof(chain));
     for (size_t i = 0; i + 1 < 20; ++i) {
         chain[i].data = (int32_t)i;
@@ -1538,200 +1498,195 @@ static void test_dump_pointers(void)
     fclose(stream);
 }
 
-static void test_paths(void)
-{
+static void test_paths(void) {
     const shrewd_basic_reflect_field_t *field = NULL;
     size_t offset = 0;
     size_t size = 0;
 
     /* resolve: value nesting and indices. */
-    expect_eq_int("resolve home.x",
-                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "home.x",
-                                                    &field, &offset, &size),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "resolve home.x",
+        shrewd_basic_reflect_type_resolve(&g_person_reflect, "home.x", &field, &offset, &size),
+        SHREWD_BASIC_ERR_OK);
     expect_true("resolve home.x shape",
                 (0 == strcmp(field->sb_refl_name, "x"))
-                && (offsetof(person_t, home) + offsetof(point_t, x) == offset)
-                && (sizeof(int32_t) == size));
-    expect_eq_int("resolve pair[1].y",
-                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "pair[1].y",
-                                                    &field, &offset, &size),
-                  SHREWD_BASIC_ERR_OK);
+                    && (offsetof(person_t, home) + offsetof(point_t, x) == offset)
+                    && (sizeof(int32_t) == size));
+    expect_eq_int(
+        "resolve pair[1].y",
+        shrewd_basic_reflect_type_resolve(&g_person_reflect, "pair[1].y", &field, &offset, &size),
+        SHREWD_BASIC_ERR_OK);
     expect_true("resolve pair[1].y shape",
                 (offsetof(person_t, pair) + sizeof(point_t) + offsetof(point_t, y) == offset)
-                && (sizeof(int32_t) == size));
-    expect_eq_int("resolve scores",
-                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "scores",
-                                                    &field, &offset, &size),
-                  SHREWD_BASIC_ERR_OK);
+                    && (sizeof(int32_t) == size));
+    expect_eq_int(
+        "resolve scores",
+        shrewd_basic_reflect_type_resolve(&g_person_reflect, "scores", &field, &offset, &size),
+        SHREWD_BASIC_ERR_OK);
     expect_true("resolve scores is the whole array", 3 * sizeof(int32_t) == size);
-    expect_eq_int("resolve scores[2]",
-                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "scores[2]",
-                                                    &field, &offset, &size),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "resolve scores[2]",
+        shrewd_basic_reflect_type_resolve(&g_person_reflect, "scores[2]", &field, &offset, &size),
+        SHREWD_BASIC_ERR_OK);
     expect_true("resolve scores[2] is one element",
                 (offsetof(person_t, scores) + 2 * sizeof(int32_t) == offset)
-                && (sizeof(int32_t) == size));
+                    && (sizeof(int32_t) == size));
 
     /* Misses, bounds and syntax. */
-    expect_eq_int("resolve miss",
-                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "nope",
-                                                    &field, &offset, &size),
-                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
-    expect_eq_int("resolve nested miss",
-                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "home.nope",
-                                                    &field, &offset, &size),
-                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
-    expect_eq_int("resolve index out of range",
-                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "scores[3]",
-                                                    &field, &offset, &size),
-                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int(
+        "resolve miss",
+        shrewd_basic_reflect_type_resolve(&g_person_reflect, "nope", &field, &offset, &size),
+        SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int(
+        "resolve nested miss",
+        shrewd_basic_reflect_type_resolve(&g_person_reflect, "home.nope", &field, &offset, &size),
+        SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int(
+        "resolve index out of range",
+        shrewd_basic_reflect_type_resolve(&g_person_reflect, "scores[3]", &field, &offset, &size),
+        SHREWD_BASIC_ERR_KEY_NOTFOUND);
     expect_eq_int("resolve empty path",
-                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "",
-                                                    &field, &offset, &size),
+                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "", &field, &offset, &size),
                   SHREWD_BASIC_ERR_ARG_INVALID);
-    expect_eq_int("resolve trailing dot",
-                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "home.",
-                                                    &field, &offset, &size),
-                  SHREWD_BASIC_ERR_ARG_INVALID);
-    expect_eq_int("resolve double dot",
-                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "home..x",
-                                                    &field, &offset, &size),
-                  SHREWD_BASIC_ERR_ARG_INVALID);
-    expect_eq_int("resolve leading digit",
-                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "1bad",
-                                                    &field, &offset, &size),
-                  SHREWD_BASIC_ERR_ARG_INVALID);
-    expect_eq_int("resolve index on scalar",
-                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "age[0]",
-                                                    &field, &offset, &size),
-                  SHREWD_BASIC_ERR_ARG_INVALID);
-    expect_eq_int("resolve double index",
-                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "pair[1][0]",
-                                                    &field, &offset, &size),
-                  SHREWD_BASIC_ERR_ARG_INVALID);
-    expect_eq_int("resolve non-numeric index",
-                  shrewd_basic_reflect_type_resolve(&g_person_reflect, "scores[x]",
-                                                    &field, &offset, &size),
-                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int(
+        "resolve trailing dot",
+        shrewd_basic_reflect_type_resolve(&g_person_reflect, "home.", &field, &offset, &size),
+        SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int(
+        "resolve double dot",
+        shrewd_basic_reflect_type_resolve(&g_person_reflect, "home..x", &field, &offset, &size),
+        SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int(
+        "resolve leading digit",
+        shrewd_basic_reflect_type_resolve(&g_person_reflect, "1bad", &field, &offset, &size),
+        SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int(
+        "resolve index on scalar",
+        shrewd_basic_reflect_type_resolve(&g_person_reflect, "age[0]", &field, &offset, &size),
+        SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int(
+        "resolve double index",
+        shrewd_basic_reflect_type_resolve(&g_person_reflect, "pair[1][0]", &field, &offset, &size),
+        SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int(
+        "resolve non-numeric index",
+        shrewd_basic_reflect_type_resolve(&g_person_reflect, "scores[x]", &field, &offset, &size),
+        SHREWD_BASIC_ERR_ARG_INVALID);
     expect_eq_int("resolve NULL type",
                   shrewd_basic_reflect_type_resolve(NULL, "age", &field, &offset, &size),
                   SHREWD_BASIC_ERR_ARG_INVALID);
 
     /* path_get/path_set on value paths. */
-    person_t person;
+    person_t person = {0};
     memset(&person, 0, sizeof(person));
     int32_t value = 21;
-    expect_eq_int("path_set home.x",
-                  shrewd_basic_reflect_path_set(&person, &g_person_reflect,
-                                                "home.x", &value, sizeof(value)),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "path_set home.x",
+        shrewd_basic_reflect_path_set(&person, &g_person_reflect, "home.x", &value, sizeof(value)),
+        SHREWD_BASIC_ERR_OK);
     expect_true("path_set home.x lands", 21 == person.home.x);
     int32_t back = 0;
-    expect_eq_int("path_get home.x",
-                  shrewd_basic_reflect_path_get(&person, &g_person_reflect,
-                                                "home.x", &back, sizeof(back)),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "path_get home.x",
+        shrewd_basic_reflect_path_get(&person, &g_person_reflect, "home.x", &back, sizeof(back)),
+        SHREWD_BASIC_ERR_OK);
     expect_true("path_get home.x value", 21 == back);
     value = 5;
     expect_eq_int("path_set pair[1].y",
-                  shrewd_basic_reflect_path_set(&person, &g_person_reflect,
-                                                "pair[1].y", &value, sizeof(value)),
+                  shrewd_basic_reflect_path_set(
+                      &person, &g_person_reflect, "pair[1].y", &value, sizeof(value)),
                   SHREWD_BASIC_ERR_OK);
     expect_true("path_set pair[1].y lands", 5 == person.pair[1].y);
     int32_t scores[3] = {7, 8, 9};
-    expect_eq_int("path_set scores blob",
-                  shrewd_basic_reflect_path_set(&person, &g_person_reflect,
-                                                "scores", scores, sizeof(scores)),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "path_set scores blob",
+        shrewd_basic_reflect_path_set(&person, &g_person_reflect, "scores", scores, sizeof(scores)),
+        SHREWD_BASIC_ERR_OK);
     expect_true("path_set scores blob lands", 0 == memcmp(person.scores, scores, sizeof(scores)));
     value = 42;
     expect_eq_int("path_set scores[2]",
-                  shrewd_basic_reflect_path_set(&person, &g_person_reflect,
-                                                "scores[2]", &value, sizeof(value)),
+                  shrewd_basic_reflect_path_set(
+                      &person, &g_person_reflect, "scores[2]", &value, sizeof(value)),
                   SHREWD_BASIC_ERR_OK);
     expect_true("path_set scores[2] lands", 42 == person.scores[2]);
-    expect_eq_int("path_get size mismatch",
-                  shrewd_basic_reflect_path_get(&person, &g_person_reflect,
-                                                "home.x", &back, (size_t)2),
-                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_eq_int(
+        "path_get size mismatch",
+        shrewd_basic_reflect_path_get(&person, &g_person_reflect, "home.x", &back, (size_t)2),
+        SHREWD_BASIC_ERR_REFLECT_MISMATCH);
 
     /* Pointer segments are followed for addressing. */
-    node_t tail;
+    node_t tail = {0};
     memset(&tail, 0, sizeof(tail));
-    node_t head;
+    node_t head = {0};
     memset(&head, 0, sizeof(head));
     head.next = &tail;
     value = 7;
-    expect_eq_int("path_set next.data",
-                  shrewd_basic_reflect_path_set(&head, &g_node_reflect,
-                                                "next.data", &value, sizeof(value)),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "path_set next.data",
+        shrewd_basic_reflect_path_set(&head, &g_node_reflect, "next.data", &value, sizeof(value)),
+        SHREWD_BASIC_ERR_OK);
     expect_true("path_set next.data lands", 7 == tail.data);
-    expect_eq_int("path_get next.data",
-                  shrewd_basic_reflect_path_get(&head, &g_node_reflect,
-                                                "next.data", &back, sizeof(back)),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "path_get next.data",
+        shrewd_basic_reflect_path_get(&head, &g_node_reflect, "next.data", &back, sizeof(back)),
+        SHREWD_BASIC_ERR_OK);
     expect_true("path_get next.data value", 7 == back);
     node_t *link = NULL;
-    expect_eq_int("path_get next (pointer value)",
-                  shrewd_basic_reflect_path_get(&head, &g_node_reflect,
-                                                "next", &link, sizeof(link)),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "path_get next (pointer value)",
+        shrewd_basic_reflect_path_get(&head, &g_node_reflect, "next", &link, sizeof(link)),
+        SHREWD_BASIC_ERR_OK);
     expect_true("path_get next copies pointer", &tail == link);
     head.next = NULL;
-    expect_eq_int("path_get through NULL",
-                  shrewd_basic_reflect_path_get(&head, &g_node_reflect,
-                                                "next.data", &back, sizeof(back)),
-                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
-    expect_eq_int("path_set through NULL",
-                  shrewd_basic_reflect_path_set(&head, &g_node_reflect,
-                                                "next.data", &value, sizeof(value)),
-                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int(
+        "path_get through NULL",
+        shrewd_basic_reflect_path_get(&head, &g_node_reflect, "next.data", &back, sizeof(back)),
+        SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int(
+        "path_set through NULL",
+        shrewd_basic_reflect_path_set(&head, &g_node_reflect, "next.data", &value, sizeof(value)),
+        SHREWD_BASIC_ERR_KEY_NOTFOUND);
     expect_true("path_set through NULL untouched", 7 == tail.data);
 
     /* resolve is metadata-only: crossing a pointer is not static. */
     head.next = &tail;
-    expect_eq_int("resolve crosses pointer",
-                  shrewd_basic_reflect_type_resolve(&g_node_reflect, "next.data",
-                                                    &field, &offset, &size),
-                  SHREWD_BASIC_ERR_ARG_INVALID);
-    expect_eq_int("resolve pointer field itself",
-                  shrewd_basic_reflect_type_resolve(&g_node_reflect, "next",
-                                                    &field, &offset, &size),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "resolve crosses pointer",
+        shrewd_basic_reflect_type_resolve(&g_node_reflect, "next.data", &field, &offset, &size),
+        SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int(
+        "resolve pointer field itself",
+        shrewd_basic_reflect_type_resolve(&g_node_reflect, "next", &field, &offset, &size),
+        SHREWD_BASIC_ERR_OK);
     expect_true("resolve pointer field size", sizeof(node_t *) == size);
 
-    expect_eq_int("path_get NULL path",
-                  shrewd_basic_reflect_path_get(&person, &g_person_reflect,
-                                                NULL, &back, sizeof(back)),
-                  SHREWD_BASIC_ERR_ARG_INVALID);
-    expect_eq_int("path_set NULL value",
-                  shrewd_basic_reflect_path_set(&person, &g_person_reflect,
-                                                "home.x", NULL, sizeof(value)),
-                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int(
+        "path_get NULL path",
+        shrewd_basic_reflect_path_get(&person, &g_person_reflect, NULL, &back, sizeof(back)),
+        SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int(
+        "path_set NULL value",
+        shrewd_basic_reflect_path_set(&person, &g_person_reflect, "home.x", NULL, sizeof(value)),
+        SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
-
-static void test_enum(void)
-{
+static void test_enum(void) {
     /* Descriptor shape. */
     expect_true("enum kind", SHREWD_BASIC_REFLECT_KIND_ENUM == g_mode_reflect.sb_refl_kind);
     expect_true("enum name", 0 == strcmp(g_mode_reflect.sb_refl_name, "mode_t"));
     expect_true("enum size", sizeof(mode_t) == g_mode_reflect.sb_refl_size);
     expect_true("enum entries", (size_t)3 == g_mode_reflect.sb_refl_enum_count);
-    expect_true("enum kind name",
-                0 == strcmp(shrewd_basic_reflect_kind_name(SHREWD_BASIC_REFLECT_KIND_ENUM),
-                            "enum"));
+    expect_true(
+        "enum kind name",
+        0 == strcmp(shrewd_basic_reflect_kind_name(SHREWD_BASIC_REFLECT_KIND_ENUM), "enum"));
 
     /* Enum traversal accessors. */
     expect_true("enum count accessor",
                 (size_t)3 == shrewd_basic_reflect_enum_count(&g_mode_reflect));
-    expect_true("enum at accessor",
-                0 == strcmp(shrewd_basic_reflect_enum_at(&g_mode_reflect, 1)
-                            ->sb_refl_name, "MODE_ON"));
-    expect_true("enum at range",
-                NULL == shrewd_basic_reflect_enum_at(&g_mode_reflect, 3));
+    expect_true(
+        "enum at accessor",
+        0 == strcmp(shrewd_basic_reflect_enum_at(&g_mode_reflect, 1)->sb_refl_name, "MODE_ON"));
+    expect_true("enum at range", NULL == shrewd_basic_reflect_enum_at(&g_mode_reflect, 3));
     expect_true("enum count on struct", 0 == shrewd_basic_reflect_enum_count(&g_person_reflect));
 
     /* name/value lookup. */
@@ -1759,11 +1714,10 @@ static void test_enum(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
 
     /* Field binding plus raw and path access. */
-    config_t config;
+    config_t config = {0};
     memset(&config, 0, sizeof(config));
     config.mode = MODE_ON;
-    const shrewd_basic_reflect_field_t *field =
-        find_or_fail("enum", &g_config_reflect, "mode");
+    const shrewd_basic_reflect_field_t *field = find_or_fail("enum", &g_config_reflect, "mode");
     if (NULL == field) {
         return;
     }
@@ -1779,18 +1733,17 @@ static void test_enum(void)
                   SHREWD_BASIC_ERR_OK);
     expect_true("enum field set lands", MODE_AUTO == config.mode);
     back = MODE_OFF;
-    expect_eq_int("enum path get",
-                  shrewd_basic_reflect_path_get(&config, &g_config_reflect,
-                                                "mode", &back, sizeof(back)),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "enum path get",
+        shrewd_basic_reflect_path_get(&config, &g_config_reflect, "mode", &back, sizeof(back)),
+        SHREWD_BASIC_ERR_OK);
     expect_true("enum path get value", MODE_AUTO == back);
 
     /* dump renders constants by name; unknown values show their number. */
     config.mode_ptr = &config.mode;
     shrewd_basic_log_module_t *module = NULL;
-    expect_eq_int("enum find module",
-                  shrewd_basic_log_module_find("reflect", &module),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "enum find module", shrewd_basic_log_module_find("reflect", &module), SHREWD_BASIC_ERR_OK);
     FILE *stream = tmpfile();
     expect_true("enum tmpfile", NULL != stream);
     if (NULL == stream) {
@@ -1813,37 +1766,37 @@ static void test_enum(void)
     fclose(stream);
 }
 
-static void test_ops(void)
-{
+static void test_ops(void) {
     /* Attachment shapes. */
     expect_true("ops type attach", &g_point_ops == g_point_ops_reflect.sb_refl_ops);
-    const shrewd_basic_reflect_field_t *type_field =
-        find_or_fail("ops", &g_ops_refs_reflect, "type_ops_slot");
-    const shrewd_basic_reflect_field_t *field_field =
-        find_or_fail("ops", &g_ops_refs_reflect, "field_ops_slot");
-    const shrewd_basic_reflect_field_t *array_field =
-        find_or_fail("ops", &g_ops_refs_reflect, "many");
+    const shrewd_basic_reflect_field_t *type_field
+        = find_or_fail("ops", &g_ops_refs_reflect, "type_ops_slot");
+    const shrewd_basic_reflect_field_t *field_field
+        = find_or_fail("ops", &g_ops_refs_reflect, "field_ops_slot");
+    const shrewd_basic_reflect_field_t *array_field
+        = find_or_fail("ops", &g_ops_refs_reflect, "many");
     if ((NULL == type_field) || (NULL == field_field) || (NULL == array_field)) {
         return;
     }
     expect_true("ops field falls back to type",
-                (NULL == type_field->sb_refl_ops) && (&g_handle_reflect == type_field->sb_refl_type));
+                (NULL == type_field->sb_refl_ops)
+                    && (&g_handle_reflect == type_field->sb_refl_type));
     expect_true("ops field override wins", &g_override_ops == field_field->sb_refl_ops);
-    const shrewd_basic_reflect_field_t *prim_ops_field =
-        find_or_fail("ops", &g_ops_refs_reflect, "prim_ops");
-    const shrewd_basic_reflect_field_t *arr_ops_field =
-        find_or_fail("ops", &g_ops_refs_reflect, "arr_ops");
+    const shrewd_basic_reflect_field_t *prim_ops_field
+        = find_or_fail("ops", &g_ops_refs_reflect, "prim_ops");
+    const shrewd_basic_reflect_field_t *arr_ops_field
+        = find_or_fail("ops", &g_ops_refs_reflect, "arr_ops");
     if ((NULL != prim_ops_field) && (NULL != arr_ops_field)) {
         expect_true("ops primitive field", &g_type_ops == prim_ops_field->sb_refl_ops);
         expect_true("ops array field",
                     (&g_override_ops == arr_ops_field->sb_refl_ops)
-                    && ((size_t)2 == arr_ops_field->sb_refl_count)
-                    && (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY == arr_ops_field->sb_refl_flags));
+                        && ((size_t)2 == arr_ops_field->sb_refl_count)
+                        && (SHREWD_BASIC_REFLECT_FIELD_F_ARRAY == arr_ops_field->sb_refl_flags));
     }
     expect_true("ops opaque target", &g_type_ops == g_handle_reflect.sb_refl_ops);
 
     /* value_get/set through the type-level ops. */
-    ops_refs_t refs;
+    ops_refs_t refs = {0};
     memset(&refs, 0, sizeof(refs));
     int32_t target = 5;
     refs.type_ops_slot = &target;
@@ -1886,9 +1839,8 @@ static void test_ops(void)
     expect_eq_int("value_get on array",
                   shrewd_basic_reflect_value_get(&refs, array_field, &out, sizeof(out)),
                   SHREWD_BASIC_ERR_ARG_INVALID);
-    const shrewd_basic_reflect_field_t *plain =
-        find_or_fail("ops", &g_person_reflect, "age");
-    person_t person;
+    const shrewd_basic_reflect_field_t *plain = find_or_fail("ops", &g_person_reflect, "age");
+    person_t person = {0};
     memset(&person, 0, sizeof(person));
     if (NULL != plain) {
         expect_eq_int("value_get without ops",
@@ -1900,16 +1852,15 @@ static void test_ops(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
-static void test_graph_ops(void)
-{
-    point_t home;
+static void test_graph_ops(void) {
+    point_t home = {0};
     memset(&home, 0, sizeof(home));
     home.x = 1;
     home.y = 2;
     int32_t counter = 3;
     const char *text = "hi";
     int32_t handle = 4;
-    graph_t graph;
+    graph_t graph = {0};
     memset(&graph, 0, sizeof(graph));
     graph.home = &home;
     graph.counter = &counter;
@@ -1918,8 +1869,8 @@ static void test_graph_ops(void)
 
     /* check: ops->check invariants, NULL targets skipped. */
     g_check_calls = 0;
-    expect_eq_int("check ok", shrewd_basic_reflect_check(&graph, &g_graph_reflect),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "check ok", shrewd_basic_reflect_check(&graph, &g_graph_reflect), SHREWD_BASIC_ERR_OK);
     expect_true("check ops ran", 1 == g_check_calls);
     handle = -1;
     expect_eq_int("check invariant",
@@ -1937,34 +1888,31 @@ static void test_graph_ops(void)
 
     /* copy: generic struct/scalar clones, ops clone, string aliasing. */
     void *raw = NULL;
-    expect_eq_int("copy ok", shrewd_basic_reflect_copy(&raw, &graph, &g_graph_reflect),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "copy ok", shrewd_basic_reflect_copy(&raw, &graph, &g_graph_reflect), SHREWD_BASIC_ERR_OK);
     graph_t *clone = raw;
     expect_true("copy struct cloned",
-                (NULL != clone->home) && (clone->home != &home)
-                && (1 == clone->home->x) && (2 == clone->home->y));
+                (NULL != clone->home) && (clone->home != &home) && (1 == clone->home->x)
+                    && (2 == clone->home->y));
     expect_true("copy scalar cloned",
-                (NULL != clone->counter) && (clone->counter != &counter)
-                && (3 == *clone->counter));
+                (NULL != clone->counter) && (clone->counter != &counter) && (3 == *clone->counter));
     expect_true("copy handle via ops",
-                (NULL != clone->handle) && (clone->handle != &handle)
-                && (4 == *clone->handle));
+                (NULL != clone->handle) && (clone->handle != &handle) && (4 == *clone->handle));
     expect_true("copy string aliased", &text == clone->p_str);
     home.x = 99;
     counter = 99;
     handle = 99;
     expect_true("copy independent",
-                (1 == clone->home->x) && (3 == *clone->counter)
-                && (4 == *clone->handle));
-    expect_eq_int("check clone", shrewd_basic_reflect_check(clone, &g_graph_reflect),
-                  SHREWD_BASIC_ERR_OK);
+                (1 == clone->home->x) && (3 == *clone->counter) && (4 == *clone->handle));
+    expect_eq_int(
+        "check clone", shrewd_basic_reflect_check(clone, &g_graph_reflect), SHREWD_BASIC_ERR_OK);
     expect_eq_int("destroy clone",
                   shrewd_basic_reflect_destroy(clone, &g_graph_reflect),
                   SHREWD_BASIC_ERR_OK);
     expect_true("destroy left borrowed string", 0 == strcmp(text, "hi"));
 
     /* Opaque targets without ops cannot be cloned. */
-    refs_t refs;
+    refs_t refs = {0};
     memset(&refs, 0, sizeof(refs));
     refs.ctx = &counter;
     void *bad = NULL;
@@ -1975,7 +1923,7 @@ static void test_graph_ops(void)
     /* Cyclic and shared graphs: the clone map and the visited set make
        copy and destroy sound - the clone keeps the cycle, shared sources
        stay shared, and every clone is freed exactly once. */
-    node_t loop;
+    node_t loop = {0};
     memset(&loop, 0, sizeof(loop));
     loop.next = &loop;
     void *loop_clone = NULL;
@@ -1983,8 +1931,7 @@ static void test_graph_ops(void)
                   shrewd_basic_reflect_copy(&loop_clone, &loop, &g_node_reflect),
                   SHREWD_BASIC_ERR_OK);
     node_t *cycle = loop_clone;
-    expect_true("copy cycle shape",
-                (NULL != cycle) && (cycle != &loop) && (cycle->next == cycle));
+    expect_true("copy cycle shape", (NULL != cycle) && (cycle != &loop) && (cycle->next == cycle));
     expect_eq_int("check cycle",
                   shrewd_basic_reflect_check(loop_clone, &g_node_reflect),
                   SHREWD_BASIC_ERR_OK);
@@ -1992,8 +1939,8 @@ static void test_graph_ops(void)
                   shrewd_basic_reflect_destroy(loop_clone, &g_node_reflect),
                   SHREWD_BASIC_ERR_OK);
 
-    node_t ring_a;
-    node_t ring_b;
+    node_t ring_a = {0};
+    node_t ring_b = {0};
     memset(&ring_a, 0, sizeof(ring_a));
     memset(&ring_b, 0, sizeof(ring_b));
     ring_a.next = &ring_b;
@@ -2004,18 +1951,17 @@ static void test_graph_ops(void)
                   SHREWD_BASIC_ERR_OK);
     node_t *ring_head = ring_clone;
     expect_true("copy ring shape",
-                (NULL != ring_head) && (ring_head != &ring_a)
-                && (ring_head->next != &ring_b)
-                && (ring_head->next->next == ring_head));
+                (NULL != ring_head) && (ring_head != &ring_a) && (ring_head->next != &ring_b)
+                    && (ring_head->next->next == ring_head));
     expect_eq_int("destroy ring",
                   shrewd_basic_reflect_destroy(ring_clone, &g_node_reflect),
                   SHREWD_BASIC_ERR_OK);
 
     /* Diamond: two references to one object stay one shared clone. */
-    point_t shared;
+    point_t shared = {0};
     memset(&shared, 0, sizeof(shared));
     shared.x = 7;
-    refs_t diamond;
+    refs_t diamond = {0};
     memset(&diamond, 0, sizeof(diamond));
     diamond.team[0] = &shared;
     diamond.team[1] = &shared;
@@ -2025,8 +1971,8 @@ static void test_graph_ops(void)
                   SHREWD_BASIC_ERR_OK);
     refs_t *d = diamond_clone;
     expect_true("copy diamond shared",
-                (NULL != d->team[0]) && (d->team[0] == d->team[1])
-                && (d->team[0] != &shared) && (7 == d->team[0]->x));
+                (NULL != d->team[0]) && (d->team[0] == d->team[1]) && (d->team[0] != &shared)
+                    && (7 == d->team[0]->x));
     expect_eq_int("destroy diamond",
                   shrewd_basic_reflect_destroy(diamond_clone, &g_refs_reflect),
                   SHREWD_BASIC_ERR_OK);
@@ -2062,8 +2008,7 @@ typedef struct visit_rec {
 } visit_rec_t;
 
 static shrewd_basic_reflect_visit_action_t visit_collect(
-        void *ctx, const shrewd_basic_reflect_visit_node_t *node)
-{
+    void *ctx, const shrewd_basic_reflect_visit_node_t *node) {
     visit_rec_t *rec = (visit_rec_t *)ctx;
     if (rec->count < VISIT_LOG_MAX) {
         visit_entry_t *entry = &rec->entries[rec->count];
@@ -2079,7 +2024,7 @@ static shrewd_basic_reflect_visit_action_t visit_collect(
     }
     ++rec->count;
     if ((node->event == rec->prune_event) && (NULL != rec->prune_path)
-            && (0 == strcmp(node->path, rec->prune_path))) {
+        && (0 == strcmp(node->path, rec->prune_path))) {
         return SHREWD_BASIC_REFLECT_VISIT_PRUNE;
     }
     if ((0 != rec->stop_after) && (rec->count >= rec->stop_after)) {
@@ -2090,8 +2035,8 @@ static shrewd_basic_reflect_visit_action_t visit_collect(
 
 /* Index of the first matching event, or -1. */
 static int visit_find(const visit_rec_t *rec,
-                      shrewd_basic_reflect_visit_event_t event, const char *path)
-{
+                      shrewd_basic_reflect_visit_event_t event,
+                      const char *path) {
     for (size_t i = 0; i < rec->count; ++i) {
         if ((event == rec->entries[i].event) && (0 == strcmp(rec->entries[i].path, path))) {
             return (int)i;
@@ -2100,9 +2045,8 @@ static int visit_find(const visit_rec_t *rec,
     return -1;
 }
 
-static void test_visit(void)
-{
-    person_t person;
+static void test_visit(void) {
+    person_t person = {0};
     memset(&person, 0, sizeof(person));
     person.name = "Alice";
     person.tag[0] = 't';
@@ -2114,7 +2058,7 @@ static void test_visit(void)
     person.pair[1].y = 9;
 
     /* Full walk of person_t: every event in order. */
-    visit_rec_t rec;
+    visit_rec_t rec = {0};
     memset(&rec, 0, sizeof(rec));
     expect_eq_int("visit person",
                   shrewd_basic_reflect_visit(&person, &g_person_reflect, visit_collect, &rec),
@@ -2122,28 +2066,28 @@ static void test_visit(void)
     expect_true("visit person count", (size_t)35 == rec.count);
     expect_true("visit root enter",
                 (0 == visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, ""))
-                && (SHREWD_BASIC_REFLECT_VISIT_ENTER == rec.entries[0].event));
+                    && (SHREWD_BASIC_REFLECT_VISIT_ENTER == rec.entries[0].event));
     expect_true("visit root exit",
-                ((int)rec.count - 1
-                 == visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_EXIT, "")));
+                ((int)rec.count - 1 == visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_EXIT, "")));
     expect_true("visit leaf scalar", 0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "age"));
-    expect_true("visit leaf string", 0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "name"));
+    expect_true("visit leaf string",
+                0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "name"));
     expect_true("visit nested order",
                 (visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, "home")
                  < visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "home.y"))
-                && (visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "home.y")
-                    < visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_EXIT, "home")));
+                    && (visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "home.y")
+                        < visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_EXIT, "home")));
     expect_true("visit struct array order",
                 (visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "pair")
                  < visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, "pair[1]"))
-                && (visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "pair[1].y")
-                    < visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_EXIT, "pair")));
+                    && (visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "pair[1].y")
+                        < visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_EXIT, "pair")));
     int tag_enter = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "tag");
     expect_true("visit array count",
                 (0 <= tag_enter) && ((size_t)4 == rec.entries[tag_enter].count));
     expect_true("visit array elements",
                 (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "tag[0]"))
-                && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "tag[3]")));
+                    && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "tag[3]")));
     expect_true("visit no leaves under arrays missing",
                 0 > visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "pair"));
 
@@ -2158,10 +2102,10 @@ static void test_visit(void)
                 0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, "home"));
     expect_true("visit prune subtree gone",
                 (0 > visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "home.x"))
-                && (0 > visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_EXIT, "home")));
+                    && (0 > visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_EXIT, "home")));
     expect_true("visit prune siblings kept",
                 (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "age"))
-                && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "pair")));
+                    && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "pair")));
 
     /* PRUNE at an array: elements and the matching ARRAY_EXIT are suppressed. */
     memset(&rec, 0, sizeof(rec));
@@ -2174,7 +2118,7 @@ static void test_visit(void)
                 0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "scores"));
     expect_true("visit prune array gone",
                 (0 > visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "scores[0]"))
-                && (0 > visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_EXIT, "scores")));
+                    && (0 > visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_EXIT, "scores")));
 
     /* STOP aborts at once - no further events at all. */
     memset(&rec, 0, sizeof(rec));
@@ -2185,14 +2129,14 @@ static void test_visit(void)
     expect_true("visit stop truncates", (size_t)2 == rec.count);
     expect_true("visit stop last leaf",
                 (SHREWD_BASIC_REFLECT_VISIT_LEAF == rec.entries[1].event)
-                && (0 == strcmp(rec.entries[1].path, "active")));
+                    && (0 == strcmp(rec.entries[1].path, "active")));
 
     /* NULL pointer slots, opaque targets and pointer-to-struct elements. */
-    point_t team_point;
+    point_t team_point = {0};
     int32_t counter = 5;
     const char *text = "hi";
     int32_t handle = 9;
-    refs_t refs;
+    refs_t refs = {0};
     memset(&refs, 0, sizeof(refs));
     memset(&team_point, 0, sizeof(team_point));
     refs.p_str = &text;
@@ -2204,30 +2148,26 @@ static void test_visit(void)
                   shrewd_basic_reflect_visit(&refs, &g_refs_reflect, visit_collect, &rec),
                   SHREWD_BASIC_ERR_OK);
     int at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "p_str");
-    expect_true("visit ptr-to-string leaf",
-                (0 <= at) && (0 == rec.entries[at].value_null));
+    expect_true("visit ptr-to-string leaf", (0 <= at) && (0 == rec.entries[at].value_null));
     at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "ctx");
-    expect_true("visit opaque leaf",
-                (0 <= at) && (0 == rec.entries[at].value_null));
+    expect_true("visit opaque leaf", (0 <= at) && (0 == rec.entries[at].value_null));
     at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "counter");
-    expect_true("visit ptr-to-scalar leaf",
-                (0 <= at) && (0 == rec.entries[at].value_null));
+    expect_true("visit ptr-to-scalar leaf", (0 <= at) && (0 == rec.entries[at].value_null));
     expect_true("visit ptr array element struct",
                 (visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "team")
                  < visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, "team[0]"))
-                && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "team[0].y"))
-                && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_EXIT, "team")));
+                    && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "team[0].y"))
+                    && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_EXIT, "team")));
     refs.counter = NULL;
     memset(&rec, 0, sizeof(rec));
     expect_eq_int("visit refs null",
                   shrewd_basic_reflect_visit(&refs, &g_refs_reflect, visit_collect, &rec),
                   SHREWD_BASIC_ERR_OK);
     at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "counter");
-    expect_true("visit null pointer leaf",
-                (0 <= at) && (0 != rec.entries[at].value_null));
+    expect_true("visit null pointer leaf", (0 <= at) && (0 != rec.entries[at].value_null));
 
     /* Cycles: a self-link reports CYCLE instead of expanding. */
-    node_t loop;
+    node_t loop = {0};
     memset(&loop, 0, sizeof(loop));
     loop.data = 1;
     loop.next = &loop;
@@ -2237,19 +2177,17 @@ static void test_visit(void)
                   SHREWD_BASIC_ERR_OK);
     at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_CYCLE, "next");
     expect_true("visit cycle reported", (0 <= at) && ((size_t)4 == rec.count));
-    expect_true("visit cycle target",
-                (0 <= at) && (0 == rec.entries[at].value_null));
+    expect_true("visit cycle target", (0 <= at) && (0 == rec.entries[at].value_null));
     loop.next = NULL;
     memset(&rec, 0, sizeof(rec));
     expect_eq_int("visit null link",
                   shrewd_basic_reflect_visit(&loop, &g_node_reflect, visit_collect, &rec),
                   SHREWD_BASIC_ERR_OK);
     at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "next");
-    expect_true("visit null struct link",
-                (0 <= at) && (0 != rec.entries[at].value_null));
+    expect_true("visit null struct link", (0 <= at) && (0 != rec.entries[at].value_null));
 
     /* Depth cap: a 20-long chain stops with a CYCLE event. */
-    node_t chain[20];
+    node_t chain[20] = {0};
     memset(chain, 0, sizeof(chain));
     for (size_t i = 0; i + 1 < 20; ++i) {
         chain[i].next = &chain[i + 1];
@@ -2264,17 +2202,16 @@ static void test_visit(void)
             saw_cycle = 1;
         }
     }
-    expect_true("visit depth cap events",
-                ((size_t)49 == rec.count) && (0 != saw_cycle));
+    expect_true("visit depth cap events", ((size_t)49 == rec.count) && (0 != saw_cycle));
     expect_true("visit depth cap shallow",
                 0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, "next.next.next"));
 
     /* Dynamic arrays: ARRAY_ENTER carries the run-time count. */
-    dyn_t dyn;
-    point_t dyn_points[2];
-    point_t *dyn_table[2];
-    int32_t dyn_values[3];
-    char *dyn_argv[3];
+    dyn_t dyn = {0};
+    point_t dyn_points[2] = {0};
+    point_t *dyn_table[2] = {0};
+    int32_t dyn_values[3] = {0};
+    char *dyn_argv[3] = {0};
     memset(&dyn, 0, sizeof(dyn));
     memset(dyn_points, 0, sizeof(dyn_points));
     dyn_table[0] = &dyn_points[0];
@@ -2297,24 +2234,23 @@ static void test_visit(void)
     at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "values");
     expect_true("visit darray count",
                 (0 <= at) && ((size_t)3 == rec.entries[at].count)
-                && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "values[2]")));
+                    && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "values[2]")));
     at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "points");
     expect_true("visit ptr darray",
                 (0 <= at) && ((size_t)2 == rec.entries[at].count)
-                && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, "points[1]")));
+                    && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, "points[1]")));
     at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "argv");
     expect_true("visit sentinel count",
                 (0 <= at) && ((size_t)2 == rec.entries[at].count)
-                && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "argv[1]")));
-    dyn_t dyn_empty;
+                    && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "argv[1]")));
+    dyn_t dyn_empty = {0};
     memset(&dyn_empty, 0, sizeof(dyn_empty));
     memset(&rec, 0, sizeof(rec));
     expect_eq_int("visit dyn empty",
                   shrewd_basic_reflect_visit(&dyn_empty, &g_dyn_reflect, visit_collect, &rec),
                   SHREWD_BASIC_ERR_OK);
     at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "points");
-    expect_true("visit null table leaf",
-                (0 <= at) && (0 != rec.entries[at].value_null));
+    expect_true("visit null table leaf", (0 <= at) && (0 != rec.entries[at].value_null));
 
     /* Argument validation. */
     expect_eq_int("visit NULL object",
@@ -2326,16 +2262,15 @@ static void test_visit(void)
     expect_eq_int("visit NULL callback",
                   shrewd_basic_reflect_visit(&person, &g_person_reflect, NULL, &rec),
                   SHREWD_BASIC_ERR_ARG_INVALID);
-    expect_eq_int("visit non-struct type",
-                  shrewd_basic_reflect_visit(&person.age, &shrewd_basic_reflect_int32,
-                                             visit_collect, &rec),
-                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int(
+        "visit non-struct type",
+        shrewd_basic_reflect_visit(&person.age, &shrewd_basic_reflect_int32, visit_collect, &rec),
+        SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
 /* --- diff/hash fixtures ------------------------------------------------ */
 
-static int ops_equal_false(const void *a, const void *b, bool *out_equal)
-{
+static int ops_equal_false(const void *a, const void *b, bool *out_equal) {
     (void)a;
     (void)b;
     *out_equal = false;
@@ -2343,35 +2278,35 @@ static int ops_equal_false(const void *a, const void *b, bool *out_equal)
 }
 
 /* Type-level ops whose equal always says "different" (root mismatch). */
-static const shrewd_basic_reflect_ops_t g_never_equal_ops = {
-    .value_size = 0,
-    .equal = ops_equal_false };
+static const shrewd_basic_reflect_ops_t g_never_equal_ops
+    = {.value_size = 0, .equal = ops_equal_false};
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE_OPS(g_never_equal_reflect, point_t, g_never_equal_ops,
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, x),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, y));
+SHREWD_BASIC_REFLECT_TYPE_DEFINE_OPS(g_never_equal_reflect,
+                                     point_t,
+                                     g_never_equal_ops,
+                                     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, x),
+                                     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, y));
 
-static int ops_hash_constant(const void *value, size_t *out_hash)
-{
+static int ops_hash_constant(const void *value, size_t *out_hash) {
     (void)value;
     *out_hash = 42;
     return SHREWD_BASIC_ERR_OK;
 }
 
 /* Type-level ops whose hash ignores the value entirely. */
-static const shrewd_basic_reflect_ops_t g_const_hash_ops = {
-    .value_size = 0,
-    .hash = ops_hash_constant };
+static const shrewd_basic_reflect_ops_t g_const_hash_ops
+    = {.value_size = 0, .hash = ops_hash_constant};
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE_OPS(g_const_hash_reflect, point_t, g_const_hash_ops,
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, x),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, y));
+SHREWD_BASIC_REFLECT_TYPE_DEFINE_OPS(g_const_hash_reflect,
+                                     point_t,
+                                     g_const_hash_ops,
+                                     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, x),
+                                     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(point_t, y));
 
-static void test_diff(void)
-{
-    person_t a;
-    person_t b;
-    char path[64];
+static void test_diff(void) {
+    person_t a = {0};
+    person_t b = {0};
+    char path[64] = {0};
     memset(&a, 0, sizeof(a));
     b = a;
 
@@ -2420,22 +2355,21 @@ static void test_diff(void)
     b.name = "Alice";
 
     /* NULL vs non-NULL pointer target. */
-    node_t left;
-    node_t right;
-    node_t target;
+    node_t left = {0};
+    node_t right = {0};
+    node_t target = {0};
     memset(&left, 0, sizeof(left));
     memset(&right, 0, sizeof(right));
     memset(&target, 0, sizeof(target));
     left.next = &target;
     expect_eq_int("diff null pointer",
-                  shrewd_basic_reflect_diff(&left, &right, &g_node_reflect,
-                                            path, sizeof(path)),
+                  shrewd_basic_reflect_diff(&left, &right, &g_node_reflect, path, sizeof(path)),
                   SHREWD_BASIC_ERR_REFLECT_MISMATCH);
     expect_true("diff null pointer path", 0 == strcmp(path, "next"));
 
     /* Dynamic arrays of different lengths report the field itself. */
-    dyn_t d1;
-    dyn_t d2;
+    dyn_t d1 = {0};
+    dyn_t d2 = {0};
     int32_t v_a[3] = {7, 8, 9};
     int32_t v_b[3] = {7, 80, 9};
     memset(&d1, 0, sizeof(d1));
@@ -2455,13 +2389,12 @@ static void test_diff(void)
     expect_true("diff darray elem path", 0 == strcmp(path, "values[1]"));
 
     /* Root-level ops->equal mismatch reports "(root)". */
-    point_t p1;
-    point_t p2;
+    point_t p1 = {0};
+    point_t p2 = {0};
     memset(&p1, 0, sizeof(p1));
     p2 = p1;
     expect_eq_int("diff root ops",
-                  shrewd_basic_reflect_diff(&p1, &p2, &g_never_equal_reflect,
-                                            path, sizeof(path)),
+                  shrewd_basic_reflect_diff(&p1, &p2, &g_never_equal_reflect, path, sizeof(path)),
                   SHREWD_BASIC_ERR_REFLECT_MISMATCH);
     expect_true("diff root ops path", 0 == strcmp(path, "(root)"));
 
@@ -2474,8 +2407,7 @@ static void test_diff(void)
     expect_eq_int("diff tiny buffer",
                   shrewd_basic_reflect_diff(&a, &b, &g_person_reflect, tiny, sizeof(tiny)),
                   SHREWD_BASIC_ERR_REFLECT_MISMATCH);
-    expect_true("diff tiny buffer terminated",
-                (3 == strlen(tiny)) && (0 == strcmp(tiny, "hom")));
+    expect_true("diff tiny buffer terminated", (3 == strlen(tiny)) && (0 == strcmp(tiny, "hom")));
     a.home.y = 5;
 
     expect_eq_int("diff NULL a",
@@ -2486,10 +2418,9 @@ static void test_diff(void)
                   SHREWD_BASIC_ERR_ARG_INVALID);
 }
 
-static void test_hash(void)
-{
-    person_t a;
-    person_t b;
+static void test_hash(void) {
+    person_t a = {0};
+    person_t b = {0};
     char name[] = "Alice";
     size_t ha = 0;
     size_t hb = 0;
@@ -2509,8 +2440,7 @@ static void test_hash(void)
     expect_eq_int("hash equal objects b",
                   shrewd_basic_reflect_hash(&b, &g_person_reflect, &hb),
                   SHREWD_BASIC_ERR_OK);
-    expect_true("hash equal objects same",
-                (0 != ha) && (ha == hb));
+    expect_true("hash equal objects same", (0 != ha) && (ha == hb));
     expect_eq_int("hash contract equal",
                   shrewd_basic_reflect_equal(&a, &b, &g_person_reflect, &same),
                   SHREWD_BASIC_ERR_OK);
@@ -2532,8 +2462,8 @@ static void test_hash(void)
     expect_true("hash different differs", ha != hb);
 
     /* Deep and dynamic content: equal graphs hash equal. */
-    dyn_t d1;
-    dyn_t d2;
+    dyn_t d1 = {0};
+    dyn_t d2 = {0};
     int32_t vals[3] = {7, 8, 9};
     memset(&d1, 0, sizeof(d1));
     memset(&d2, 0, sizeof(d2));
@@ -2541,17 +2471,15 @@ static void test_hash(void)
     d1.value_count = 3;
     d2.values = vals;
     d2.value_count = 3;
-    expect_eq_int("hash dyn a",
-                  shrewd_basic_reflect_hash(&d1, &g_dyn_reflect, &ha),
-                  SHREWD_BASIC_ERR_OK);
-    expect_eq_int("hash dyn b",
-                  shrewd_basic_reflect_hash(&d2, &g_dyn_reflect, &hb),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "hash dyn a", shrewd_basic_reflect_hash(&d1, &g_dyn_reflect, &ha), SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "hash dyn b", shrewd_basic_reflect_hash(&d2, &g_dyn_reflect, &hb), SHREWD_BASIC_ERR_OK);
     expect_true("hash dyn same", ha == hb);
 
     /* Cyclic graphs hash deterministically (back-edges fold as a marker). */
-    node_t loop_a;
-    node_t loop_b;
+    node_t loop_a = {0};
+    node_t loop_b = {0};
     memset(&loop_a, 0, sizeof(loop_a));
     memset(&loop_b, 0, sizeof(loop_b));
     loop_a.next = &loop_a;
@@ -2565,8 +2493,8 @@ static void test_hash(void)
     expect_true("hash cycle same", ha == hb);
 
     /* ops->hash overrides the metadata-driven fold. */
-    point_t p1;
-    point_t p2;
+    point_t p1 = {0};
+    point_t p2 = {0};
     memset(&p1, 0, sizeof(p1));
     memset(&p2, 0, sizeof(p2));
     p2.x = 999;
@@ -2594,28 +2522,26 @@ typedef struct {
     int32_t id;
 } text_t;
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_text_reflect, text_t,
-    SHREWD_BASIC_REFLECT_FIELD_STRING_BUFFER(text_t, title),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(text_t, id));
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_text_reflect,
+                                 text_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING_BUFFER(text_t, title),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(text_t, id));
 
-static void test_stringbuf(void)
-{
+static void test_stringbuf(void) {
     /* Descriptor shape: an inline char array with the string-buffer flag. */
-    const shrewd_basic_reflect_field_t *field =
-        find_or_fail("stringbuf", &g_text_reflect, "title");
+    const shrewd_basic_reflect_field_t *field = find_or_fail("stringbuf", &g_text_reflect, "title");
     if (NULL == field) {
         return;
     }
     expect_true("stringbuf shape",
                 (&shrewd_basic_reflect_char == field->sb_refl_type)
-                && ((size_t)8 == field->sb_refl_count)
-                && ((size_t)1 == field->sb_refl_stride)
-                && ((uint32_t)(SHREWD_BASIC_REFLECT_FIELD_F_ARRAY
-                               | SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)
-                    == field->sb_refl_flags));
+                    && ((size_t)8 == field->sb_refl_count) && ((size_t)1 == field->sb_refl_stride)
+                    && ((uint32_t)(SHREWD_BASIC_REFLECT_FIELD_F_ARRAY
+                                   | SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)
+                        == field->sb_refl_flags));
 
-    text_t a;
-    text_t b;
+    text_t a = {0};
+    text_t b = {0};
     memset(&a, 0, sizeof(a));
     memset(&b, 0, sizeof(b));
     memcpy(a.title, "hi", 3);
@@ -2652,16 +2578,14 @@ static void test_stringbuf(void)
                   SHREWD_BASIC_ERR_OK);
     memset(buf, 0, sizeof(buf));
     slurp(stream, buf, sizeof(buf));
-    expect_true("stringbuf dump escaped",
-                NULL != strstr(buf, "title = \"a\\\"b\\nc\""));
+    expect_true("stringbuf dump escaped", NULL != strstr(buf, "title = \"a\\\"b\\nc\""));
     memcpy(a.title, "abcdefgh", 8); /* no NUL at all */
     expect_eq_int("stringbuf dump unterminated",
                   shrewd_basic_reflect_dump(&g_text_reflect, &a, "text"),
                   SHREWD_BASIC_ERR_OK);
     memset(buf, 0, sizeof(buf));
     slurp(stream, buf, sizeof(buf));
-    expect_true("stringbuf dump all bytes",
-                NULL != strstr(buf, "title = \"abcdefgh\""));
+    expect_true("stringbuf dump all bytes", NULL != strstr(buf, "title = \"abcdefgh\""));
     shrewd_basic_log_module_set_stream(module, stderr);
     fclose(stream);
 
@@ -2673,7 +2597,7 @@ static void test_stringbuf(void)
                   shrewd_basic_reflect_equal(&a, &b, &g_text_reflect, &same),
                   SHREWD_BASIC_ERR_OK);
     expect_true("stringbuf equal yes", same);
-    char path[64];
+    char path[64] = {0};
     expect_eq_int("stringbuf diff",
                   shrewd_basic_reflect_diff(&a, &b, &g_text_reflect, path, sizeof(path)),
                   SHREWD_BASIC_ERR_OK);
@@ -2700,7 +2624,7 @@ static void test_stringbuf(void)
     /* visit reports one LEAF, not an element list. */
     memset(&a, 0, sizeof(a));
     memcpy(a.title, "hi", 3);
-    visit_rec_t rec;
+    visit_rec_t rec = {0};
     memset(&rec, 0, sizeof(rec));
     expect_eq_int("stringbuf visit",
                   shrewd_basic_reflect_visit(&a, &g_text_reflect, visit_collect, &rec),
@@ -2708,10 +2632,10 @@ static void test_stringbuf(void)
     int at = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "title");
     expect_true("stringbuf visit leaf",
                 (0 <= at) && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "id"))
-                && (0 > visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "title")));
+                    && (0 > visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "title")));
 
     /* Storage is still bytes: get/set move them raw, paths index chars. */
-    char raw[8];
+    char raw[8] = {0};
     memcpy(a.title, "abcdef", 7);
     expect_eq_int("stringbuf field_get",
                   shrewd_basic_reflect_field_get(&a, field, raw, sizeof(raw)),
@@ -2719,13 +2643,11 @@ static void test_stringbuf(void)
     expect_true("stringbuf raw bytes", 0 == memcmp(raw, "abcdef\0\0", 8));
     char ch = 'Z';
     expect_eq_int("stringbuf path_set",
-                  shrewd_basic_reflect_path_set(&a, &g_text_reflect, "title[2]", &ch,
-                                                sizeof(ch)),
+                  shrewd_basic_reflect_path_set(&a, &g_text_reflect, "title[2]", &ch, sizeof(ch)),
                   SHREWD_BASIC_ERR_OK);
     char got = '\0';
     expect_eq_int("stringbuf path_get",
-                  shrewd_basic_reflect_path_get(&a, &g_text_reflect, "title[2]", &got,
-                                                sizeof(got)),
+                  shrewd_basic_reflect_path_get(&a, &g_text_reflect, "title[2]", &got, sizeof(got)),
                   SHREWD_BASIC_ERR_OK);
     expect_true("stringbuf path index", 'Z' == got);
 }
@@ -2809,135 +2731,134 @@ typedef struct {
     int32_t f69;
 } many_t;
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_many_reflect, many_t,
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f0),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f1),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f2),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f3),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f4),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f5),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f6),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f7),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f8),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f9),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f10),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f11),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f12),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f13),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f14),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f15),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f16),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f17),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f18),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f19),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f20),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f21),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f22),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f23),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f24),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f25),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f26),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f27),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f28),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f29),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f30),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f31),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f32),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f33),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f34),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f35),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f36),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f37),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f38),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f39),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f40),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f41),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f42),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f43),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f44),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f45),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f46),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f47),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f48),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f49),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f50),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f51),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f52),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f53),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f54),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f55),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f56),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f57),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f58),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f59),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f60),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f61),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f62),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f63),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f64),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f65),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f66),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f67),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f68),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f69));
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_many_reflect,
+                                 many_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f0),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f1),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f2),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f3),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f4),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f5),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f6),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f7),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f8),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f9),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f10),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f11),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f12),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f13),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f14),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f15),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f16),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f17),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f18),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f19),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f20),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f21),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f22),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f23),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f24),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f25),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f26),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f27),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f28),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f29),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f30),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f31),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f32),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f33),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f34),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f35),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f36),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f37),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f38),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f39),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f40),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f41),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f42),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f43),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f44),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f45),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f46),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f47),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f48),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f49),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f50),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f51),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f52),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f53),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f54),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f55),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f56),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f57),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f58),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f59),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f60),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f61),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f62),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f63),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f64),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f65),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f66),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f67),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f68),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(many_t, f69));
 
-static void test_lookup_index(void)
-{
+static void test_lookup_index(void) {
     /* The sorted index is built lazily: every person field must resolve
        to the very same descriptor as the raw table. */
     for (size_t i = 0; i < g_person_reflect.sb_refl_field_count; ++i) {
         const shrewd_basic_reflect_field_t *field = NULL;
-        const shrewd_basic_reflect_field_t *want =
-                &g_person_reflect.sb_refl_fields[i];
-        expect_eq_int("lookup hit",
-                      shrewd_basic_reflect_type_find_field(
-                              &g_person_reflect, want->sb_refl_name, &field),
-                      SHREWD_BASIC_ERR_OK);
+        const shrewd_basic_reflect_field_t *want = &g_person_reflect.sb_refl_fields[i];
+        expect_eq_int(
+            "lookup hit",
+            shrewd_basic_reflect_type_find_field(&g_person_reflect, want->sb_refl_name, &field),
+            SHREWD_BASIC_ERR_OK);
         expect_true("lookup hit pointer", field == want);
     }
     const shrewd_basic_reflect_field_t *field = NULL;
     expect_eq_int("lookup miss",
-                  shrewd_basic_reflect_type_find_field(&g_person_reflect, "nope",
-                                                       &field),
+                  shrewd_basic_reflect_type_find_field(&g_person_reflect, "nope", &field),
                   SHREWD_BASIC_ERR_KEY_NOTFOUND);
 
     /* More types than lookup slots: results stay correct across
        round-robin eviction and rebuild. */
-    const shrewd_basic_reflect_type_t *types[] = {
-        &g_point_reflect, &g_node_reflect, &g_refs_reflect, &g_wide_reflect,
-        &g_huge_reflect, &g_dyn_reflect, &g_flex_reflect, &g_zflex_reflect,
-        &g_text_reflect, &g_ops_refs_reflect, &g_graph_reflect };
+    const shrewd_basic_reflect_type_t *types[] = {&g_point_reflect,
+                                                  &g_node_reflect,
+                                                  &g_refs_reflect,
+                                                  &g_wide_reflect,
+                                                  &g_huge_reflect,
+                                                  &g_dyn_reflect,
+                                                  &g_flex_reflect,
+                                                  &g_zflex_reflect,
+                                                  &g_text_reflect,
+                                                  &g_ops_refs_reflect,
+                                                  &g_graph_reflect};
     for (size_t i = 0; i < (sizeof(types) / sizeof(types[0])); ++i) {
-        const shrewd_basic_reflect_field_t *first =
-                shrewd_basic_reflect_type_field_at(types[i], 0);
+        const shrewd_basic_reflect_field_t *first = shrewd_basic_reflect_type_field_at(types[i], 0);
         expect_eq_int("lookup churn",
-                      shrewd_basic_reflect_type_find_field(
-                              types[i], first->sb_refl_name, &field),
+                      shrewd_basic_reflect_type_find_field(types[i], first->sb_refl_name, &field),
                       SHREWD_BASIC_ERR_OK);
         expect_true("lookup churn pointer", field == first);
     }
     /* person_t may have been evicted by now: it must still resolve. */
     expect_eq_int("lookup rebuilt",
-                  shrewd_basic_reflect_type_find_field(&g_person_reflect, "age",
-                                                       &field),
+                  shrewd_basic_reflect_type_find_field(&g_person_reflect, "age", &field),
                   SHREWD_BASIC_ERR_OK);
-    expect_true("lookup rebuilt pointer",
-                field == &g_person_reflect.sb_refl_fields[3]);
+    expect_true("lookup rebuilt pointer", field == &g_person_reflect.sb_refl_fields[3]);
 
     /* Oversized type (70 fields): the linear fallback finds every one. */
-    expect_true("lookup oversized count",
-                (size_t)70 == g_many_reflect.sb_refl_field_count);
+    expect_true("lookup oversized count", (size_t)70 == g_many_reflect.sb_refl_field_count);
     for (size_t i = 0; i < g_many_reflect.sb_refl_field_count; ++i) {
         const shrewd_basic_reflect_field_t *want = &g_many_reflect.sb_refl_fields[i];
-        expect_eq_int("lookup fallback",
-                      shrewd_basic_reflect_type_find_field(
-                              &g_many_reflect, want->sb_refl_name, &field),
-                      SHREWD_BASIC_ERR_OK);
+        expect_eq_int(
+            "lookup fallback",
+            shrewd_basic_reflect_type_find_field(&g_many_reflect, want->sb_refl_name, &field),
+            SHREWD_BASIC_ERR_OK);
         expect_true("lookup fallback pointer", field == want);
     }
     expect_eq_int("lookup fallback miss",
-                  shrewd_basic_reflect_type_find_field(&g_many_reflect, "nope",
-                                                       &field),
+                  shrewd_basic_reflect_type_find_field(&g_many_reflect, "nope", &field),
                   SHREWD_BASIC_ERR_KEY_NOTFOUND);
 }
 
@@ -2949,21 +2870,19 @@ typedef struct {
     const char *borrowed; /* plain STRING: aliased on copy, never freed */
 } owned_t;
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_owned_reflect, owned_t,
-    SHREWD_BASIC_REFLECT_FIELD_STRING_OWNED(owned_t, title),
-    SHREWD_BASIC_REFLECT_FIELD_STRING_OWNED(owned_t, shared),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(owned_t, borrowed));
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_owned_reflect,
+                                 owned_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING_OWNED(owned_t, title),
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING_OWNED(owned_t, shared),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(owned_t, borrowed));
 
-static void test_owned_strings(void)
-{
+static void test_owned_strings(void) {
     /* Descriptor shape. */
-    const shrewd_basic_reflect_field_t *field =
-        find_or_fail("owned", &g_owned_reflect, "title");
+    const shrewd_basic_reflect_field_t *field = find_or_fail("owned", &g_owned_reflect, "title");
     if (NULL != field) {
         expect_true("owned shape",
                     (&shrewd_basic_reflect_string == field->sb_refl_type)
-                    && (SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED
-                        == field->sb_refl_flags));
+                        && (SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED == field->sb_refl_flags));
     }
 
     /* A heap-owned graph: two fields share one buffer, one is borrowed. */
@@ -2997,10 +2916,10 @@ static void test_owned_strings(void)
                   SHREWD_BASIC_ERR_OK);
     expect_true("owned clone deep",
                 (NULL != twin) && (twin->title != src->title)
-                && (0 == strcmp(twin->title, "hello")));
+                    && (0 == strcmp(twin->title, "hello")));
     expect_true("owned clone shared",
-                (twin->shared != src->shared)   /* own copy of the buffer ... */
-                && (0 == strcmp(twin->shared, "dup")));
+                (twin->shared != src->shared) /* own copy of the buffer ... */
+                    && (0 == strcmp(twin->shared, "dup")));
     expect_true("owned clone borrowed", twin->borrowed == src->borrowed);
 
     bool same = false;
@@ -3023,11 +2942,9 @@ static void test_owned_strings(void)
     src->title = NULL;
     owned_t *null_clone = NULL;
     expect_eq_int("owned copy null",
-                  shrewd_basic_reflect_copy((void **)&null_clone, src,
-                                            &g_owned_reflect),
+                  shrewd_basic_reflect_copy((void **)&null_clone, src, &g_owned_reflect),
                   SHREWD_BASIC_ERR_OK);
-    expect_true("owned null stays null",
-                (NULL != null_clone) && (NULL == null_clone->title));
+    expect_true("owned null stays null", (NULL != null_clone) && (NULL == null_clone->title));
     expect_eq_int("owned destroy null clone",
                   shrewd_basic_reflect_destroy(null_clone, &g_owned_reflect),
                   SHREWD_BASIC_ERR_OK);
@@ -3049,31 +2966,30 @@ typedef struct {
     int32_t value;
 } reg_t;
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_reg_reflect, reg_t,
-    SHREWD_BASIC_REFLECT_FIELD_BITS(reg_t, cfg, ready, 0, 1),
-    SHREWD_BASIC_REFLECT_FIELD_BITS(reg_t, cfg, mode, 1, 3),
-    SHREWD_BASIC_REFLECT_FIELD_BITS(reg_t, cfg, divider, 8, 16),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(reg_t, value));
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_reg_reflect,
+                                 reg_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_BITS(reg_t, cfg, ready, 0, 1),
+                                 SHREWD_BASIC_REFLECT_FIELD_BITS(reg_t, cfg, mode, 1, 3),
+                                 SHREWD_BASIC_REFLECT_FIELD_BITS(reg_t, cfg, divider, 8, 16),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(reg_t, value));
 
-static void test_bits(void)
-{
+static void test_bits(void) {
     /* Descriptor shape: unit offsets plus bit position/width. */
-    const shrewd_basic_reflect_field_t *field =
-        find_or_fail("bits", &g_reg_reflect, "mode");
+    const shrewd_basic_reflect_field_t *field = find_or_fail("bits", &g_reg_reflect, "mode");
     if (NULL == field) {
         return;
     }
     expect_true("bits shape",
                 (SHREWD_BASIC_REFLECT_FIELD_F_BITS == field->sb_refl_flags)
-                && (offsetof(reg_t, cfg) == field->sb_refl_offset)
-                && (sizeof(uint32_t) == field->sb_refl_size)
-                && ((size_t)1 == field->sb_refl_bit_offset)
-                && ((size_t)3 == field->sb_refl_bit_width)
-                && (&shrewd_basic_reflect_uint32 == field->sb_refl_type));
+                    && (offsetof(reg_t, cfg) == field->sb_refl_offset)
+                    && (sizeof(uint32_t) == field->sb_refl_size)
+                    && ((size_t)1 == field->sb_refl_bit_offset)
+                    && ((size_t)3 == field->sb_refl_bit_width)
+                    && (&shrewd_basic_reflect_uint32 == field->sb_refl_type));
 
     /* Extract: unused unit bits are invisible to get. Garbage lives in
        bits 4-7 and 24-31 (the groups cover bits 0 and 1-3 and 8-23). */
-    reg_t reg;
+    reg_t reg = {0};
     memset(&reg, 0, sizeof(reg));
     reg.cfg = (1u << 0) | (5u << 1) | (100u << 8) | 0xf0u | 0xab000000u;
     reg.value = 7;
@@ -3113,20 +3029,19 @@ static void test_bits(void)
 
     /* Paths resolve to groups too. */
     word = 0;
-    expect_eq_int("bits path_get",
-                  shrewd_basic_reflect_path_get(&reg, &g_reg_reflect, "divider",
-                                                &word, sizeof(word)),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "bits path_get",
+        shrewd_basic_reflect_path_get(&reg, &g_reg_reflect, "divider", &word, sizeof(word)),
+        SHREWD_BASIC_ERR_OK);
     expect_true("bits path value", 100u == word);
     word = 0;
     expect_eq_int("bits path_set",
-                  shrewd_basic_reflect_path_set(&reg, &g_reg_reflect, "ready",
-                                                &word, sizeof(word)),
+                  shrewd_basic_reflect_path_set(&reg, &g_reg_reflect, "ready", &word, sizeof(word)),
                   SHREWD_BASIC_ERR_OK);
     expect_true("bits path wrote", 0u == (reg.cfg & 1u));
 
     /* equal/hash use the groups only: garbage in unused bits is equal. */
-    reg_t other;
+    reg_t other = {0};
     memset(&other, 0, sizeof(other));
     other.cfg = (0u << 0) | (3u << 1) | (100u << 8) | 0x30u | 0x07000000u;
     other.value = 7;
@@ -3137,28 +3052,24 @@ static void test_bits(void)
     expect_true("bits equal yes", same);
     size_t ha = 0;
     size_t hb = 0;
-    expect_eq_int("bits hash a",
-                  shrewd_basic_reflect_hash(&reg, &g_reg_reflect, &ha),
-                  SHREWD_BASIC_ERR_OK);
-    expect_eq_int("bits hash b",
-                  shrewd_basic_reflect_hash(&other, &g_reg_reflect, &hb),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "bits hash a", shrewd_basic_reflect_hash(&reg, &g_reg_reflect, &ha), SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "bits hash b", shrewd_basic_reflect_hash(&other, &g_reg_reflect, &hb), SHREWD_BASIC_ERR_OK);
     expect_true("bits hash same", ha == hb);
 
     /* A group difference is a first-class difference. */
     other.cfg |= (1u << 8); /* divider 100 -> 101 */
-    char path[64];
+    char path[64] = {0};
     expect_eq_int("bits diff",
-                  shrewd_basic_reflect_diff(&reg, &other, &g_reg_reflect,
-                                            path, sizeof(path)),
+                  shrewd_basic_reflect_diff(&reg, &other, &g_reg_reflect, path, sizeof(path)),
                   SHREWD_BASIC_ERR_REFLECT_MISMATCH);
     expect_true("bits diff path", 0 == strcmp(path, "divider"));
 
     /* dump shows the extracted numbers, not the whole unit. */
     shrewd_basic_log_module_t *module = NULL;
-    expect_eq_int("bits find module",
-                  shrewd_basic_log_module_find("reflect", &module),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "bits find module", shrewd_basic_log_module_find("reflect", &module), SHREWD_BASIC_ERR_OK);
     FILE *stream = tmpfile();
     expect_true("bits tmpfile", NULL != stream);
     if (NULL == stream) {
@@ -3166,29 +3077,27 @@ static void test_bits(void)
     }
     shrewd_basic_log_module_set_stream(module, stream);
     reg.cfg = (1u << 0) | (3u << 1) | (100u << 8) | 0xf0u | 0xab000000u;
-    expect_eq_int("bits dump",
-                  shrewd_basic_reflect_dump(&g_reg_reflect, &reg, "reg"),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "bits dump", shrewd_basic_reflect_dump(&g_reg_reflect, &reg, "reg"), SHREWD_BASIC_ERR_OK);
     char buf[4096] = {0};
     slurp(stream, buf, sizeof(buf));
     expect_true("bits dump groups",
-                (NULL != strstr(buf, "  ready = 1"))
-                && (NULL != strstr(buf, "  mode = 3"))
-                && (NULL != strstr(buf, "  divider = 100")));
+                (NULL != strstr(buf, "  ready = 1")) && (NULL != strstr(buf, "  mode = 3"))
+                    && (NULL != strstr(buf, "  divider = 100")));
     expect_true("bits dump hides unit", NULL == strstr(buf, "2868903936")); /* 0xab000000 */
     shrewd_basic_log_module_set_stream(module, stderr);
     fclose(stream);
 
     /* visit reports each group as one LEAF. */
-    visit_rec_t rec;
+    visit_rec_t rec = {0};
     memset(&rec, 0, sizeof(rec));
     expect_eq_int("bits visit",
                   shrewd_basic_reflect_visit(&reg, &g_reg_reflect, visit_collect, &rec),
                   SHREWD_BASIC_ERR_OK);
     expect_true("bits visit leaves",
                 (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "ready"))
-                && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "mode"))
-                && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "divider")));
+                    && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "mode"))
+                    && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "divider")));
 
     /* copy carries the unit bytes; equal stays group-based. */
     reg_t *clone = NULL;
@@ -3202,6 +3111,304 @@ static void test_bits(void)
                   SHREWD_BASIC_ERR_OK);
 }
 
+/* --- C bit-field fixtures (FIELD_BITS_UNIT) ---------------------------- */
+
+/*
+ * Real C bit-fields: the storage unit has no member name, so placement
+ * is explicit numbers (as the reflect_gen DWARF mode derives them). The
+ * unit is the single unsigned word at offset 0; every supported toolchain
+ * packs same-declared-type bit-fields LSB-first into one unit, so the
+ * numbers are stable across the verification matrix.
+ */
+typedef struct {
+    unsigned ok : 1;
+    unsigned level : 3;
+    unsigned mode : 4;
+    unsigned rest : 24;
+} cbit_t;
+
+/* "rest" stays undescribed on purpose: only described bits survive. */
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(
+    g_cbit_reflect,
+    cbit_t,
+    SHREWD_BASIC_REFLECT_FIELD_BITS_UNIT(
+        cbit_t, ok, shrewd_basic_reflect_uint32, 0, sizeof(uint32_t), 0, 1),
+    SHREWD_BASIC_REFLECT_FIELD_BITS_UNIT(
+        cbit_t, level, shrewd_basic_reflect_uint32, 0, sizeof(uint32_t), 1, 3),
+    SHREWD_BASIC_REFLECT_FIELD_BITS_UNIT(
+        cbit_t, mode, shrewd_basic_reflect_uint32, 0, sizeof(uint32_t), 4, 4));
+
+static void test_cbit(void) {
+    /* Descriptor shape: explicit unit placement plus group position. */
+    const shrewd_basic_reflect_field_t *field = find_or_fail("cbit", &g_cbit_reflect, "mode");
+    if (NULL == field) {
+        return;
+    }
+    expect_true(
+        "cbit shape",
+        (SHREWD_BASIC_REFLECT_FIELD_F_BITS == field->sb_refl_flags)
+            && ((size_t)0 == field->sb_refl_offset) && (sizeof(uint32_t) == field->sb_refl_size)
+            && ((size_t)4 == field->sb_refl_bit_offset) && ((size_t)4 == field->sb_refl_bit_width)
+            && (&shrewd_basic_reflect_uint32 == field->sb_refl_type));
+    expect_eq_int(
+        "cbit check_type", shrewd_basic_reflect_check_type(&g_cbit_reflect), SHREWD_BASIC_ERR_OK);
+
+    /* C bit-fields and the descriptors agree: read what C wrote. */
+    cbit_t reg = {0};
+    memset(&reg, 0, sizeof(reg));
+    reg.ok = 1;
+    reg.level = 5;
+    reg.mode = 9;
+    reg.rest = 0xabcdef;
+    uint32_t word = 0;
+    field = find_or_fail("cbit", &g_cbit_reflect, "ok");
+    if (NULL != field) {
+        expect_eq_int("cbit get ok",
+                      shrewd_basic_reflect_field_get(&reg, field, &word, sizeof(word)),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("cbit ok value", 1u == word);
+    }
+    field = find_or_fail("cbit", &g_cbit_reflect, "level");
+    if (NULL != field) {
+        expect_eq_int("cbit get level",
+                      shrewd_basic_reflect_field_get(&reg, field, &word, sizeof(word)),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("cbit level value", 5u == word);
+    }
+    field = find_or_fail("cbit", &g_cbit_reflect, "mode");
+    if (NULL != field) {
+        expect_eq_int("cbit get mode",
+                      shrewd_basic_reflect_field_get(&reg, field, &word, sizeof(word)),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("cbit mode value", 9u == word);
+    }
+
+    /* ...and write what reflection inserts (read-modify-write). */
+    word = 3;
+    field = find_or_fail("cbit", &g_cbit_reflect, "mode");
+    if (NULL != field) {
+        expect_eq_int("cbit set mode",
+                      shrewd_basic_reflect_field_set(&reg, field, &word, sizeof(word)),
+                      SHREWD_BASIC_ERR_OK);
+    }
+    expect_true("cbit set wrote", 3u == reg.mode);
+    expect_true("cbit set kept neighbors", (1u == reg.ok) && (5u == reg.level));
+
+    /* Undescribed group bits are invisible to equal/hash. */
+    cbit_t other = {0};
+    memset(&other, 0, sizeof(other));
+    other.ok = 1;
+    other.level = 5;
+    other.mode = 3;
+    other.rest = 1;
+    bool same = false;
+    expect_eq_int("cbit equal",
+                  shrewd_basic_reflect_equal(&reg, &other, &g_cbit_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("cbit equal yes", same);
+    size_t ha = 0;
+    size_t hb = 0;
+    expect_eq_int(
+        "cbit hash a", shrewd_basic_reflect_hash(&reg, &g_cbit_reflect, &ha), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("cbit hash b",
+                  shrewd_basic_reflect_hash(&other, &g_cbit_reflect, &hb),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("cbit hash same", ha == hb);
+
+    /* A described-group difference is a first-class difference. */
+    other.level = 4;
+    char path[64] = {0};
+    expect_eq_int("cbit diff",
+                  shrewd_basic_reflect_diff(&reg, &other, &g_cbit_reflect, path, sizeof(path)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("cbit diff path", 0 == strcmp(path, "level"));
+}
+
+/* --- wide-string fixtures (STRING16/STRING32) -------------------------- */
+
+/*
+ * Wide content as integer-constant arrays (not u""/U"" literals): zero
+ * toolchain risk across the verification matrix.
+ */
+static const char16_t g_title_a[] = {'c', 'a', 'f', 0x00e9, 0}; /* café */
+static const char16_t g_title_b[] = {'c', 'a', 'f', 0x00e9, 0}; /* same, aliased */
+static const char16_t g_title_c[] = {'t', 'e', 'a', 0};         /* tea */
+static const char32_t g_body_a[] = {'h', 'i', 0x1f600, 0};      /* hi😀 */
+static const char16_t g_code_full[8] = {'o', 'k', 0, 0x3042, 0x3042, 0, 0, 0};
+static const char16_t g_code_tail[8] = {'o', 'k', 0, 0x7777, 0x7777, 0, 0, 0};
+static const char16_t g_code_long[8] = {'o', 'k', 'a', 'y', '!', 0, 0, 0};
+
+typedef struct {
+    const char16_t *title; /* borrowed */
+    const char32_t *body;  /* owned */
+    const wchar_t *label;  /* borrowed, unit width follows wchar_t */
+    char16_t code[8];      /* wide string buffer */
+    uint32_t id;
+} wtext_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_wtext_reflect,
+                                 wtext_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING16(wtext_t, title),
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING32_OWNED(wtext_t, body),
+                                 SHREWD_BASIC_REFLECT_FIELD_WSTRING(wtext_t, label),
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING16_BUFFER(wtext_t, code),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(wtext_t, id));
+
+static void test_wstring(void) {
+    /* Descriptor shapes: kinds follow the declared unit width. */
+    const shrewd_basic_reflect_field_t *field = find_or_fail("wstr", &g_wtext_reflect, "title");
+    if (NULL == field) {
+        return;
+    }
+    expect_true("wstr kind16",
+                (SHREWD_BASIC_REFLECT_KIND_STRING16 == field->sb_refl_type->sb_refl_kind)
+                    && (sizeof(const char16_t *) == field->sb_refl_size));
+    field = find_or_fail("wstr", &g_wtext_reflect, "body");
+    expect_true("wstr kind32",
+                (NULL != field)
+                    && (SHREWD_BASIC_REFLECT_KIND_STRING32 == field->sb_refl_type->sb_refl_kind));
+    field = find_or_fail("wstr", &g_wtext_reflect, "label");
+    if (NULL != field) {
+        shrewd_basic_reflect_kind_t want = (2 == sizeof(wchar_t))
+                                               ? SHREWD_BASIC_REFLECT_KIND_STRING16
+                                               : SHREWD_BASIC_REFLECT_KIND_STRING32;
+        expect_true("wstr wstring width", want == field->sb_refl_type->sb_refl_kind);
+    }
+    field = find_or_fail("wstr", &g_wtext_reflect, "code");
+    expect_true("wstr buffer shape",
+                (NULL != field) && ((size_t)8 == field->sb_refl_count)
+                    && ((size_t)2 == field->sb_refl_stride)
+                    && (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)));
+    expect_eq_int(
+        "wstr check_type", shrewd_basic_reflect_check_type(&g_wtext_reflect), SHREWD_BASIC_ERR_OK);
+
+    /* Content semantics: distinct objects, equal code units. */
+    wtext_t left = {0};
+    wtext_t right = {0};
+    memset(&left, 0, sizeof(left));
+    memset(&right, 0, sizeof(right));
+    left.title = g_title_a;
+    right.title = g_title_b;
+    memcpy(left.code, g_code_full, sizeof(left.code));
+    memcpy(right.code, g_code_tail, sizeof(right.code)); /* tail after NUL differs */
+    left.id = 1;
+    right.id = 1;
+    bool same = false;
+    expect_eq_int("wstr equal",
+                  shrewd_basic_reflect_equal(&left, &right, &g_wtext_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wstr equal yes", same);
+    size_t ha = 0;
+    size_t hb = 0;
+    expect_eq_int("wstr hash a",
+                  shrewd_basic_reflect_hash(&left, &g_wtext_reflect, &ha),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("wstr hash b",
+                  shrewd_basic_reflect_hash(&right, &g_wtext_reflect, &hb),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wstr hash same", ha == hb);
+
+    /* A differing code unit is a first-class difference. */
+    right.title = g_title_c;
+    char path[64] = {0};
+    expect_eq_int("wstr diff",
+                  shrewd_basic_reflect_diff(&left, &right, &g_wtext_reflect, path, sizeof(path)),
+                  SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("wstr diff path", 0 == strcmp(path, "title"));
+
+    /* NULL handling: NULL == NULL, NULL != content. */
+    wtext_t empty = {0};
+    memset(&empty, 0, sizeof(empty));
+    wtext_t nulls = {0};
+    memset(&nulls, 0, sizeof(nulls));
+    same = false;
+    expect_eq_int("wstr null equal",
+                  shrewd_basic_reflect_equal(&empty, &nulls, &g_wtext_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wstr null equal yes", same);
+    nulls.title = g_title_a;
+    same = true;
+    expect_eq_int("wstr null differ",
+                  shrewd_basic_reflect_equal(&empty, &nulls, &g_wtext_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wstr null differ no", !same);
+
+    /* Buffer content stops at the NUL unit: differing tails stay equal,
+       a longer run of visible units differs. */
+    memcpy(right.code, g_code_long, sizeof(right.code));
+    right.title = g_title_a;
+    same = false;
+    expect_eq_int("wstr buf differ",
+                  shrewd_basic_reflect_equal(&left, &right, &g_wtext_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wstr buf differ no", !same);
+
+    /* Owned wide strings: copy clones content, shared strings stay shared. */
+    wtext_t *src = NULL;
+    wtext_t *twin = NULL;
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_calloc((void **)&src, 1, sizeof(*src))) {
+        expect_true("wstr alloc src", false);
+        return;
+    }
+    {
+        void *block = NULL;
+        size_t bytes = sizeof(g_body_a);
+        if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_calloc(&block, 1, bytes)) {
+            expect_true("wstr alloc body", false);
+            return;
+        }
+        memcpy(block, g_body_a, bytes);
+        src->body = (const char32_t *)block;
+        src->title = g_title_a;
+    }
+    expect_eq_int("wstr copy",
+                  shrewd_basic_reflect_copy((void **)&twin, src, &g_wtext_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wstr clone distinct", (NULL != twin) && (twin->body != src->body));
+    expect_true("wstr clone content",
+                (NULL != twin) && (0 == memcmp(twin->body, g_body_a, sizeof(g_body_a))));
+    expect_true("wstr clone borrow", (NULL != twin) && (twin->title == src->title));
+    same = false;
+    expect_eq_int("wstr clone equal",
+                  shrewd_basic_reflect_equal(src, twin, &g_wtext_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wstr clone equal yes", same);
+    expect_eq_int("wstr destroy src",
+                  shrewd_basic_reflect_destroy(src, &g_wtext_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("wstr destroy clone",
+                  shrewd_basic_reflect_destroy(twin, &g_wtext_reflect),
+                  SHREWD_BASIC_ERR_OK);
+
+    /* dump renders non-ASCII units as \u / \U escapes. */
+    shrewd_basic_log_module_t *module = NULL;
+    expect_eq_int(
+        "wstr find module", shrewd_basic_log_module_find("reflect", &module), SHREWD_BASIC_ERR_OK);
+    FILE *stream = tmpfile();
+    expect_true("wstr tmpfile", NULL != stream);
+    if (NULL == stream) {
+        return;
+    }
+    shrewd_basic_log_module_set_stream(module, stream);
+    wtext_t shown = {0};
+    memset(&shown, 0, sizeof(shown));
+    shown.title = g_title_a;
+    shown.body = g_body_a;
+    shown.code[0] = 'o';
+    shown.code[1] = 0x3042;
+    shown.code[2] = 0; /* escapes sit before the NUL unit */
+    expect_eq_int("wstr dump",
+                  shrewd_basic_reflect_dump(&g_wtext_reflect, &shown, "wtext"),
+                  SHREWD_BASIC_ERR_OK);
+    char buf[4096] = {0};
+    slurp(stream, buf, sizeof(buf));
+    expect_true("wstr dump escape16", NULL != strstr(buf, "caf\\u00e9"));
+    expect_true("wstr dump escape32", NULL != strstr(buf, "\\U0001f600"));
+    expect_true("wstr dump buf escape", NULL != strstr(buf, "o\\u3042"));
+    shrewd_basic_log_module_set_stream(module, stderr);
+    fclose(stream);
+}
+
 /* --- multi-dimension array fixtures ------------------------------------ */
 
 /* int32_t m[2][3]: a matrix of 2 rows x 3 columns. */
@@ -3210,23 +3417,347 @@ typedef struct {
     int32_t id;
 } matrix_t;
 
-SHREWD_BASIC_REFLECT_ARRAY_DEFINE(g_row3_reflect, shrewd_basic_reflect_int32,
-                                  int32_t, 3);
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_matrix_reflect, matrix_t,
-    SHREWD_BASIC_REFLECT_FIELD_ARRAY(matrix_t, m, g_row3_reflect),
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(matrix_t, id));
+SHREWD_BASIC_REFLECT_ARRAY_DEFINE(g_row3_reflect, shrewd_basic_reflect_int32, int32_t, 3);
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_matrix_reflect,
+                                 matrix_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_ARRAY(matrix_t, m, g_row3_reflect),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(matrix_t, id));
+
+/* --- wide _OPS twins --------------------------------------------------- */
+
+static int g_wide_ops_equal_calls = 0;
+
+static int wide_ops_equal(const void *a, const void *b, bool *out_equal) {
+    (void)a;
+    (void)b;
+    ++g_wide_ops_equal_calls;
+    *out_equal = true;
+    return SHREWD_BASIC_ERR_OK;
+}
+
+static const shrewd_basic_reflect_ops_t g_wide_ops = {.equal = wide_ops_equal};
+
+typedef struct {
+    const char16_t *tag;
+    char16_t buf[4];
+    const wchar_t *label;
+} wops_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_wops_reflect,
+                                 wops_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING16_OPS(wops_t, tag, g_wide_ops),
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING16_BUFFER_OPS(wops_t,
+                                                                                buf,
+                                                                                g_wide_ops),
+                                 SHREWD_BASIC_REFLECT_FIELD_WSTRING_OPS(wops_t, label, g_wide_ops));
+
+static void test_wide_ops(void) {
+    /* The _OPS twins attach a field-level vtable like the char forms. */
+    const shrewd_basic_reflect_field_t *tag = find_or_fail("wide-ops", &g_wops_reflect, "tag");
+    const shrewd_basic_reflect_field_t *buf = find_or_fail("wide-ops", &g_wops_reflect, "buf");
+    const shrewd_basic_reflect_field_t *label = find_or_fail("wide-ops", &g_wops_reflect, "label");
+    if ((NULL == tag) || (NULL == buf) || (NULL == label)) {
+        return;
+    }
+    expect_true("wide ops tag attach", &g_wide_ops == tag->sb_refl_ops);
+    expect_true("wide ops buffer attach", &g_wide_ops == buf->sb_refl_ops);
+    expect_true("wide ops wstring attach", &g_wide_ops == label->sb_refl_ops);
+
+    /* Behavior: the field-level equal hook wins over content compare. */
+    static const char16_t left_units[] = {'l', 0};
+    static const char16_t right_units[] = {'r', 0};
+    wops_t left = {0};
+    wops_t right = {0};
+    memset(&left, 0, sizeof(left));
+    memset(&right, 0, sizeof(right));
+    left.tag = left_units;
+    right.tag = right_units;
+    left.buf[0] = 'x';
+    right.buf[0] = 'y';
+    left.label = L"a";
+    right.label = L"b";
+    bool same = false;
+    g_wide_ops_equal_calls = 0;
+    expect_eq_int("wide ops equal",
+                  shrewd_basic_reflect_equal(&left, &right, &g_wops_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wide ops hook ran", same && (0 < g_wide_ops_equal_calls));
+}
+
+/* --- wide scalars (LONG_DOUBLE / COMPLEX / BIT_INT) --------------------- */
+
+typedef struct {
+    long double wide;
+    double pair[2];
+    int32_t bits;
+} wscalar_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_wscalar_reflect,
+                                 wscalar_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_LONG_DOUBLE(wscalar_t, wide),
+                                 SHREWD_BASIC_REFLECT_FIELD_COMPLEX(wscalar_t, pair),
+                                 SHREWD_BASIC_REFLECT_FIELD_BITINT(wscalar_t, bits));
+
+static void test_wscalar(void) {
+    /* Descriptor shapes. */
+    const shrewd_basic_reflect_field_t *wide = find_or_fail("wscalar", &g_wscalar_reflect, "wide");
+    const shrewd_basic_reflect_field_t *pair = find_or_fail("wscalar", &g_wscalar_reflect, "pair");
+    const shrewd_basic_reflect_field_t *bits = find_or_fail("wscalar", &g_wscalar_reflect, "bits");
+    if ((NULL == wide) || (NULL == pair) || (NULL == bits)) {
+        return;
+    }
+    expect_true("wscalar kinds",
+                (SHREWD_BASIC_REFLECT_KIND_LONG_DOUBLE == wide->sb_refl_type->sb_refl_kind)
+                    && (SHREWD_BASIC_REFLECT_KIND_COMPLEX == pair->sb_refl_type->sb_refl_kind)
+                    && (SHREWD_BASIC_REFLECT_KIND_BIT_INT == bits->sb_refl_type->sb_refl_kind));
+
+    /* Value semantics for long double and complex halves; byte
+       semantics for the bit-int member. */
+    wscalar_t left = {0};
+    wscalar_t right = {0};
+    memset(&left, 0, sizeof(left));
+    memset(&right, 0, sizeof(right));
+    left.wide = 1.5L;
+    right.wide = 1.5L;
+    left.pair[0] = 2.5;
+    left.pair[1] = -3.25;
+    right.pair[0] = 2.5;
+    right.pair[1] = -3.25;
+    left.bits = 0x01020304;
+    right.bits = 0x01020304;
+    bool same = false;
+    expect_eq_int("wscalar equal",
+                  shrewd_basic_reflect_equal(&left, &right, &g_wscalar_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wscalar same", same);
+
+    /* The equal/hash contract: equal values hash equal. */
+    size_t hash_left = 0;
+    size_t hash_right = 0;
+    expect_eq_int("wscalar hash left",
+                  shrewd_basic_reflect_hash(&left, &g_wscalar_reflect, &hash_left),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("wscalar hash right",
+                  shrewd_basic_reflect_hash(&right, &g_wscalar_reflect, &hash_right),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wscalar hash match", hash_left == hash_right);
+
+    /* Inequality fires per component / per value. */
+    right.pair[1] = 0.0;
+    expect_eq_int("wscalar complex diff",
+                  shrewd_basic_reflect_equal(&left, &right, &g_wscalar_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wscalar complex unequal", !same);
+    right.pair[1] = -3.25;
+    right.wide = 1.25L;
+    expect_eq_int("wscalar long double diff",
+                  shrewd_basic_reflect_equal(&left, &right, &g_wscalar_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wscalar long double unequal", !same);
+    right.wide = 1.5L;
+    right.bits = 0x01020305;
+    expect_eq_int("wscalar bit-int diff",
+                  shrewd_basic_reflect_equal(&left, &right, &g_wscalar_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wscalar bit-int unequal", !same);
+
+    /* dump renders the three shapes without error. */
+    expect_eq_int("wscalar dump",
+                  shrewd_basic_reflect_dump(&g_wscalar_reflect, &left, "wscalar"),
+                  SHREWD_BASIC_ERR_OK);
+}
+
+/* --- text layer (render/scan) ------------------------------------------- */
+
+typedef enum { TEXT_RED = 1, TEXT_BLUE = 7 } text_color_t;
+
+SHREWD_BASIC_REFLECT_ENUM_DEFINE(g_text_color_reflect,
+                                 text_color_t,
+                                 SHREWD_BASIC_REFLECT_ENUM_VALUE(TEXT_RED),
+                                 SHREWD_BASIC_REFLECT_ENUM_VALUE(TEXT_BLUE));
+
+typedef struct {
+    bool flag;
+    int32_t num;
+    uint16_t unum;
+    double real;
+    float single;
+    text_color_t color;
+    char tag[8];
+    const char *owned;
+    const char *borrowed;
+} text_leaf_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_text_leaf_reflect,
+                                 text_leaf_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(text_leaf_t, flag),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(text_leaf_t, num),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(text_leaf_t, unum),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(text_leaf_t, real),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(text_leaf_t, single),
+                                 SHREWD_BASIC_REFLECT_FIELD_ENUM(text_leaf_t,
+                                                                 color,
+                                                                 g_text_color_reflect),
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING_BUFFER(text_leaf_t, tag),
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING_OWNED(text_leaf_t, owned),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(text_leaf_t, borrowed));
+
+static unsigned char *text_slot(text_leaf_t *obj, const char *name) {
+    const shrewd_basic_reflect_field_t *field = find_or_fail("text", &g_text_leaf_reflect, name);
+    return (NULL != field) ? ((unsigned char *)obj + field->sb_refl_offset) : NULL;
+}
+
+static void test_text_layer(void) {
+    text_leaf_t obj;
+    text_leaf_t back;
+    const shrewd_basic_reflect_field_t *field = NULL;
+    char buf[32];
+    size_t len = 0;
+    memset(&obj, 0, sizeof(obj));
+    memset(&back, 0, sizeof(back));
+
+    /* Render: round-trip safe forms (enum by name, floats at digits). */
+    obj.flag = true;
+    obj.num = -42;
+    obj.unum = 65000;
+    obj.real = 2.5;
+    obj.single = 1.25f;
+    obj.color = TEXT_BLUE;
+    memcpy(obj.tag, "hi", 3);
+    field = find_or_fail("text", &g_text_leaf_reflect, "flag");
+    if (NULL == field) {
+        return;
+    }
+    expect_eq_int(
+        "text render bool",
+        shrewd_basic_reflect_render_text(field, text_slot(&obj, "flag"), buf, sizeof(buf), &len),
+        SHREWD_BASIC_ERR_OK);
+    expect_true("text render bool text", (0 == strcmp(buf, "true")) && (4 == len));
+    expect_eq_int(
+        "text render enum",
+        shrewd_basic_reflect_render_text(find_or_fail("text", &g_text_leaf_reflect, "color"),
+                                         text_slot(&obj, "color"),
+                                         buf,
+                                         sizeof(buf),
+                                         &len),
+        SHREWD_BASIC_ERR_OK);
+    expect_true("text render enum name", 0 == strcmp(buf, "TEXT_BLUE"));
+    expect_eq_int(
+        "text render buffer",
+        shrewd_basic_reflect_render_text(find_or_fail("text", &g_text_leaf_reflect, "tag"),
+                                         text_slot(&obj, "tag"),
+                                         buf,
+                                         sizeof(buf),
+                                         &len),
+        SHREWD_BASIC_ERR_OK);
+    expect_true("text render buffer text", 0 == strcmp(buf, "hi"));
+
+    /* Measure mode and truncation contract. */
+    expect_eq_int(
+        "text render measure",
+        shrewd_basic_reflect_render_text(find_or_fail("text", &g_text_leaf_reflect, "unum"),
+                                         text_slot(&obj, "unum"),
+                                         NULL,
+                                         0,
+                                         &len),
+        SHREWD_BASIC_ERR_OK);
+    expect_true("text render measure len", 5 == len);
+    expect_eq_int(
+        "text render trunc",
+        shrewd_basic_reflect_render_text(find_or_fail("text", &g_text_leaf_reflect, "unum"),
+                                         text_slot(&obj, "unum"),
+                                         buf,
+                                         3,
+                                         &len),
+        SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    expect_true("text render trunc len", 5 == len);
+
+    /* Scan: strict, round-trip through render. */
+    field = find_or_fail("text", &g_text_leaf_reflect, "num");
+    expect_eq_int("text scan int",
+                  shrewd_basic_reflect_scan_text(field, text_slot(&back, "num"), "-42", 3),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("text scan int value", -42 == back.num);
+    expect_true("text scan int junk",
+                SHREWD_BASIC_ERR_REFLECT_TEXT
+                    == shrewd_basic_reflect_scan_text(field, text_slot(&back, "num"), "42x", 3));
+    expect_true("text scan int sign",
+                SHREWD_BASIC_ERR_REFLECT_TEXT
+                    == shrewd_basic_reflect_scan_text(field, text_slot(&back, "num"), "+42", 3));
+    field = find_or_fail("text", &g_text_leaf_reflect, "unum");
+    expect_true("text scan uint range",
+                SHREWD_BASIC_ERR_REFLECT_TEXT
+                    == shrewd_basic_reflect_scan_text(field, text_slot(&back, "unum"), "70000", 5));
+    expect_true("text scan uint sign",
+                SHREWD_BASIC_ERR_REFLECT_TEXT
+                    == shrewd_basic_reflect_scan_text(field, text_slot(&back, "unum"), "-1", 2));
+    field = find_or_fail("text", &g_text_leaf_reflect, "single");
+    expect_true(
+        "text scan float narrow",
+        SHREWD_BASIC_ERR_REFLECT_TEXT
+            == shrewd_basic_reflect_scan_text(field, text_slot(&back, "single"), "1e300", 5));
+    expect_true("text scan float nonfinite",
+                SHREWD_BASIC_ERR_REFLECT_TEXT
+                    == shrewd_basic_reflect_scan_text(field, text_slot(&back, "single"), "inf", 3));
+    expect_eq_int("text scan float ok",
+                  shrewd_basic_reflect_scan_text(field, text_slot(&back, "single"), "1.25", 4),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("text scan float value", 1.25f == back.single);
+    field = find_or_fail("text", &g_text_leaf_reflect, "color");
+    expect_eq_int("text scan enum name",
+                  shrewd_basic_reflect_scan_text(field, text_slot(&back, "color"), "TEXT_RED", 8),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("text scan enum value", TEXT_RED == back.color);
+    expect_eq_int("text scan enum number",
+                  shrewd_basic_reflect_scan_text(field, text_slot(&back, "color"), "7", 1),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("text scan enum numeric", TEXT_BLUE == back.color);
+
+    /* Strings: buffer bounds and owned allocation. */
+    field = find_or_fail("text", &g_text_leaf_reflect, "tag");
+    expect_true(
+        "text scan buffer long",
+        SHREWD_BASIC_ERR_REFLECT_MISMATCH
+            == shrewd_basic_reflect_scan_text(field, text_slot(&back, "tag"), "0123456789", 10));
+    expect_eq_int("text scan buffer ok",
+                  shrewd_basic_reflect_scan_text(field, text_slot(&back, "tag"), "hello", 5),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("text scan buffer nul", 0 == strcmp(back.tag, "hello"));
+    /* Owned scan allocates; destroy releases contents AND the root, so
+       the root must live on the heap (the graph ownership model). */
+    field = find_or_fail("text", &g_text_leaf_reflect, "owned");
+    {
+        text_leaf_t *heap = NULL;
+        expect_eq_int("text scan owned alloc",
+                      shrewd_basic_platform_calloc((void **)&heap, 1, sizeof(*heap)),
+                      SHREWD_BASIC_ERR_OK);
+        expect_eq_int("text scan owned",
+                      shrewd_basic_reflect_scan_text(field, text_slot(heap, "owned"), "copy me", 7),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("text scan owned value",
+                    (NULL != heap->owned) && (0 == strcmp(heap->owned, "copy me")));
+        expect_eq_int("text scan owned destroy",
+                      shrewd_basic_reflect_destroy(heap, &g_text_leaf_reflect),
+                      SHREWD_BASIC_ERR_OK);
+    }
+
+    /* Refusals: borrowed strings and non-leaves. */
+    field = find_or_fail("text", &g_text_leaf_reflect, "borrowed");
+    expect_true("text scan borrowed refused",
+                SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED
+                    == shrewd_basic_reflect_scan_text(field, text_slot(&back, "borrowed"), "x", 1));
+}
 
 /* int32_t cube[2][2][2]: rows nest (row of rows). */
 typedef struct {
     int32_t cube[2][2][2];
 } cube_t;
 
-SHREWD_BASIC_REFLECT_ARRAY_DEFINE(g_row2_reflect, shrewd_basic_reflect_int32,
-                                  int32_t, 2);
-SHREWD_BASIC_REFLECT_ARRAY_DEFINE(g_plane22_reflect, g_row2_reflect,
-                                  int32_t[2], 2);
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_cube_reflect, cube_t,
-    SHREWD_BASIC_REFLECT_FIELD_ARRAY(cube_t, cube, g_plane22_reflect));
+SHREWD_BASIC_REFLECT_ARRAY_DEFINE(g_row2_reflect, shrewd_basic_reflect_int32, int32_t, 2);
+SHREWD_BASIC_REFLECT_ARRAY_DEFINE(g_plane22_reflect, g_row2_reflect, int32_t[2], 2);
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_cube_reflect,
+                                 cube_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_ARRAY(cube_t, cube, g_plane22_reflect));
 
 /* point_t grid[2][2]: a matrix of struct values. */
 typedef struct {
@@ -3234,24 +3765,23 @@ typedef struct {
 } grid_t;
 
 SHREWD_BASIC_REFLECT_ARRAY_DEFINE(g_pair2_reflect, g_point_reflect, point_t, 2);
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_grid_reflect, grid_t,
-    SHREWD_BASIC_REFLECT_FIELD_ARRAY(grid_t, grid, g_pair2_reflect));
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_grid_reflect,
+                                 grid_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_ARRAY(grid_t, grid, g_pair2_reflect));
 
-static void test_multidim(void)
-{
+static void test_multidim(void) {
     /* Row descriptor shape. */
     expect_true("multidim row kind",
                 SHREWD_BASIC_REFLECT_KIND_ARRAY == g_row3_reflect.sb_refl_kind);
     expect_true("multidim row shape",
                 (&shrewd_basic_reflect_int32 == g_row3_reflect.sb_refl_elem)
-                && ((size_t)3 == g_row3_reflect.sb_refl_elem_count)
-                && (sizeof(int32_t) == g_row3_reflect.sb_refl_elem_stride)
-                && ((3 * sizeof(int32_t)) == g_row3_reflect.sb_refl_size));
+                    && ((size_t)3 == g_row3_reflect.sb_refl_elem_count)
+                    && (sizeof(int32_t) == g_row3_reflect.sb_refl_elem_stride)
+                    && ((3 * sizeof(int32_t)) == g_row3_reflect.sb_refl_size));
     expect_true("multidim kind name",
-                0 == strcmp(shrewd_basic_reflect_kind_name(
-                                    g_row3_reflect.sb_refl_kind), "array"));
+                0 == strcmp(shrewd_basic_reflect_kind_name(g_row3_reflect.sb_refl_kind), "array"));
 
-    matrix_t mx;
+    matrix_t mx = {0};
     memset(&mx, 0, sizeof(mx));
     for (size_t r = 0; r < 2; ++r) {
         for (size_t c = 0; c < 3; ++c) {
@@ -3263,49 +3793,44 @@ static void test_multidim(void)
     /* Chained paths: one index per row level. */
     int32_t at = 0;
     expect_eq_int("multidim path_get",
-                  shrewd_basic_reflect_path_get(&mx, &g_matrix_reflect, "m[1][2]",
-                                                &at, sizeof(at)),
+                  shrewd_basic_reflect_path_get(&mx, &g_matrix_reflect, "m[1][2]", &at, sizeof(at)),
                   SHREWD_BASIC_ERR_OK);
     expect_true("multidim path value", 6 == at);
     at = 50;
     expect_eq_int("multidim path_set",
-                  shrewd_basic_reflect_path_set(&mx, &g_matrix_reflect, "m[0][1]",
-                                                &at, sizeof(at)),
+                  shrewd_basic_reflect_path_set(&mx, &g_matrix_reflect, "m[0][1]", &at, sizeof(at)),
                   SHREWD_BASIC_ERR_OK);
     expect_true("multidim path wrote", 50 == mx.m[0][1]);
     at = 0;
     expect_eq_int("multidim path row",
-                  shrewd_basic_reflect_path_get(&mx, &g_matrix_reflect, "m[1]",
-                                                &at, sizeof(at)),
+                  shrewd_basic_reflect_path_get(&mx, &g_matrix_reflect, "m[1]", &at, sizeof(at)),
                   SHREWD_BASIC_ERR_REFLECT_MISMATCH);
-    expect_eq_int("multidim path row size",
-                  shrewd_basic_reflect_path_get(&mx, &g_matrix_reflect, "m[1]",
-                                                &mx.m[1][0], sizeof(mx.m[1])),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "multidim path row size",
+        shrewd_basic_reflect_path_get(&mx, &g_matrix_reflect, "m[1]", &mx.m[1][0], sizeof(mx.m[1])),
+        SHREWD_BASIC_ERR_OK);
     expect_eq_int("multidim path row range",
-                  shrewd_basic_reflect_path_get(&mx, &g_matrix_reflect, "m[2][0]",
-                                                &at, sizeof(at)),
+                  shrewd_basic_reflect_path_get(&mx, &g_matrix_reflect, "m[2][0]", &at, sizeof(at)),
                   SHREWD_BASIC_ERR_KEY_NOTFOUND);
     expect_eq_int("multidim path col range",
-                  shrewd_basic_reflect_path_get(&mx, &g_matrix_reflect, "m[0][3]",
-                                                &at, sizeof(at)),
+                  shrewd_basic_reflect_path_get(&mx, &g_matrix_reflect, "m[0][3]", &at, sizeof(at)),
                   SHREWD_BASIC_ERR_KEY_NOTFOUND);
 
     /* resolve is static all the way (no pointer segments). */
     const shrewd_basic_reflect_field_t *field = NULL;
     size_t offset = 0;
     size_t size = 0;
-    expect_eq_int("multidim resolve",
-                  shrewd_basic_reflect_type_resolve(&g_matrix_reflect, "m[1][2]",
-                                                    &field, &offset, &size),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "multidim resolve",
+        shrewd_basic_reflect_type_resolve(&g_matrix_reflect, "m[1][2]", &field, &offset, &size),
+        SHREWD_BASIC_ERR_OK);
     expect_true("multidim resolve shape",
-                (offsetof(matrix_t, m) + (1 * 3 * sizeof(int32_t))
-                 + (2 * sizeof(int32_t))) == offset
-                && (sizeof(int32_t) == size));
+                (offsetof(matrix_t, m) + (1 * 3 * sizeof(int32_t)) + (2 * sizeof(int32_t)))
+                        == offset
+                    && (sizeof(int32_t) == size));
 
     /* equal/diff/hash. */
-    matrix_t twin;
+    matrix_t twin = {0};
     twin = mx;
     bool same = false;
     expect_eq_int("multidim equal",
@@ -3322,10 +3847,9 @@ static void test_multidim(void)
                   SHREWD_BASIC_ERR_OK);
     expect_true("multidim hash same", ha == hb);
     twin.m[1][0] = 99;
-    char path[64];
+    char path[64] = {0};
     expect_eq_int("multidim diff",
-                  shrewd_basic_reflect_diff(&mx, &twin, &g_matrix_reflect,
-                                            path, sizeof(path)),
+                  shrewd_basic_reflect_diff(&mx, &twin, &g_matrix_reflect, path, sizeof(path)),
                   SHREWD_BASIC_ERR_REFLECT_MISMATCH);
     expect_true("multidim diff path", 0 == strcmp(path, "m[1][0]"));
     twin.m[1][0] = mx.m[1][0];
@@ -3348,19 +3872,19 @@ static void test_multidim(void)
     slurp(stream, buf, sizeof(buf));
     expect_true("multidim dump rows",
                 (NULL != strstr(buf, "m = [ [ 1, 50, 3 ], [ 4, 5, 6 ] ]"))
-                && (NULL != strstr(buf, "id = 7")));
+                    && (NULL != strstr(buf, "id = 7")));
     shrewd_basic_log_module_set_stream(module, stderr);
     fclose(stream);
 
     /* 3D: rows nest. */
-    cube_t cube;
+    cube_t cube = {0};
     memset(&cube, 0, sizeof(cube));
     cube.cube[1][0][1] = 42;
     at = 0;
-    expect_eq_int("multidim 3d get",
-                  shrewd_basic_reflect_path_get(&cube, &g_cube_reflect,
-                                                "cube[1][0][1]", &at, sizeof(at)),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "multidim 3d get",
+        shrewd_basic_reflect_path_get(&cube, &g_cube_reflect, "cube[1][0][1]", &at, sizeof(at)),
+        SHREWD_BASIC_ERR_OK);
     expect_true("multidim 3d value", 42 == at);
     stream = tmpfile();
     expect_true("multidim 3d tmpfile", NULL != stream);
@@ -3380,7 +3904,7 @@ static void test_multidim(void)
     fclose(stream);
 
     /* Struct rows: inline blocks per element. */
-    grid_t grid;
+    grid_t grid = {0};
     memset(&grid, 0, sizeof(grid));
     grid.grid[1][0].x = 3;
     grid.grid[1][0].y = 4;
@@ -3397,35 +3921,35 @@ static void test_multidim(void)
     memset(buf, 0, sizeof(buf));
     slurp(stream, buf, sizeof(buf));
     expect_true("multidim grid dump inline",
-                NULL != strstr(buf, "grid = [ [ { x = 0, y = 0 }, { x = 8, y = 0 } ],"
-                                    " [ { x = 3, y = 4 }, { x = 0, y = 0 } ] ]"));
+                NULL
+                    != strstr(buf,
+                              "grid = [ [ { x = 0, y = 0 }, { x = 8, y = 0 } ],"
+                              " [ { x = 3, y = 4 }, { x = 0, y = 0 } ] ]"));
     shrewd_basic_log_module_set_stream(module, stderr);
     fclose(stream);
-    grid_t grid_twin;
+    grid_t grid_twin = {0};
     grid_twin = grid;
     grid_twin.grid[1][0].y = 40;
     expect_eq_int("multidim grid diff",
-                  shrewd_basic_reflect_diff(&grid, &grid_twin, &g_grid_reflect,
-                                            path, sizeof(path)),
+                  shrewd_basic_reflect_diff(&grid, &grid_twin, &g_grid_reflect, path, sizeof(path)),
                   SHREWD_BASIC_ERR_REFLECT_MISMATCH);
     expect_true("multidim grid diff path", 0 == strcmp(path, "grid[1][0].y"));
 
     /* visit: nested ARRAY_ENTER per row level. */
-    visit_rec_t rec;
+    visit_rec_t rec = {0};
     memset(&rec, 0, sizeof(rec));
     expect_eq_int("multidim visit",
                   shrewd_basic_reflect_visit(&mx, &g_matrix_reflect, visit_collect, &rec),
                   SHREWD_BASIC_ERR_OK);
     int at_idx = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "m");
-    expect_true("multidim visit outer",
-                (0 <= at_idx) && ((size_t)2 == rec.entries[at_idx].count));
+    expect_true("multidim visit outer", (0 <= at_idx) && ((size_t)2 == rec.entries[at_idx].count));
     at_idx = visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "m[1]");
     expect_true("multidim visit inner",
                 (0 <= at_idx) && ((size_t)3 == rec.entries[at_idx].count)
-                && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "m[1][2]")));
+                    && (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "m[1][2]")));
     expect_true("multidim visit rows bracketed",
                 visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_EXIT, "m[0]")
-                < visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "m[1]"));
+                    < visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ARRAY_ENTER, "m[1]"));
 
     /* copy clones matrix bytes; equal stays green. */
     matrix_t *clone = NULL;
@@ -3434,7 +3958,7 @@ static void test_multidim(void)
                   SHREWD_BASIC_ERR_OK);
     expect_true("multidim clone equal",
                 (NULL != clone) && (0 == memcmp(clone->m, mx.m, sizeof(mx.m)))
-                && (clone->id == mx.id));
+                    && (clone->id == mx.id));
     expect_eq_int("multidim destroy",
                   shrewd_basic_reflect_destroy(clone, &g_matrix_reflect),
                   SHREWD_BASIC_ERR_OK);
@@ -3442,11 +3966,7 @@ static void test_multidim(void)
 
 /* --- tagged union fixtures --------------------------------------------- */
 
-typedef enum {
-    PAYLOAD_NONE = 0,
-    PAYLOAD_INT = 1,
-    PAYLOAD_POINT = 2
-} payload_kind_t;
+typedef enum { PAYLOAD_NONE = 0, PAYLOAD_INT = 1, PAYLOAD_POINT = 2 } payload_kind_t;
 
 typedef union {
     int32_t number;
@@ -3458,18 +3978,23 @@ typedef struct {
     payload_t payload;
 } message_t;
 
-SHREWD_BASIC_REFLECT_ENUM_DEFINE(g_payload_kind_reflect, payload_kind_t,
-    SHREWD_BASIC_REFLECT_ENUM_VALUE(PAYLOAD_NONE),
-    SHREWD_BASIC_REFLECT_ENUM_VALUE(PAYLOAD_INT),
-    SHREWD_BASIC_REFLECT_ENUM_VALUE(PAYLOAD_POINT));
+SHREWD_BASIC_REFLECT_ENUM_DEFINE(g_payload_kind_reflect,
+                                 payload_kind_t,
+                                 SHREWD_BASIC_REFLECT_ENUM_VALUE(PAYLOAD_NONE),
+                                 SHREWD_BASIC_REFLECT_ENUM_VALUE(PAYLOAD_INT),
+                                 SHREWD_BASIC_REFLECT_ENUM_VALUE(PAYLOAD_POINT));
 
-SHREWD_BASIC_REFLECT_UNION_DEFINE(g_payload_reflect, payload_t,
+SHREWD_BASIC_REFLECT_UNION_DEFINE(
+    g_payload_reflect,
+    payload_t,
     SHREWD_BASIC_REFLECT_UNION_VARIANT(PAYLOAD_INT,
-        SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(payload_t, number)),
-    SHREWD_BASIC_REFLECT_UNION_VARIANT(PAYLOAD_POINT,
-        SHREWD_BASIC_REFLECT_FIELD_STRUCT(payload_t, point, g_point_reflect)));
+                                       SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(payload_t, number)),
+    SHREWD_BASIC_REFLECT_UNION_VARIANT(
+        PAYLOAD_POINT, SHREWD_BASIC_REFLECT_FIELD_STRUCT(payload_t, point, g_point_reflect)));
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_message_reflect, message_t,
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(
+    g_message_reflect,
+    message_t,
     SHREWD_BASIC_REFLECT_FIELD_ENUM(message_t, kind, g_payload_kind_reflect),
     SHREWD_BASIC_REFLECT_FIELD_UNION(message_t, payload, g_payload_reflect, kind));
 
@@ -3493,49 +4018,50 @@ typedef struct {
     mixed_t mixed;
 } mixed_msg_t;
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_rich_reflect, rich_t,
-    SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(rich_t, pad),
-    SHREWD_BASIC_REFLECT_FIELD_PTR(rich_t, link, g_point_reflect));
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_rich_reflect,
+                                 rich_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(rich_t, pad),
+                                 SHREWD_BASIC_REFLECT_FIELD_PTR(rich_t, link, g_point_reflect));
 
-SHREWD_BASIC_REFLECT_UNION_DEFINE(g_mixed_reflect, mixed_t,
-    SHREWD_BASIC_REFLECT_UNION_VARIANT(1,
-        SHREWD_BASIC_REFLECT_FIELD_STRUCT(mixed_t, rich, g_rich_reflect)),
-    SHREWD_BASIC_REFLECT_UNION_VARIANT(2,
-        SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(mixed_t, number)));
+SHREWD_BASIC_REFLECT_UNION_DEFINE(
+    g_mixed_reflect,
+    mixed_t,
+    SHREWD_BASIC_REFLECT_UNION_VARIANT(
+        1, SHREWD_BASIC_REFLECT_FIELD_STRUCT(mixed_t, rich, g_rich_reflect)),
+    SHREWD_BASIC_REFLECT_UNION_VARIANT(2, SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(mixed_t, number)));
 
-SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_mixed_msg_reflect, mixed_msg_t,
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(
+    g_mixed_msg_reflect,
+    mixed_msg_t,
     SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(mixed_msg_t, tag),
     SHREWD_BASIC_REFLECT_FIELD_UNION(mixed_msg_t, mixed, g_mixed_reflect, tag));
 
-static void test_union(void)
-{
+static void test_union(void) {
     /* Union descriptor shape. */
     expect_true("union type kind",
                 SHREWD_BASIC_REFLECT_KIND_UNION == g_payload_reflect.sb_refl_kind);
-    expect_true("union variants",
-                ((size_t)2 == g_payload_reflect.sb_refl_variant_count)
-                && (0 == strcmp(g_payload_reflect.sb_refl_variants[0].sb_refl_name,
-                                "PAYLOAD_INT"))
-                && ((int64_t)PAYLOAD_POINT
-                    == g_payload_reflect.sb_refl_variants[1].sb_refl_tag)
-                && ((size_t)1 == g_payload_reflect.sb_refl_variants[1].sb_refl_field_count));
-    const shrewd_basic_reflect_field_t *field =
-        find_or_fail("union", &g_message_reflect, "payload");
+    expect_true(
+        "union variants",
+        ((size_t)2 == g_payload_reflect.sb_refl_variant_count)
+            && (0 == strcmp(g_payload_reflect.sb_refl_variants[0].sb_refl_name, "PAYLOAD_INT"))
+            && ((int64_t)PAYLOAD_POINT == g_payload_reflect.sb_refl_variants[1].sb_refl_tag)
+            && ((size_t)1 == g_payload_reflect.sb_refl_variants[1].sb_refl_field_count));
+    const shrewd_basic_reflect_field_t *field
+        = find_or_fail("union", &g_message_reflect, "payload");
     if (NULL != field) {
         expect_true("union field shape",
                     (SHREWD_BASIC_REFLECT_FIELD_F_UNION == field->sb_refl_flags)
-                    && (offsetof(message_t, kind) == field->sb_refl_limit_offset)
-                    && (sizeof(payload_kind_t) == field->sb_refl_limit_size));
+                        && (offsetof(message_t, kind) == field->sb_refl_limit_offset)
+                        && (sizeof(payload_kind_t) == field->sb_refl_limit_size));
     }
 
-    message_t msg;
+    message_t msg = {0};
     memset(&msg, 0, sizeof(msg));
 
     /* dump: the active variant renders as a tagged block. */
     shrewd_basic_log_module_t *module = NULL;
-    expect_eq_int("union find module",
-                  shrewd_basic_log_module_find("reflect", &module),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "union find module", shrewd_basic_log_module_find("reflect", &module), SHREWD_BASIC_ERR_OK);
     FILE *stream = tmpfile();
     expect_true("union tmpfile", NULL != stream);
     if (NULL == stream) {
@@ -3551,8 +4077,7 @@ static void test_union(void)
     slurp(stream, buf, sizeof(buf));
     expect_true("union dump int variant",
                 (NULL != strstr(buf, "payload = (PAYLOAD_INT) {"))
-                && (NULL != strstr(buf, "number = 42"))
-                && (NULL == strstr(buf, "point =")));
+                    && (NULL != strstr(buf, "number = 42")) && (NULL == strstr(buf, "point =")));
     msg.kind = PAYLOAD_POINT;
     msg.payload.point.x = 1;
     msg.payload.point.y = 2;
@@ -3563,21 +4088,19 @@ static void test_union(void)
     slurp(stream, buf, sizeof(buf));
     expect_true("union dump point variant",
                 (NULL != strstr(buf, "payload = (PAYLOAD_POINT) {"))
-                && (NULL != strstr(buf, "point = {"))
-                && (NULL != strstr(buf, "    x = 1")));
+                    && (NULL != strstr(buf, "point = {")) && (NULL != strstr(buf, "    x = 1")));
     msg.kind = PAYLOAD_NONE;
     expect_eq_int("union dump unknown",
                   shrewd_basic_reflect_dump(&g_message_reflect, &msg, "msg"),
                   SHREWD_BASIC_ERR_OK);
     memset(buf, 0, sizeof(buf));
     slurp(stream, buf, sizeof(buf));
-    expect_true("union dump unknown tag",
-                NULL != strstr(buf, "payload = (tag 0: unknown)"));
+    expect_true("union dump unknown tag", NULL != strstr(buf, "payload = (tag 0: unknown)"));
     shrewd_basic_log_module_set_stream(module, stderr);
     fclose(stream);
 
     /* equal/diff/hash follow the active variant. */
-    message_t twin;
+    message_t twin = {0};
     memset(&twin, 0, sizeof(twin));
     msg.kind = PAYLOAD_POINT;
     msg.payload.point.x = 1;
@@ -3598,17 +4121,15 @@ static void test_union(void)
                   SHREWD_BASIC_ERR_OK);
     expect_true("union hash same", ha == hb);
     twin.payload.point.y = 3;
-    char path[64];
+    char path[64] = {0};
     expect_eq_int("union diff inner",
-                  shrewd_basic_reflect_diff(&msg, &twin, &g_message_reflect,
-                                            path, sizeof(path)),
+                  shrewd_basic_reflect_diff(&msg, &twin, &g_message_reflect, path, sizeof(path)),
                   SHREWD_BASIC_ERR_REFLECT_MISMATCH);
     expect_true("union diff inner path", 0 == strcmp(path, "payload.point.y"));
     twin.payload.point.y = 2;
     twin.kind = PAYLOAD_INT;
     expect_eq_int("union diff tag",
-                  shrewd_basic_reflect_diff(&msg, &twin, &g_message_reflect,
-                                            path, sizeof(path)),
+                  shrewd_basic_reflect_diff(&msg, &twin, &g_message_reflect, path, sizeof(path)),
                   SHREWD_BASIC_ERR_REFLECT_MISMATCH);
     /* The described tag member comes first in the field list, so it is
        the first difference; the union's own tag check is covered by the
@@ -3630,8 +4151,7 @@ static void test_union(void)
                   SHREWD_BASIC_ERR_OK);
     expect_true("union equal unknown differs no", !same);
     expect_eq_int("union diff unknown",
-                  shrewd_basic_reflect_diff(&msg, &twin, &g_message_reflect,
-                                            path, sizeof(path)),
+                  shrewd_basic_reflect_diff(&msg, &twin, &g_message_reflect, path, sizeof(path)),
                   SHREWD_BASIC_ERR_REFLECT_MISMATCH);
     expect_true("union diff unknown path", 0 == strcmp(path, "payload"));
     twin.payload.number = 0;
@@ -3640,37 +4160,36 @@ static void test_union(void)
     msg.kind = PAYLOAD_POINT;
     msg.payload.point.x = 7;
     int32_t at = 0;
-    expect_eq_int("union path_get",
-                  shrewd_basic_reflect_path_get(&msg, &g_message_reflect,
-                                                "payload.point.x", &at, sizeof(at)),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "union path_get",
+        shrewd_basic_reflect_path_get(&msg, &g_message_reflect, "payload.point.x", &at, sizeof(at)),
+        SHREWD_BASIC_ERR_OK);
     expect_true("union path value", 7 == at);
     at = 9;
-    expect_eq_int("union path_set",
-                  shrewd_basic_reflect_path_set(&msg, &g_message_reflect,
-                                                "payload.point.y", &at, sizeof(at)),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "union path_set",
+        shrewd_basic_reflect_path_set(&msg, &g_message_reflect, "payload.point.y", &at, sizeof(at)),
+        SHREWD_BASIC_ERR_OK);
     expect_true("union path wrote", 9 == msg.payload.point.y);
     msg.kind = PAYLOAD_NONE;
-    expect_eq_int("union path unknown tag",
-                  shrewd_basic_reflect_path_get(&msg, &g_message_reflect,
-                                                "payload.point.x", &at, sizeof(at)),
-                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int(
+        "union path unknown tag",
+        shrewd_basic_reflect_path_get(&msg, &g_message_reflect, "payload.point.x", &at, sizeof(at)),
+        SHREWD_BASIC_ERR_KEY_NOTFOUND);
 
     /* resolve refuses union descent (static walk cannot know the tag). */
     const shrewd_basic_reflect_field_t *rfield = NULL;
     size_t roffset = 0;
     size_t rsize = 0;
     expect_eq_int("union resolve refuses",
-                  shrewd_basic_reflect_type_resolve(&g_message_reflect,
-                                                    "payload.point.x", &rfield,
-                                                    &roffset, &rsize),
+                  shrewd_basic_reflect_type_resolve(
+                      &g_message_reflect, "payload.point.x", &rfield, &roffset, &rsize),
                   SHREWD_BASIC_ERR_ARG_INVALID);
 
     /* visit expands the active variant (LEAF for unknown tags). */
     msg.kind = PAYLOAD_INT;
     msg.payload.number = 42;
-    visit_rec_t rec;
+    visit_rec_t rec = {0};
     memset(&rec, 0, sizeof(rec));
     expect_eq_int("union visit",
                   shrewd_basic_reflect_visit(&msg, &g_message_reflect, visit_collect, &rec),
@@ -3678,8 +4197,8 @@ static void test_union(void)
     expect_true("union visit variant",
                 (visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, "payload")
                  < visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "payload.number"))
-                && (visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "payload.number")
-                    < visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_EXIT, "payload")));
+                    && (visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "payload.number")
+                        < visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_EXIT, "payload")));
     msg.kind = PAYLOAD_NONE;
     memset(&rec, 0, sizeof(rec));
     expect_eq_int("union visit unknown",
@@ -3687,7 +4206,7 @@ static void test_union(void)
                   SHREWD_BASIC_ERR_OK);
     expect_true("union visit unknown leaf",
                 (0 <= visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_LEAF, "payload"))
-                && (0 > visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, "payload")));
+                    && (0 > visit_find(&rec, SHREWD_BASIC_REFLECT_VISIT_ENTER, "payload")));
 
     /* copy/destroy touch only the active variant's pointers. */
     void *block = NULL;
@@ -3697,7 +4216,7 @@ static void test_union(void)
     point_t *heap_point = block;
     heap_point->x = 5;
     heap_point->y = 6;
-    mixed_msg_t src;
+    mixed_msg_t src = {0};
     memset(&src, 0, sizeof(src));
     src.tag = 2;
     src.mixed.number = 5;
@@ -3706,8 +4225,7 @@ static void test_union(void)
     expect_eq_int("union copy stale",
                   shrewd_basic_reflect_copy((void **)&clone, &src, &g_mixed_msg_reflect),
                   SHREWD_BASIC_ERR_OK);
-    expect_true("union stale aliased",
-                (NULL != clone) && (clone->mixed.rich.link == heap_point));
+    expect_true("union stale aliased", (NULL != clone) && (clone->mixed.rich.link == heap_point));
     expect_eq_int("union destroy stale",
                   shrewd_basic_reflect_destroy(clone, &g_mixed_msg_reflect),
                   SHREWD_BASIC_ERR_OK);
@@ -3733,7 +4251,7 @@ static void test_union(void)
                   SHREWD_BASIC_ERR_OK);
     expect_true("union active cloned",
                 (NULL != clone) && (clone->mixed.rich.link != src.mixed.rich.link)
-                && (8 == clone->mixed.rich.link->x));
+                    && (8 == clone->mixed.rich.link->x));
     expect_eq_int("union destroy clone",
                   shrewd_basic_reflect_destroy(clone, &g_mixed_msg_reflect),
                   SHREWD_BASIC_ERR_OK);
@@ -3750,10 +4268,10 @@ typedef struct {
     size_t count;
 } test_reg_t;
 
-static int test_reg_insert(void *ctx, const char *name,
+static int test_reg_insert(void *ctx,
+                           const char *name,
                            const shrewd_basic_reflect_type_t *type,
-                           shrewd_basic_reflect_lookup_t **out_slot)
-{
+                           shrewd_basic_reflect_lookup_t **out_slot) {
     test_reg_t *reg = (test_reg_t *)ctx;
     (void)type;
     for (size_t i = 0; i < reg->count; ++i) {
@@ -3769,10 +4287,10 @@ static int test_reg_insert(void *ctx, const char *name,
     return SHREWD_BASIC_ERR_OK;
 }
 
-static int test_reg_insert_no_slot(void *ctx, const char *name,
+static int test_reg_insert_no_slot(void *ctx,
+                                   const char *name,
                                    const shrewd_basic_reflect_type_t *type,
-                                   shrewd_basic_reflect_lookup_t **out_slot)
-{
+                                   shrewd_basic_reflect_lookup_t **out_slot) {
     (void)ctx;
     (void)name;
     (void)type;
@@ -3781,8 +4299,7 @@ static int test_reg_insert_no_slot(void *ctx, const char *name,
 }
 
 static const shrewd_basic_reflect_lookup_t *test_reg_find_type(
-        void *ctx, const shrewd_basic_reflect_type_t *type)
-{
+    void *ctx, const shrewd_basic_reflect_type_t *type) {
     test_reg_t *reg = (test_reg_t *)ctx;
     for (size_t i = 0; i < reg->count; ++i) {
         if (reg->entries[i].sb_refl_type == type) {
@@ -3792,9 +4309,7 @@ static const shrewd_basic_reflect_lookup_t *test_reg_find_type(
     return NULL;
 }
 
-static const shrewd_basic_reflect_lookup_t *test_reg_find_name(void *ctx,
-                                                               const char *name)
-{
+static const shrewd_basic_reflect_lookup_t *test_reg_find_name(void *ctx, const char *name) {
     test_reg_t *reg = (test_reg_t *)ctx;
     for (size_t i = 0; i < reg->count; ++i) {
         if (0 == strcmp(reg->entries[i].sb_refl_name, name)) {
@@ -3804,15 +4319,13 @@ static const shrewd_basic_reflect_lookup_t *test_reg_find_name(void *ctx,
     return NULL;
 }
 
-static void test_lookup_list(void)
-{
-    static const shrewd_basic_reflect_list_ops_t ops = {
-        test_reg_insert, test_reg_find_type, test_reg_find_name };
-    static const shrewd_basic_reflect_list_ops_t broken = {
-        test_reg_insert_no_slot, NULL, NULL };
-    test_reg_t reg;
-    shrewd_basic_reflect_list_t list;
-    shrewd_basic_reflect_lookup_t look;
+static void test_lookup_list(void) {
+    static const shrewd_basic_reflect_list_ops_t ops
+        = {test_reg_insert, test_reg_find_type, test_reg_find_name};
+    static const shrewd_basic_reflect_list_ops_t broken = {test_reg_insert_no_slot, NULL, NULL};
+    test_reg_t reg = {0};
+    shrewd_basic_reflect_list_t list = {0};
+    shrewd_basic_reflect_lookup_t look = {0};
     const shrewd_basic_reflect_field_t *field = NULL;
     const shrewd_basic_reflect_field_t *legacy_field = NULL;
     const shrewd_basic_reflect_type_t *found = NULL;
@@ -3831,15 +4344,13 @@ static void test_lookup_list(void)
     expect_eq_int("lookup_init person",
                   shrewd_basic_reflect_lookup_init(&look, &g_person_reflect, NULL),
                   SHREWD_BASIC_ERR_OK);
-    expect_true("lookup name defaults to type name",
-                0 == strcmp(look.sb_refl_name, "person_t"));
+    expect_true("lookup name defaults to type name", 0 == strcmp(look.sb_refl_name, "person_t"));
     expect_true("lookup indexed all fields",
                 look.sb_refl_count == g_person_reflect.sb_refl_field_count);
     field = shrewd_basic_reflect_lookup_find(&look, "age", 3);
-    expect_true("lookup_find hit", (NULL != field)
-                && (field->sb_refl_offset == offsetof(person_t, age)));
-    expect_true("lookup_find miss",
-                NULL == shrewd_basic_reflect_lookup_find(&look, "nope", 4));
+    expect_true("lookup_find hit",
+                (NULL != field) && (field->sb_refl_offset == offsetof(person_t, age)));
+    expect_true("lookup_find miss", NULL == shrewd_basic_reflect_lookup_find(&look, "nope", 4));
     expect_true("lookup_find rejects prefix",
                 NULL == shrewd_basic_reflect_lookup_find(&look, "ag", 2));
     expect_true("lookup_find rejects extension",
@@ -3850,19 +4361,15 @@ static void test_lookup_list(void)
 
     /* Non-struct types register without an index. */
     expect_eq_int("lookup_init primitive",
-                  shrewd_basic_reflect_lookup_init(&look, &shrewd_basic_reflect_int32,
-                                                   "i32"),
+                  shrewd_basic_reflect_lookup_init(&look, &shrewd_basic_reflect_int32, "i32"),
                   SHREWD_BASIC_ERR_OK);
     expect_true("lookup primitive unindexed", 0 == look.sb_refl_count);
-    expect_true("lookup primitive name kept",
-                0 == strcmp(look.sb_refl_name, "i32"));
-    expect_true("lookup_find unindexed",
-                NULL == shrewd_basic_reflect_lookup_find(&look, "x", 1));
+    expect_true("lookup primitive name kept", 0 == strcmp(look.sb_refl_name, "i32"));
+    expect_true("lookup_find unindexed", NULL == shrewd_basic_reflect_lookup_find(&look, "x", 1));
 
     /* Registration: names are the caller's keys, aliases allowed. */
     expect_eq_int("list register person",
-                  shrewd_basic_reflect_list_register(&list, &g_person_reflect,
-                                                     "person"),
+                  shrewd_basic_reflect_list_register(&list, &g_person_reflect, "person"),
                   SHREWD_BASIC_ERR_OK);
     expect_eq_int("list register point",
                   shrewd_basic_reflect_list_register(&list, &g_point_reflect, "point"),
@@ -3871,16 +4378,14 @@ static void test_lookup_list(void)
                   shrewd_basic_reflect_list_register(&list, &g_point_reflect, "vec2"),
                   SHREWD_BASIC_ERR_OK);
     expect_eq_int("list rejects duplicate name",
-                  shrewd_basic_reflect_list_register(&list, &g_person_reflect,
-                                                     "point"),
+                  shrewd_basic_reflect_list_register(&list, &g_person_reflect, "point"),
                   SHREWD_BASIC_ERR_KEY_EXISTS);
     expect_eq_int("list rejects NULL",
                   shrewd_basic_reflect_list_register(NULL, &g_point_reflect, "x"),
                   SHREWD_BASIC_ERR_ARG_INVALID);
     expect_eq_int("list rejects NULL slot ops",
                   shrewd_basic_reflect_list_register(
-                          &(shrewd_basic_reflect_list_t){ &broken, &reg },
-                          &g_wide_reflect, "wide"),
+                      &(shrewd_basic_reflect_list_t){&broken, &reg}, &g_wide_reflect, "wide"),
                   SHREWD_BASIC_ERR_ARG_INVALID);
 
     /* type_find_list: lookup by registration name. */
@@ -3893,127 +4398,637 @@ static void test_lookup_list(void)
                   SHREWD_BASIC_ERR_KEY_NOTFOUND);
 
     /* find_field_list: indexed hits and misses. */
-    expect_eq_int("find_field_list hit",
-                  shrewd_basic_reflect_type_find_field_list(&list, &g_person_reflect,
-                                                            "home", &field),
-                  SHREWD_BASIC_ERR_OK);
-    expect_true("find_field_list hit offset",
-                field->sb_refl_offset == offsetof(person_t, home));
-    expect_eq_int("find_field_list miss",
-                  shrewd_basic_reflect_type_find_field_list(&list, &g_person_reflect,
-                                                            "nope", &field),
-                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
-    expect_eq_int("find_field_list NULL list",
-                  shrewd_basic_reflect_type_find_field_list(NULL, &g_person_reflect,
-                                                            "home", &field),
-                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int(
+        "find_field_list hit",
+        shrewd_basic_reflect_type_find_field_list(&list, &g_person_reflect, "home", &field),
+        SHREWD_BASIC_ERR_OK);
+    expect_true("find_field_list hit offset", field->sb_refl_offset == offsetof(person_t, home));
+    expect_eq_int(
+        "find_field_list miss",
+        shrewd_basic_reflect_type_find_field_list(&list, &g_person_reflect, "nope", &field),
+        SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int(
+        "find_field_list NULL list",
+        shrewd_basic_reflect_type_find_field_list(NULL, &g_person_reflect, "home", &field),
+        SHREWD_BASIC_ERR_ARG_INVALID);
 
     /* Unregistered types fall back to the linear scan. */
     expect_eq_int("find_field_list unregistered",
-                  shrewd_basic_reflect_type_find_field_list(&list, &g_wide_reflect,
-                                                            "wide", &field),
+                  shrewd_basic_reflect_type_find_field_list(&list, &g_wide_reflect, "wide", &field),
                   SHREWD_BASIC_ERR_OK);
     expect_true("find_field_list unregistered offset",
                 field->sb_refl_offset == offsetof(wide_t, wide));
     expect_eq_int("find_field_list unregistered miss",
-                  shrewd_basic_reflect_type_find_field_list(&list, &g_wide_reflect,
-                                                            "nope", &field),
+                  shrewd_basic_reflect_type_find_field_list(&list, &g_wide_reflect, "nope", &field),
                   SHREWD_BASIC_ERR_KEY_NOTFOUND);
 
     /* resolve_list agrees with the no-list resolve. */
     expect_eq_int("resolve_list",
-                  shrewd_basic_reflect_type_resolve_list(&list, &g_person_reflect,
-                                                         "pair[0].y", &field,
-                                                         &offset, &size),
+                  shrewd_basic_reflect_type_resolve_list(
+                      &list, &g_person_reflect, "pair[0].y", &field, &offset, &size),
                   SHREWD_BASIC_ERR_OK);
     expect_eq_int("resolve legacy",
-                  shrewd_basic_reflect_type_resolve(&g_person_reflect,
-                                                    "pair[0].y", &legacy_field,
-                                                    &legacy_offset, &legacy_size),
+                  shrewd_basic_reflect_type_resolve(
+                      &g_person_reflect, "pair[0].y", &legacy_field, &legacy_offset, &legacy_size),
                   SHREWD_BASIC_ERR_OK);
     expect_true("resolve_list matches legacy",
-                (field == legacy_field) && (offset == legacy_offset)
-                && (size == legacy_size));
+                (field == legacy_field) && (offset == legacy_offset) && (size == legacy_size));
 
     /* path_set_list / path_get_list round-trip, nested and indexed. */
     wrote = 42;
     expect_eq_int("path_set_list nested",
-                  shrewd_basic_reflect_path_set_list(&list, &(person_t){0},
-                                                     &g_person_reflect, "home.x",
-                                                     &wrote, sizeof(wrote)),
+                  shrewd_basic_reflect_path_set_list(
+                      &list, &(person_t){0}, &g_person_reflect, "home.x", &wrote, sizeof(wrote)),
                   SHREWD_BASIC_ERR_OK);
     {
-        person_t probe;
+        person_t probe = {0};
         memset(&probe, 0, sizeof(probe));
         wrote = 42;
         expect_eq_int("path_set_list probe",
-                      shrewd_basic_reflect_path_set_list(&list, &probe,
-                                                         &g_person_reflect, "home.x",
-                                                         &wrote, sizeof(wrote)),
+                      shrewd_basic_reflect_path_set_list(
+                          &list, &probe, &g_person_reflect, "home.x", &wrote, sizeof(wrote)),
                       SHREWD_BASIC_ERR_OK);
         wrote = 7;
         expect_eq_int("path_set_list indexed",
-                      shrewd_basic_reflect_path_set_list(&list, &probe,
-                                                         &g_person_reflect,
-                                                         "pair[1].y", &wrote,
-                                                         sizeof(wrote)),
+                      shrewd_basic_reflect_path_set_list(
+                          &list, &probe, &g_person_reflect, "pair[1].y", &wrote, sizeof(wrote)),
                       SHREWD_BASIC_ERR_OK);
         expect_eq_int("path_get_list nested",
-                      shrewd_basic_reflect_path_get_list(&list, &probe,
-                                                         &g_person_reflect, "home.x",
-                                                         &value, sizeof(value)),
+                      shrewd_basic_reflect_path_get_list(
+                          &list, &probe, &g_person_reflect, "home.x", &value, sizeof(value)),
                       SHREWD_BASIC_ERR_OK);
         expect_true("path_get_list nested value", 42 == value);
         expect_eq_int("path_get_list indexed",
-                      shrewd_basic_reflect_path_get_list(&list, &probe,
-                                                         &g_person_reflect,
-                                                         "pair[1].y", &value,
-                                                         sizeof(value)),
+                      shrewd_basic_reflect_path_get_list(
+                          &list, &probe, &g_person_reflect, "pair[1].y", &value, sizeof(value)),
                       SHREWD_BASIC_ERR_OK);
         expect_true("path_get_list indexed value", 7 == value);
         expect_eq_int("path_get_list size mismatch",
-                      shrewd_basic_reflect_path_get_list(&list, &probe,
-                                                         &g_person_reflect, "home.x",
-                                                         &value, sizeof(value) + 1u),
+                      shrewd_basic_reflect_path_get_list(
+                          &list, &probe, &g_person_reflect, "home.x", &value, sizeof(value) + 1u),
                       SHREWD_BASIC_ERR_REFLECT_MISMATCH);
     }
     expect_eq_int("path_get_list miss",
-                  shrewd_basic_reflect_path_get_list(&list, &(person_t){0},
-                                                     &g_person_reflect, "home.zz",
-                                                     &value, sizeof(value)),
+                  shrewd_basic_reflect_path_get_list(
+                      &list, &(person_t){0}, &g_person_reflect, "home.zz", &value, sizeof(value)),
                   SHREWD_BASIC_ERR_KEY_NOTFOUND);
     expect_eq_int("path_get_list NULL list",
-                  shrewd_basic_reflect_path_get_list(NULL, &(person_t){0},
-                                                     &g_person_reflect, "home.x",
-                                                     &value, sizeof(value)),
+                  shrewd_basic_reflect_path_get_list(
+                      NULL, &(person_t){0}, &g_person_reflect, "home.x", &value, sizeof(value)),
                   SHREWD_BASIC_ERR_ARG_INVALID);
 
     /* Mixed list: registered root walks into an unregistered nested type. */
     memset(&reg, 0, sizeof(reg));
     expect_eq_int("mixed register root",
-                  shrewd_basic_reflect_list_register(&list, &g_person_reflect,
-                                                     "person"),
+                  shrewd_basic_reflect_list_register(&list, &g_person_reflect, "person"),
                   SHREWD_BASIC_ERR_OK);
     {
-        person_t probe;
+        person_t probe = {0};
         memset(&probe, 0, sizeof(probe));
         wrote = 5;
         expect_eq_int("mixed path_set_list",
-                      shrewd_basic_reflect_path_set_list(&list, &probe,
-                                                         &g_person_reflect,
-                                                         "pair[0].x", &wrote,
-                                                         sizeof(wrote)),
+                      shrewd_basic_reflect_path_set_list(
+                          &list, &probe, &g_person_reflect, "pair[0].x", &wrote, sizeof(wrote)),
                       SHREWD_BASIC_ERR_OK);
         expect_true("mixed path wrote", 5 == probe.pair[0].x);
     }
 }
 
-int main(void)
-{
+static void test_registry(void) {
+    SHREWD_BASIC_REFLECT_REGISTRY_DEFINE(reg, 4);
+    shrewd_basic_reflect_list_t list = {0};
+    const shrewd_basic_reflect_type_t *found = NULL;
+    const shrewd_basic_reflect_field_t *field = NULL;
+
+    expect_eq_int(
+        "registry bind", shrewd_basic_reflect_registry_bind(&reg, &list), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("registry bind NULL",
+                  shrewd_basic_reflect_registry_bind(NULL, &list),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_true("registry ops exposed", NULL != shrewd_basic_reflect_registry_ops());
+
+    /* Register out of name order; the array sorts, lookups binary-search. */
+    expect_eq_int("registry add point",
+                  shrewd_basic_reflect_list_register(&list, &g_point_reflect, "point"),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("registry add person",
+                  shrewd_basic_reflect_list_register(&list, &g_person_reflect, "person"),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("registry add wide",
+                  shrewd_basic_reflect_list_register(&list, &g_wide_reflect, "wide"),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("registry add alias",
+                  shrewd_basic_reflect_list_register(&list, &g_point_reflect, "vec2"),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("registry rejects duplicate",
+                  shrewd_basic_reflect_list_register(&list, &g_point_reflect, "point"),
+                  SHREWD_BASIC_ERR_KEY_EXISTS);
+    expect_eq_int("registry rejects full",
+                  shrewd_basic_reflect_list_register(&list, &g_huge_reflect, "huge"),
+                  SHREWD_BASIC_ERR_MEM_NOMEM);
+
+    /* Binary search hits the first, middle and last names. */
+    expect_eq_int("registry find person",
+                  shrewd_basic_reflect_type_find_list(&list, "person", &found),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("registry find person type", &g_person_reflect == found);
+    expect_eq_int("registry find vec2",
+                  shrewd_basic_reflect_type_find_list(&list, "vec2", &found),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("registry find vec2 type", &g_point_reflect == found);
+    expect_eq_int("registry find wide",
+                  shrewd_basic_reflect_type_find_list(&list, "wide", &found),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("registry find wide type", &g_wide_reflect == found);
+    expect_eq_int("registry find miss",
+                  shrewd_basic_reflect_type_find_list(&list, "nobody", &found),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+
+    /* Field lookup through the registry index, and linear fallback. */
+    expect_eq_int(
+        "registry find_field hit",
+        shrewd_basic_reflect_type_find_field_list(&list, &g_person_reflect, "age", &field),
+        SHREWD_BASIC_ERR_OK);
+    expect_true("registry find_field offset", field->sb_refl_offset == offsetof(person_t, age));
+    expect_eq_int("registry find_field fallback",
+                  shrewd_basic_reflect_type_find_field_list(&list, &g_node_reflect, "data", &field),
+                  SHREWD_BASIC_ERR_OK);
+}
+
+static void test_descriptor_meta(void) {
+    const shrewd_basic_reflect_field_t *field = NULL;
+
+    /* ABI and alignment propagate from the authoring macros. */
+    expect_true("abi person", SHREWD_BASIC_REFLECT_ABI == g_person_reflect.sb_refl_abi);
+    expect_true("align person", _Alignof(person_t) == g_person_reflect.sb_refl_align);
+    expect_true("align prim", _Alignof(int32_t) == shrewd_basic_reflect_int32.sb_refl_align);
+    expect_true("align string",
+                _Alignof(const char *) == shrewd_basic_reflect_string.sb_refl_align);
+    expect_true("align enum", _Alignof(mode_t) == g_mode_reflect.sb_refl_align);
+    expect_true("align row", _Alignof(int32_t) == g_row3_reflect.sb_refl_align);
+    expect_true("align union", _Alignof(payload_t) == g_payload_reflect.sb_refl_align);
+    expect_true("align opaque unknown", 0 == g_handle_reflect.sb_refl_align);
+
+    /* field_align: value fields follow their type, pointer slots do not. */
+    expect_eq_int("field_align find age",
+                  shrewd_basic_reflect_type_find_field(&g_person_reflect, "age", &field),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("field_align value", _Alignof(int32_t) == shrewd_basic_reflect_field_align(field));
+    expect_eq_int("field_align find name",
+                  shrewd_basic_reflect_type_find_field(&g_person_reflect, "name", &field),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("field_align pointer", _Alignof(void *) == shrewd_basic_reflect_field_align(field));
+    expect_true("field_align NULL", 0 == shrewd_basic_reflect_field_align(NULL));
+
+    /* check_type accepts every fixture shape. */
+    expect_eq_int(
+        "check person", shrewd_basic_reflect_check_type(&g_person_reflect), SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "check node", shrewd_basic_reflect_check_type(&g_node_reflect), SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "check enum", shrewd_basic_reflect_check_type(&g_mode_reflect), SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "check array", shrewd_basic_reflect_check_type(&g_row3_reflect), SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "check union", shrewd_basic_reflect_check_type(&g_payload_reflect), SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "check opaque", shrewd_basic_reflect_check_type(&g_handle_reflect), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("check primitive",
+                  shrewd_basic_reflect_check_type(&shrewd_basic_reflect_int32),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "check NULL", shrewd_basic_reflect_check_type(NULL), SHREWD_BASIC_ERR_ARG_INVALID);
+
+    /* Hand-corrupted copies are flagged. */
+    {
+        shrewd_basic_reflect_type_t bad = g_person_reflect;
+        bad.sb_refl_abi = SHREWD_BASIC_REFLECT_ABI + 1;
+        expect_eq_int("check bad abi",
+                      shrewd_basic_reflect_check_type(&bad),
+                      SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+        bad = g_person_reflect;
+        bad.sb_refl_size = 1; /* fields now exceed the type */
+        expect_eq_int("check bad size",
+                      shrewd_basic_reflect_check_type(&bad),
+                      SHREWD_BASIC_ERR_REFLECT_MISMATCH);
+    }
+}
+
+static void test_describe_type(void) {
+    shrewd_basic_log_module_t *module = NULL;
+    FILE *stream = tmpfile();
+    char buf[4096] = {0};
+    size_t n = 0;
+
+    expect_true("describe tmpfile", NULL != stream);
+    if (NULL == stream) {
+        return;
+    }
+    expect_eq_int("describe find module",
+                  shrewd_basic_log_module_find("reflect", &module),
+                  SHREWD_BASIC_ERR_OK);
+    if (NULL == module) {
+        fclose(stream);
+        return;
+    }
+    expect_eq_int("describe set stream",
+                  shrewd_basic_log_module_set_stream(module, stream),
+                  SHREWD_BASIC_ERR_OK);
+
+    expect_eq_int(
+        "describe person", shrewd_basic_reflect_describe(&g_person_reflect), SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "describe enum", shrewd_basic_reflect_describe(&g_mode_reflect), SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "describe union", shrewd_basic_reflect_describe(&g_payload_reflect), SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "describe NULL", shrewd_basic_reflect_describe(NULL), SHREWD_BASIC_ERR_ARG_INVALID);
+
+    fflush(stream);
+    rewind(stream);
+    n = fread(buf, 1, sizeof(buf) - 1, stream);
+    buf[n] = '\0';
+    expect_true("describe header", NULL != strstr(buf, "person_t (struct,"));
+    expect_true("describe field line", NULL != strstr(buf, "age"));
+    expect_true("describe align", NULL != strstr(buf, "align="));
+    expect_true("describe shape marker", NULL != strstr(buf, "int32[3]"));
+    expect_true("describe enum constants", NULL != strstr(buf, "mode_t (enum"));
+    expect_true("describe union cases", NULL != strstr(buf, "case "));
+    expect_eq_int("describe restore stream",
+                  shrewd_basic_log_module_set_stream(module, stderr),
+                  SHREWD_BASIC_ERR_OK);
+    fclose(stream);
+}
+
+/* Anonymous members (C11 6.7.2.1): described flat - the sub-members
+   are listed directly, their offsetof/sizeof resolve through the
+   anonymous parent. */
+typedef struct {
+    struct { /* anonymous nested struct */
+        int32_t ax;
+        int32_t ay;
+    };
+    union { /* anonymous union (n/f alias by design) */
+        int32_t n;
+        float f;
+    };
+    int32_t z;
+} anon_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_anon_reflect,
+                                 anon_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(anon_t, ax),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(anon_t, ay),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(anon_t, n),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(anon_t, f),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(anon_t, z));
+
+static void test_anonymous(void) {
+    const shrewd_basic_reflect_field_t *field = NULL;
+    anon_t obj = {0};
+    int32_t value = 0;
+
+    memset(&obj, 0, sizeof(obj));
+    expect_eq_int(
+        "anon check", shrewd_basic_reflect_check_type(&g_anon_reflect), SHREWD_BASIC_ERR_OK);
+    expect_eq_int("anon find ax",
+                  shrewd_basic_reflect_type_find_field(&g_anon_reflect, "ax", &field),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("anon ax offset", field->sb_refl_offset == offsetof(anon_t, ax));
+    expect_eq_int("anon find z",
+                  shrewd_basic_reflect_type_find_field(&g_anon_reflect, "z", &field),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("anon z offset", field->sb_refl_offset == offsetof(anon_t, z));
+
+    /* get/set and paths resolve through the anonymous parent. */
+    value = 5;
+    expect_eq_int("anon set ax",
+                  shrewd_basic_reflect_path_set(&obj, &g_anon_reflect, "ax", &value, sizeof(value)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("anon ax landed", 5 == obj.ax);
+    value = 6;
+    expect_eq_int("anon set ay",
+                  shrewd_basic_reflect_path_set(&obj, &g_anon_reflect, "ay", &value, sizeof(value)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("anon ay landed", 6 == obj.ay);
+    value = 0;
+    expect_eq_int("anon get ay",
+                  shrewd_basic_reflect_path_get(&obj, &g_anon_reflect, "ay", &value, sizeof(value)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("anon ay read", 6 == value);
+}
+
+/* Layout fixture: deterministic padding on every verified ABI. */
+typedef struct {
+    char c;
+    int32_t n;
+    char d;
+    double f;
+} pad_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_pad_reflect,
+                                 pad_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(pad_t, c),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(pad_t, n),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(pad_t, d),
+                                 SHREWD_BASIC_REFLECT_FIELD_PRIMITIVE(pad_t, f));
+
+typedef struct {
+    shrewd_basic_reflect_layout_entry_t entries[8];
+    size_t count;
+    int abort_status;
+} layout_cap_t;
+
+static int layout_collect(void *ctx, const shrewd_basic_reflect_layout_entry_t *entry) {
+    layout_cap_t *cap = (layout_cap_t *)ctx;
+    if (cap->count < (sizeof(cap->entries) / sizeof(cap->entries[0]))) {
+        cap->entries[cap->count] = *entry;
+        ++cap->count;
+    }
+    return (0 != cap->abort_status) ? cap->abort_status : SHREWD_BASIC_ERR_OK;
+}
+
+static void test_layout(void) {
+    layout_cap_t cap = {0};
+    size_t total = 0;
+
+    memset(&cap, 0, sizeof(cap));
+    expect_eq_int("layout person",
+                  shrewd_basic_reflect_layout(&g_pad_reflect, layout_collect, &cap),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("layout field count", cap.count == g_pad_reflect.sb_refl_field_count);
+
+    /* Entries arrive sorted by offset with correct gaps. */
+    total = 0;
+    for (size_t i = 0; i < cap.count; ++i) {
+        const shrewd_basic_reflect_layout_entry_t *e = &cap.entries[i];
+        if (0 != i) {
+            expect_true("layout sorted", cap.entries[i - 1].offset <= e->offset);
+        }
+        expect_true("layout offset", e->offset == e->field->sb_refl_offset);
+        expect_true("layout size", e->size == e->field->sb_refl_size);
+        total += e->pad_before + e->size;
+    }
+    /* Every byte of the type is accounted: pads + fields + trailing. */
+    {
+        const shrewd_basic_reflect_layout_entry_t *last = &cap.entries[cap.count - 1];
+        size_t trailing = g_pad_reflect.sb_refl_size - (last->offset + last->size);
+        expect_true("layout accounts all bytes", (total + trailing) == sizeof(pad_t));
+    }
+    /* Precise padding shape: n follows c (gap), f follows d (gap). */
+    expect_true("layout pad before n",
+                cap.entries[1].pad_before == (offsetof(pad_t, n) - (offsetof(pad_t, c) + 1)));
+    expect_true("layout pad before f",
+                cap.entries[3].pad_before == (offsetof(pad_t, f) - (offsetof(pad_t, d) + 1)));
+
+    /* Callback aborts propagate; bad arguments are rejected. */
+    cap.abort_status = SHREWD_BASIC_ERR_KEY_NOTFOUND;
+    expect_eq_int("layout abort",
+                  shrewd_basic_reflect_layout(&g_pad_reflect, layout_collect, &cap),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("layout NULL",
+                  shrewd_basic_reflect_layout(NULL, layout_collect, &cap),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+    expect_eq_int("layout not struct",
+                  shrewd_basic_reflect_layout(&shrewd_basic_reflect_int32, layout_collect, &cap),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+}
+
+typedef struct {
+    char paths[16][64];
+    int kinds[16];
+    size_t count;
+    int abort_status;
+} diff_cap_t;
+
+static int diff_collect(void *ctx, const char *path, shrewd_basic_reflect_diff_kind_t kind) {
+    diff_cap_t *cap = (diff_cap_t *)ctx;
+    if (cap->count < (sizeof(cap->paths) / sizeof(cap->paths[0]))) {
+        (void)snprintf(cap->paths[cap->count], sizeof(cap->paths[0]), "%s", path);
+        cap->kinds[cap->count] = (int)kind;
+        ++cap->count;
+    }
+    return (0 != cap->abort_status) ? cap->abort_status : SHREWD_BASIC_ERR_OK;
+}
+
+static int diff_cap_has(const diff_cap_t *cap, const char *path, int kind) {
+    for (size_t i = 0; i < cap->count; ++i) {
+        if ((0 == strcmp(cap->paths[i], path)) && (cap->kinds[i] == kind)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void test_diff_all(void) {
+    diff_cap_t cap = {0};
+    person_t a = {0};
+    person_t b = {0};
+
+    memset(&cap, 0, sizeof(cap));
+    memset(&a, 0, sizeof(a));
+    memset(&b, 0, sizeof(b));
+
+    /* Four independent differences, all reported with indexed paths. */
+    a.age = 1;
+    b.age = 2;
+    a.name = "aa";
+    b.name = "bb";
+    a.scores[2] = 9;
+    b.scores[2] = 7;
+    a.pair[1].y = 5;
+    b.pair[1].y = 6;
+    expect_eq_int("diff_all many",
+                  shrewd_basic_reflect_diff_all(&a, &b, &g_person_reflect, diff_collect, &cap),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("diff_all count", 4 == cap.count);
+    expect_true("diff_all age", diff_cap_has(&cap, "age", SHREWD_BASIC_REFLECT_DIFF_VALUE));
+    expect_true("diff_all name", diff_cap_has(&cap, "name", SHREWD_BASIC_REFLECT_DIFF_VALUE));
+    expect_true("diff_all scores",
+                diff_cap_has(&cap, "scores[2]", SHREWD_BASIC_REFLECT_DIFF_VALUE));
+    expect_true("diff_all pair", diff_cap_has(&cap, "pair[1].y", SHREWD_BASIC_REFLECT_DIFF_VALUE));
+
+    /* Equal graphs report nothing. */
+    memset(&cap, 0, sizeof(cap));
+    expect_eq_int("diff_all equal",
+                  shrewd_basic_reflect_diff_all(&a, &a, &g_person_reflect, diff_collect, &cap),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("diff_all equal silent", 0 == cap.count);
+
+    /* Pointer NULL-ness is a shape difference. */
+    {
+        node_t n1 = {0};
+        node_t n2 = {0};
+        node_t tail = {0};
+        memset(&n1, 0, sizeof(n1));
+        memset(&n2, 0, sizeof(n2));
+        memset(&tail, 0, sizeof(tail));
+        n1.data = 1;
+        n2.data = 1;
+        n2.next = &tail;
+        memset(&cap, 0, sizeof(cap));
+        expect_eq_int("diff_all shape",
+                      shrewd_basic_reflect_diff_all(&n1, &n2, &g_node_reflect, diff_collect, &cap),
+                      SHREWD_BASIC_ERR_OK);
+        expect_true("diff_all next shape",
+                    diff_cap_has(&cap, "next", SHREWD_BASIC_REFLECT_DIFF_SHAPE));
+    }
+
+    /* Callback aborts propagate; NULL arguments are rejected. */
+    cap.abort_status = SHREWD_BASIC_ERR_KEY_NOTFOUND;
+    expect_eq_int("diff_all abort",
+                  shrewd_basic_reflect_diff_all(&a, &b, &g_person_reflect, diff_collect, &cap),
+                  SHREWD_BASIC_ERR_KEY_NOTFOUND);
+    expect_eq_int("diff_all NULL",
+                  shrewd_basic_reflect_diff_all(NULL, &b, &g_person_reflect, diff_collect, &cap),
+                  SHREWD_BASIC_ERR_ARG_INVALID);
+}
+
+typedef struct {
+    int allocs;
+    int frees;
+    int fail_at; /* -1 = never; n = fail the (n+1)-th allocation */
+} tally_t;
+
+static int tally_alloc(void *ctx, void **out, size_t size) {
+    tally_t *tally = (tally_t *)ctx;
+    if ((0 <= tally->fail_at) && (tally->fail_at == tally->allocs)) {
+        *out = NULL;
+        return SHREWD_BASIC_ERR_MEM_NOMEM;
+    }
+    ++tally->allocs;
+    return shrewd_basic_platform_calloc(out, 1, size);
+}
+
+static void tally_free(void *ctx, void *ptr) {
+    tally_t *tally = (tally_t *)ctx;
+    void *block = ptr;
+    ++tally->frees;
+    (void)shrewd_basic_platform_free(&block);
+}
+
+static void test_allocator(void) {
+    tally_t tally = {0};
+    shrewd_basic_reflect_allocator_t alloc = {0};
+    node_t tail = {0};
+    node_t head = {0};
+    node_t *clone = NULL;
+
+    alloc.alloc = tally_alloc;
+    alloc.free = tally_free;
+    alloc.ctx = &tally;
+    memset(&tally, 0, sizeof(tally));
+    tally.fail_at = -1;
+    memset(&tail, 0, sizeof(tail));
+    memset(&head, 0, sizeof(head));
+    tail.data = 2;
+    head.data = 1;
+    head.next = &tail;
+
+    /* A two-node graph cloneable and destroyable entirely through the
+       injected allocator (blocks and copy bookkeeping alike). */
+    expect_eq_int("alloc copy_with",
+                  shrewd_basic_reflect_copy_with(&alloc, (void **)&clone, &head, &g_node_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("alloc counted", 2 <= tally.allocs);
+    expect_true("alloc clone graph",
+                (NULL != clone) && (1 == clone->data) && (NULL != clone->next)
+                    && (2 == clone->next->data) && (&tail != clone->next));
+    expect_eq_int("alloc destroy_with",
+                  shrewd_basic_reflect_destroy_with(&alloc, clone, &g_node_reflect),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("alloc balanced", tally.frees == tally.allocs);
+
+    /* Failure injection: the copy cleans up whatever it created. */
+    memset(&tally, 0, sizeof(tally));
+    tally.fail_at = 2;
+    clone = NULL;
+    expect_eq_int("alloc fail",
+                  shrewd_basic_reflect_copy_with(&alloc, (void **)&clone, &head, &g_node_reflect),
+                  SHREWD_BASIC_ERR_MEM_NOMEM);
+    expect_true("alloc fail balanced", (0 < tally.allocs) && (tally.frees == tally.allocs));
+}
+
+static void test_hash_cycles(void) {
+    node_t self = {0};
+    node_t a2 = {0};
+    node_t b2 = {0};
+    node_t a3 = {0};
+    node_t b3 = {0};
+    node_t c3 = {0};
+    node_t other = {0};
+    size_t h_self = 0;
+    size_t h_two = 0;
+    size_t h_three = 0;
+    size_t h_other = 0;
+    bool same = false;
+
+    /* Self-loop, two-cycle and three-cycle are all bisimilar infinite
+       chains: equal() says equal, and the refined hash must agree. */
+    memset(&self, 0, sizeof(self));
+    self.data = 7;
+    self.next = &self;
+    memset(&a2, 0, sizeof(a2));
+    memset(&b2, 0, sizeof(b2));
+    a2.data = 7;
+    b2.data = 7;
+    a2.next = &b2;
+    b2.next = &a2;
+    memset(&a3, 0, sizeof(a3));
+    memset(&b3, 0, sizeof(b3));
+    memset(&c3, 0, sizeof(c3));
+    a3.data = 7;
+    b3.data = 7;
+    c3.data = 7;
+    a3.next = &b3;
+    b3.next = &c3;
+    c3.next = &a3;
+
+    expect_eq_int("cycle hash self",
+                  shrewd_basic_reflect_hash(&self, &g_node_reflect, &h_self),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("cycle hash two",
+                  shrewd_basic_reflect_hash(&a2, &g_node_reflect, &h_two),
+                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int("cycle hash three",
+                  shrewd_basic_reflect_hash(&a3, &g_node_reflect, &h_three),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("cycle hash self == two", h_self == h_two);
+    expect_true("cycle hash two == three", h_two == h_three);
+
+    /* The equal walk agrees on all three shapes. */
+    expect_eq_int("cycle equal self two",
+                  shrewd_basic_reflect_equal(&self, &a2, &g_node_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("cycle equal self two yes", same);
+    expect_eq_int("cycle equal two three",
+                  shrewd_basic_reflect_equal(&a2, &a3, &g_node_reflect, &same),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("cycle equal two three yes", same);
+
+    /* Different content still differs. */
+    memset(&other, 0, sizeof(other));
+    other.data = 8;
+    other.next = &other;
+    expect_eq_int("cycle hash other",
+                  shrewd_basic_reflect_hash(&other, &g_node_reflect, &h_other),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("cycle hash other differs", h_other != h_self);
+}
+
+int main(void) {
     test_describe();
     test_find_field();
     test_lookup_index();
     test_lookup_list();
+    test_registry();
+    test_descriptor_meta();
+    test_describe_type();
+    test_anonymous();
+    test_layout();
+    test_diff_all();
+    test_allocator();
+    test_hash_cycles();
     test_get_set_scalars();
     test_get_set_string();
     test_nested();
@@ -4031,6 +5046,11 @@ int main(void)
     test_stringbuf();
     test_owned_strings();
     test_bits();
+    test_cbit();
+    test_wstring();
+    test_wide_ops();
+    test_wscalar();
+    test_text_layer();
     test_multidim();
     test_union();
     test_graph_ops();

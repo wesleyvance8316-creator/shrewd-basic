@@ -15,7 +15,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "shrewd-basic/json/json.h"
+#include "shrewd-basic/formats/json.h"
 
 typedef struct shrewd_basic_json_entry {
     char *key;
@@ -58,18 +58,19 @@ struct shrewd_basic_json_value {
 /* Effective option values (0 means "the documented default"). */
 
 /* Create a number from its exact token text (copies @p n bytes). */
-int json_value_new_number(const char *raw, size_t n,
-                          shrewd_basic_json_value_t **out);
+int json_value_new_number(const char *raw, size_t n, shrewd_basic_json_value_t **out);
 
 /*
  * Append an object member unconditionally (duplicate keys are kept,
  * preserving document order - what parse needs for text fidelity).
  * The public shrewd_basic_json_set() is the replace-or-append view.
  */
-int json_object_add(shrewd_basic_json_value_t *object, const char *key,
+int json_object_add(shrewd_basic_json_value_t *object,
+                    const char *key,
                     shrewd_basic_json_value_t *item);
 /* Like json_object_add but takes ownership of @p key (no copy). */
-int json_object_add_steal(shrewd_basic_json_value_t *object, char *key,
+int json_object_add_steal(shrewd_basic_json_value_t *object,
+                          char *key,
                           shrewd_basic_json_value_t *item);
 
 /*
@@ -90,14 +91,12 @@ void json_policy_view(const shrewd_basic_json_info_t *info,
                       const shrewd_basic_reflect_field_t *field,
                       shrewd_basic_json_key_info_t *out);
 
-static inline int json_opt_depth(const shrewd_basic_json_options_t *options)
-{
-    return ((NULL != options) && (0 < options->max_depth))
-            ? options->max_depth : SHREWD_BASIC_JSON_DEPTH_DEFAULT;
+static inline int json_opt_depth(const shrewd_basic_json_options_t *options) {
+    return ((NULL != options) && (0 < options->max_depth)) ? options->max_depth
+                                                           : SHREWD_BASIC_JSON_DEPTH_DEFAULT;
 }
 
-static inline int json_opt_indent(const shrewd_basic_json_options_t *options)
-{
+static inline int json_opt_indent(const shrewd_basic_json_options_t *options) {
     return ((NULL != options) && (0 < options->indent)) ? options->indent : 2;
 }
 
@@ -106,9 +105,7 @@ static inline int json_opt_indent(const shrewd_basic_json_options_t *options)
  * consumed, or 0 for an invalid sequence (overlong, surrogate and
  * out-of-range forms are rejected).
  */
-static inline size_t json_utf8_decode(const unsigned char *text, size_t n,
-                                      unsigned *out)
-{
+static inline size_t json_utf8_decode(const unsigned char *text, size_t n, unsigned *out) {
     unsigned c = text[0];
     size_t need = 0;
     unsigned cp = 0;
@@ -138,7 +135,7 @@ static inline size_t json_utf8_decode(const unsigned char *text, size_t n,
         cp = (cp << 6) | (text[i] & 0x3fu);
     }
     if (((2 == need) && (0x80u > cp)) || ((3 == need) && (0x800u > cp))
-            || ((4 == need) && (0x10000u > cp))) {
+        || ((4 == need) && (0x10000u > cp))) {
         return 0; /* overlong */
     }
     if ((0xd800u <= cp) && (0xdfffu >= cp)) {
@@ -152,13 +149,11 @@ static inline size_t json_utf8_decode(const unsigned char *text, size_t n,
 }
 
 /* Is @p n bytes of @p text well-formed UTF-8? */
-static inline int json_utf8_valid(const char *text, size_t n)
-{
+static inline int json_utf8_valid(const char *text, size_t n) {
     size_t i = 0;
     while (i < n) {
         unsigned cp = 0;
-        size_t used = json_utf8_decode((const unsigned char *)text + i, n - i,
-                                       &cp);
+        size_t used = json_utf8_decode((const unsigned char *)text + i, n - i, &cp);
         if (0 == used) {
             return 0;
         }
@@ -168,8 +163,7 @@ static inline int json_utf8_valid(const char *text, size_t n)
 }
 
 /* Bounded strlen for counted buffers (strnlen is POSIX, not C11). */
-static inline size_t json_strn_len(const char *text, size_t max)
-{
+static inline size_t json_strn_len(const char *text, size_t max) {
     size_t n = 0;
     while ((n < max) && ('\0' != text[n])) {
         ++n;
@@ -195,8 +189,7 @@ int json_buf_printf(json_buf_t *buf, const char *fmt, ...);
 int json_buf_string(json_buf_t *buf, const char *text);
 
 /* Append one code point to @p buf as UTF-8. */
-static inline int json_utf8_append(json_buf_t *buf, unsigned code)
-{
+static inline int json_utf8_append(json_buf_t *buf, unsigned code) {
     char bytes[4];
     size_t n = 0;
     if (0x80u > code) {

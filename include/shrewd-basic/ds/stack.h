@@ -64,7 +64,8 @@ bool shrewd_basic_stack_empty(const shrewd_basic_stack_t *stack);
 
 /** Visit payloads bottom to top until @p visit returns non-OK. */
 int shrewd_basic_stack_foreach(const shrewd_basic_stack_t *stack,
-                               shrewd_basic_stack_visit_fn visit, void *ctx);
+                               shrewd_basic_stack_visit_fn visit,
+                               void *ctx);
 
 #ifdef __cplusplus
 }

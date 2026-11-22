@@ -184,15 +184,25 @@ dump 覆盖全部形态:转义字符串、`[ a, b, c ]` 标量数组(32 个封�
 - equal:双模拟(在比的 (a,b) 对再现即判等),循环数据可终止;
 - dump/visit/hash:`(object, type)` 对的在路径检测(嵌入成员与父共享地址不算环),
   16 层深度钳制;
-- hash 环图按形状折叠(回边记标记),已文档化限制。
+- hash 共享/环目标经颜色细化(双模拟不变,自环与多元环同哈希);深度封顶区折标记。
 
-### 字符串的三种形态
+### 字符串的三种形态(× 三种码元宽度)
 
 | 形态 | 存储 | equal/hash | copy/destroy |
 |---|---|---|---|
 | `STRING`(借用) | 槽内是 `char *` | 按内容 | 别名 / 永不释放 |
 | `F_STRING_OWNED`(拥有) | 槽内是 `char *` | 按内容 | 克隆内容 / 释放内容 |
 | `F_STRINGBUF` | `char[N]` 内联 | 到 NUL 为止 | 原样字节 / 无 |
+
+宽字符串(`STRING16`/`STRING32`:`char16_t *`/`char32_t *`/`wchar_t *`)
+是同一组形态的 **16/32 位码元版**:比较/哈希/截断一律按码元到 NUL 单元
+为止,dump 逐码元转义(`\uXXXX`/`\UXXXXXXXX`),owned 克隆按码元内容。
+显式宏(`FIELD_STRING16/32` 与 `FIELD_WSTRING` 系列)——刻意不走
+`_Generic` 自动映射,避免 `char32_t`/`unsigned int` 别名吞掉整型指针。
+
+宽标量(`LONG_DOUBLE`/`COMPLEX`/`BIT_INT`)同批补齐:`long double`
+值语义、复数 `[re, im]` 分量语义、位精确整数原宽字节语义(符号性走
+ops);json/bin 侧宽字符串 UTF-8 互转已全支持(严格双向)。
 
 ### 位组
 
@@ -229,11 +239,15 @@ struct shrewd_basic_reflect_ops {
 
 - `_Generic` 只列基本类型(不列 stdint 别名防重复关联),无 `default`:不支持的
   成员类型**编译期报错**是特性;
+- **匿名 struct/union 成员**(C11 无名成员)按**平铺**描述:子成员直接
+  列进外层字段表(`FIELD_PRIMITIVE(S, ax)` 即可,offsetof/sizeof 穿透
+  匿名父级);同址的匿名 union 子成员互为别名,语义由应用自理;
 - 字符缓冲二选一:`FIELD_STRING_BUFFER`(文本语义)或 `FIELD_ARRAY(t, buf,
   shrewd_basic_reflect_char)`(字节精确);裸 `FIELD_PRIMITIVE` 会把数组退化成
   字符串指针;
-- **C 位域成员无法描述**(布局实现定义且不可内省)——`FIELD_BITS` 覆盖的是
-  "真实单元 + 作者给定位段"(寄存器位段/协议头);
+- **C 位域成员用 `FIELD_BITS_UNIT`**(显式单元放置)——布局实现定义、宏无法
+  内省,放置参数由 `reflect_gen --backend dwarf` 从编译器实际布局产出;
+  `FIELD_BITS` 覆盖"真实单元 + 作者给定位段"(寄存器位段/协议头);
 - 多维数组的行元素是**值类型**(标量/结构体/嵌套行);生成器对
   `T m[N][M]` 自动生成行类型,3D+ 同理;
 - 柔性尾部(FAM)的分配契约:`sizeof` 只覆盖头部,须

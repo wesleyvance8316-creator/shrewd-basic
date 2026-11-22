@@ -82,20 +82,23 @@ int shrewd_basic_dlist_back(const shrewd_basic_dlist_t *list, void **out);
  * Insert @p data just before @p node, which must belong to @p list.
  */
 int shrewd_basic_dlist_insert_before(shrewd_basic_dlist_t *list,
-                                     shrewd_basic_dlist_node_t *node, void *data);
+                                     shrewd_basic_dlist_node_t *node,
+                                     void *data);
 
 /**
  * Insert @p data just after @p node, which must belong to @p list.
  */
 int shrewd_basic_dlist_insert_after(shrewd_basic_dlist_t *list,
-                                    shrewd_basic_dlist_node_t *node, void *data);
+                                    shrewd_basic_dlist_node_t *node,
+                                    void *data);
 
 /**
  * Unlink and free @p node (which must belong to @p list) and store its
  * payload into @p *out (NULL discards).
  */
 int shrewd_basic_dlist_remove(shrewd_basic_dlist_t *list,
-                              shrewd_basic_dlist_node_t *node, void **out);
+                              shrewd_basic_dlist_node_t *node,
+                              void **out);
 
 /** Store the node count into @p *out. */
 int shrewd_basic_dlist_size(const shrewd_basic_dlist_t *list, size_t *out);
@@ -105,7 +108,8 @@ bool shrewd_basic_dlist_empty(const shrewd_basic_dlist_t *list);
 
 /** Visit payloads front to back until @p visit returns non-OK. */
 int shrewd_basic_dlist_foreach(const shrewd_basic_dlist_t *list,
-                               shrewd_basic_dlist_visit_fn visit, void *ctx);
+                               shrewd_basic_dlist_visit_fn visit,
+                               void *ctx);
 
 /** Visit payloads back to front until @p visit returns non-OK. */
 int shrewd_basic_dlist_foreach_reverse(const shrewd_basic_dlist_t *list,

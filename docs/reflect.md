@@ -81,15 +81,32 @@ person (person_t) {
 ### 3.1 kind(`shrewd_basic_reflect_kind_t`)
 
 `BOOL, CHAR, INT8, UINT8, INT16, UINT16, INT32, UINT32, INT64, UINT64, ENUM,
-FLOAT, DOUBLE, STRING, STRUCT, ARRAY, OPAQUE`
+FLOAT, DOUBLE, STRING, STRUCT, ARRAY, OPAQUE, STRING16, STRING32,
+LONG_DOUBLE, COMPLEX, BIT_INT`
 
 - `ENUM`:枚举值(int 兼容,顺序排在整数族之后、浮点之前),`ENUM_DEFINE` 注册名/值表,dump 按常量名渲染,`enum_find_name/enum_find_value` 双向查表;
 - `STRING`:`char *` / `const char *` 成员,指针即值;
+- `STRING16` / `STRING32`:`char16_t *` / `char32_t *`(或 `wchar_t *`,宽度随
+  平台)宽字符串:值是指向(或本身就是)NUL **码元**结尾的码元序列,
+  equal/diff/hash 按码元到 NUL 单元为止,dump 逐码元转义(`\uXXXX` /
+  `\UXXXXXXXX`);`wchar_t` 用 `FIELD_WSTRING` 系列按 `WCHAR_MAX` 编译期归入
+  16/32。**刻意不做 `_Generic` 自动映射**(char32_t 是 unsigned int 的别名,
+  自动关联会把普通整型指针静默变成字符串),宽字符串一律显式宏;
 - `STRUCT`:有字段表的聚合;
 - `ARRAY`:定长数组值(多维数组的一行),`ARRAY_DEFINE` 注册元素/计数/步长,行可嵌套(3D+);
 - `UNION`:带标签联合,`UNION_DEFINE` + `UNION_VARIANT` 注册变体表,`FIELD_UNION` 联动
   标签成员;遍历按标签选中**活动变体**(dump/equal/hash/copy/destroy/visit),标签无匹配
   时按原始字节比较、copy 只拷存储、destroy 不触碰(**失效槽位的野指针永不释放**);
+- `LONG_DOUBLE`:`long double` 标量,值语义与 float/double 同款(等值按 `==`、
+  dump 十进制、等值必等哈希);`_Generic` 可自动映射;
+- `COMPLEX`:复数标量,成员视作 `[re, im]` 两个分量(半宽 4/8/16 对应
+  float/double/long double),逐分量值语义,dump 渲染 C 字面量形
+  `1.5+2.5i`;**显式宏** `FIELD_COMPLEX`(MSVC 无 `_Complex`,不做
+  `_Generic`);
+- `BIT_INT`:位精确整数(`_BitInt(N)`/`unsigned _BitInt(N)`),**原宽
+  字节语义**(equal 按 memcmp、hash 折原始字节、dump 打 `0x` 十六进制)——
+  符号性/精度语义在字节之外,需要时走 ops;**显式宏** `FIELD_BITINT`
+  (`_BitInt(N)` 需逐 N 关联,宏本身零编译器依赖);
 - `OPAQUE`:不可描述的目标(`shrewd_basic_reflect_void` 或应用自定义),只能打地址/走 ops;
 - 枚举可扩展(POINTER 等留待未来),所有 switch 都有 `default` 兜底为 `unknown`。
 
@@ -129,6 +146,8 @@ struct shrewd_basic_reflect_type {
 shrewd_basic_reflect_bool / _char / _int8 / _uint8 / _int16 / _uint16
 shrewd_basic_reflect_int32 / _uint32 / _int64 / _uint64 / _float / _double
 shrewd_basic_reflect_string   /* const char * */
+shrewd_basic_reflect_string16 /* char16_t * / 16 位 wchar_t * */
+shrewd_basic_reflect_string32 /* char32_t * / 32 位 wchar_t * */
 shrewd_basic_reflect_void     /* 不透明目标(OPAQUE),size = 0 */
 ```
 
@@ -153,7 +172,15 @@ shrewd_basic_reflect_void     /* 不透明目标(OPAQUE),size = 0 */
 | `FIELD_FLEX(struct_type, member, count_member, ref)` | 柔性尾部(尾部内联 + 计数联动) |
 | `FIELD_STRING_BUFFER(struct_type, member)` | `char[N]` 文本缓冲:按 C 字符串渲染/比较(dump 引号转义、equal/diff/hash 到 NUL 为止、visit 单 LEAF;get/set 仍是原始 N 字节) |
 | `FIELD_STRING_OWNED(struct_type, member)` | 图**拥有**的 `char *`:copy 克隆内容(共享串保持共享)、destroy 释放;NULL 保持 NULL;equal/hash/dump 不变 |
-| `FIELD_BITS(struct_type, unit, name, bit_offset, bit_width)` | 真实整数单元内的位组(寄存器位段/协议头):get/set 读改写单元(值零扩展到单元宽度),equal/diff/hash/dump 只看该组的位;**C 位域成员无法描述**(布局实现定义) |
+| `FIELD_STRING16/32(struct_type, member)` | `char16_t *` / `char32_t *` 宽字符串(借用) |
+| `FIELD_STRING16/32_OWNED(struct_type, member)` | 自有宽字符串:copy 克隆码元内容、destroy 释放 |
+| `FIELD_STRING16/32_BUFFER(struct_type, member)` | `char16_t[N]` / `char32_t[N]` 宽文本缓冲:按码元到 NUL 单元为止 |
+| `FIELD_WSTRING/_OWNED/_BUFFER(struct_type, member)` | `wchar_t` 形态,单元宽度随 `WCHAR_MAX` 编译期归入 16/32 |
+| `FIELD_LONG_DOUBLE(struct_type, member)` | `long double` 标量(也可经 `FIELD_PRIMITIVE` 的 `_Generic` 自动映射) |
+| `FIELD_COMPLEX(struct_type, member)` | 复数成员(`[re, im]` 分量视图,半宽决定分量类型) |
+| `FIELD_BITINT(struct_type, member)` | 位精确整数(`_BitInt(N)`,原宽字节语义) |
+| `FIELD_BITS(struct_type, unit, name, bit_offset, bit_width)` | 真实整数单元内的位组(寄存器位段/协议头):get/set 读改写单元(值零扩展到单元宽度),equal/diff/hash/dump 只看该组的位 |
+| `FIELD_BITS_UNIT(struct_type, name, unit_ref, unit_offset, unit_size, bit_offset, bit_width)` | 显式单元放置的位组(`unit_ref` 不带 `&`):**C 位域成员**用——offsetof 碰不到位域的匿名存储,放置参数取自编译器实际布局(`reflect_gen --backend dwarf` 产出) |
 | `FIELD_UNION(struct_type, member, union_var, tag_member)` | 带标签联合成员:标签在运行时选变体,只有活动变体参与比较/拷贝/释放/渲染 |
 | `FIELD_*_OPS`(全部形态各有变体) | 同上 + 字段级 ops 覆盖 |
 
@@ -185,6 +212,7 @@ SHREWD_BASIC_REFLECT_TYPE_DECLARE(var)                                /* 跨 TU 
 ## 5. 接口参考
 
 全部返回 `int` 错误码(`shrewd-basic/platform/error.h`),数据经出参返回。
+逐接口的**全名、精确原型、参数与返回值**见 [reflect API reference](reflect-api.md)。
 
 | 接口 | 语义 | 错误码 |
 |---|---|---|
@@ -285,9 +313,9 @@ member ( '[' index ']' )? ( '.' member ( '[' index ']' )? )*
   `REFLECT_MISMATCH`;`path` 可传 NULL 跳过报告,非 NULL 时保证 NUL 结尾(过小则截断)。
 - `shrewd_basic_reflect_hash(obj, type, &out)`:与 equal 相容的泛型哈希——**相等的对象
   必然哈希相等**。叶子按规范编码折入 FNV-1a 流(整数按值、浮点折叠 -0.0/NaN 标记、
-  字符串按内容、不透明按地址),与字节序和宽度无关。限制:环图按形状折叠(回边记标记
-  常量),双模拟但形状不同的环可能哈希不同;深度钳制区两侧同样折叠标记,与 equal 的
-  钳制行为一致。自定义节点用 `ops->hash`。
+    字符串按内容、不透明按地址),与字节序和宽度无关。共享/环目标经迭代颜色细化折叠
+  (双模拟不变:自环、二元环、长环、菱形共享尾哈希一致);限制仅剩深度封顶区——两侧
+  折标记,与 equal 的封顶一致,超封顶才可能碰撞。自定义节点用 `ops->hash`。
 
 ---
 
@@ -296,6 +324,7 @@ member ( '[' index ']' )? ( '.' member ( '[' index ']' )? )*
 ```
 person (person_t) {
   name = "Alice"            字符串:转义 \\ \" \n \r \t 与 \xHH,NULL → (null),256 字节截断
+  title = "café"       宽字符串:同上 ASCII 转义,其余码元 \uXXXX(16 位)/ \UXXXXXXXX(32 位)
   grade = 'A'               char:可打印字符,否则 '\x07'
   small = -7                有符号整数(按真实宽度读)
   big = 5                   无符号整数
@@ -365,7 +394,7 @@ struct shrewd_basic_reflect_ops {
 | 结构体 | `platform_calloc` + 字段递归 | 递归 + `platform_free` |
 | 标量 | `platform_alloc` + 拷值(规范宽度) | `platform_free` |
 | 字符串(槽) | **别名**(借用语义) | 永不触碰 |
-| 字符串(`F_STRING_OWNED`) | **克隆内容**(共享串保持共享) | 释放内容(访问集保证一次) |
+| 字符串(`F_STRING_OWNED`) | **克隆内容**(共享串保持共享;宽字符串按码元克隆) | 释放内容(访问集保证一次) |
 | 不透明 | 拒绝(`ARG_INVALID`) | 跳过(非我方分配) |
 | 超深度钳制 | 别名(防御) | 跳过 |
 
@@ -399,8 +428,9 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
 1. **描述符成员统一带 `sb_refl_` 前缀**(`sb_refl_name` / `sb_refl_type` / `sb_refl_size` ...):C 宏替换会改写 designated initializer 的设计器(未加前缀时,参数 `type` 会毁掉 `.type =`),项目缩写 + `refl_` 双重前缀使设计器与 `type`/`name`/`var`/`size` 等常见标识符彻底隔离——这些词如今可安全用作宏参数或用户包装宏的参数;宏参数仅需避开 `sb_refl_*` 本身。
 2. **`char buf[N]` 必须用 `FIELD_ARRAY(t, buf, shrewd_basic_reflect_char)`**:
    `FIELD_PRIMITIVE` 会因数组退化把 `char[N]` 当 `char *` 误判为字符串(编译器抓不到)。
-3. **多维数组不支持**(元素类型模型是单层),bit-field / 联合体 / 函数指针 /
-   匿名成员不支持。柔性尾部(`T a[]` 与 GNU `T a[0]`)用 `FIELD_FLEX`:成员必须是
+3. **多维数组按行类型嵌套描述**(元素类型模型是单层,`ARRAY_DEFINE` 逐层
+   包装)。函数指针不支持。柔性尾部(`T a[]` 与 GNU `T a[0]`)用
+   `FIELD_FLEX`:成员必须是
    最后一个、含它的结构体不能再内嵌(C 约束);**分配必须含尾部**
    (`platform_calloc(1, sizeof(T) + n * sizeof(T0))`),`sizeof` 只覆盖头部;
    copy 克隆时会按运行时计数补足尾部。
@@ -422,13 +452,95 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
 
 ## 10. 代码生成器(可选)
 
-`tools/reflect_gen.py`(纯 Python3,零依赖)解析头文件的受支持子集,
+`tools/reflect_gen.py`(Python3;词法后端零依赖,dwarf 后端需
+`python3-pyelftools` + C 编译器)解析头文件的受支持子集,
 产出与手写完全一致的宏注解,作为可选的编写辅助——**库本身永远不需要它**,
 生成物可读、可手改、可与手写混用:
 
-    python3 tools/reflect_gen.py input.h -o stub   # 生成 stub.h + stub.c
+    python3 tools/reflect_gen.py input.h -o stub   # 生成 stub.h + stub.c(词法后端)
+    python3 tools/reflect_gen.py input.h -o stub --backend dwarf
+                                   # 编译探针读真实布局:位域 FIELD_BITS_UNIT、
+                                   # _Static_assert(sizeof/offsetof) 指纹防陈旧
+    python3 tools/reflect_gen.py input.h --backend dwarf --layout
+                                   # pahole-lite 布局报告(偏移/填充/packed,--json 机器可读)
 
-- 收录:`typedef struct/enum`;标量/字符串(`FIELD_PRIMITIVE`)、嵌套结构体
+### 注解语法(严格点名)
+
+> 完整注解手册(按对象分章:类型/成员/联合体/宽形态/json 策略/CLI/构建接线)
+> 见 [annotations.md](annotations.md)。
+
+生成器**只生成注解点名的类型**——头文件里的 struct 不全量收录,
+未标注的不生成。分工原则:事实问编译器(布局/宽度),意图问注释
+(所有权/联合体标签)。
+
+**语句式语法**(C 风格):注解注释里的每条语句是
+`namespace: 项, 项, ...;`——`;` 结束语句(必填),`,` 分项;项为
+目标(`type=NAME` / `member=TYPE.MEMBER`,**必须在首项、每句一次**)、
+裸指令(`owned`)或键值(`key="x"`、`count=len`)。值是裸词或
+`'...'`/`"..."` 引号文本(**无转义**——两种引号都嵌不下的值不支持),
+列表套一层花括号:`case={A,B}`。命名空间是开放词汇(`reflect:` /
+`json:` / 未来的 `bin:`),每个应用层独立描述、可混排;**工具不认识的
+命名空间硬错误**,绝不静默跳过。
+
+    /* reflect: type=demo_config_t;
+       reflect: member=demo_config_t.name, owned; */
+    typedef struct {
+        /* reflect: member=demo_config_t.age, range 语义见 json 章节 */
+        int32_t age;
+    } demo_config_t;
+
+**放置自由(位置零语义)**:注解按目标名(`member=TYPE.MEMBER`)认主,
+不看它挨着哪一行——成员/类型**上一行**(推荐:意图贴着字段、长指令
+随便折行、clang-format 不挪窝)、同行末尾(短指令)、文件顶部集中
+清单块,语义完全相同。注意:注解语句必须**领起注释块**(`/* reflect:`
+开头);普通注释里夹注解语句会硬错误,防止被误当散文丢弃;`/* */`
+是唯一注释形态(不做 `//`——被"注释掉"的注解会意外生效)。
+
+**收录契约**:只收 `typedef struct|union|enum {体} 名字;` 形式
+(带 tag 的 `typedef struct foo {...} a_t;` 与多名字 `} a_t, b_t;`
+均可,注册的是 typedef 名;裸 `struct foo {...};` 不收)。**命名完全
+自由**——`_t` 只是示例习惯,生成器不校验命名,描述符名机械拼接
+`<原名>_reflect`(如 `DemoConfig` → `DemoConfig_reflect`)。
+
+- `type=NAME`:点名生成;`type=NAME, external`:被引用但手写描述符,
+  不生成;
+- 成员指令:`owned`/`stringbuf`/`wstringbuf`(字符串三形态)、`skip`、
+  `count=`(柔性数组配对计数成员)、`ops=`、`name=`(改字段名);
+- 联合体:`union_tag=MEMBER` + `case=CONST`(多个写 `case={A,B}`,
+  全部写 `case=*`)→ `UNION_DEFINE` + `FIELD_UNION`,按 case 分组切
+  标签——tag 是设计意图,两个后端都无法从布局推断,联合体成员必须
+  给 `union_tag=` 或 `skip`;
+- 宽字符串(`char16_t`/`char32_t`/`wchar_t` 及一层 typedef 别名)识别为
+  `FIELD_STRING16/32`/`FIELD_WSTRING` 家族;
+- **引用闭包硬错误**:被引用的头内类型必须同样点名(或 `--external NAME`),
+  否则报错退出——两条出口:生成,或 external。不可改的第三方头用
+  `--type NAME` / `--external NAME` 命令行点名。
+
+**`json:` 命名空间**(JSON 策略桩,见 [json.md §6](json.md)):
+`json: type=NAME` 点名生成 `NAME_json` 策略表(仅含带指令的成员,
+稀疏表);`json: member=TYPE.MEMBER, ...` 一指令生成一行宏:
+
+| 指令 | 生成行 |
+|---|---|
+| `key="x"` / `keys={"a","b"}` | `KEY(m, "x")` / `KEY(m, "a", "b")`(首名为规范键;两者互斥) |
+| `omit_empty` / `required` / `hidden` / `borrowed` | 同名 `OMIT_EMPTY/REQUIRED/HIDDEN/BORROWED` 行 |
+| `default=18` / `default_str="s"` / `default_json='{"a":1}'` | `DEFAULT/DEFAULT_STR/DEFAULT_JSON`(三者择一) |
+| `range=0..150` | `RANGE(m, 0, 150)` |
+| `ops=NAME` / `ops_elem=NAME` | `OPS/OPS_ELEM` |
+| `format="date-time"` / `pattern="^\d+$"` | `FORMAT/PATTERN`(仅 schema 标注) |
+| `union_style=nested\|flat\|unwrap` | `UNION_STYLE(m, ...)` |
+
+闭包硬错误:成员指令必须有 `json: type=`(或 `--json-type NAME`);
+type= 必须有 reflect 描述符(生成或 external);空表硬错误。语义注意:
+decode **永远额外接受成员名**(库不变量,`key=`/`keys=` 添加接受名并
+设规范编码键)。
+
+### 产出与收录
+
+- 默认输出 `<input>_reflect.{c,h}`,拒绝覆盖输入本身;有 `json:` 点名时
+  另出 `<output>_json.{c,h}`(策略表,可与构建系统的格式开关共存);`--schema-dump` 再出 `<output>_schema_dump.c`(schema 导出程序,构建期运行固化 `schema.json`);
+- 描述符命名约定 `<类型名>_reflect`(如 `shape_t_reflect`);
+- 收录形态:标量/字符串(`FIELD_PRIMITIVE`)、嵌套结构体
   (`FIELD_STRUCT`)、定长数组(`FIELD_ARRAY`)、柔性尾部(`FIELD_FLEX`,含 GNU
   `[0]` 形态,自动配对 `name_count`/`name_len`/`count`/`len` 计数成员,配不到则
   告警跳过)、指针(`FIELD_PTR`/`FIELD_PTR_ARRAY`)、枚举(`FIELD_ENUM`/`ENUM_DEFINE`),
@@ -436,9 +548,20 @@ SHREWD_BASIC_REFLECT_TYPE_DEFINE(device_type, device_t,
 - 多维数组 `T m[N][M]`(任意维):逐层生成 `ARRAY_DEFINE` 行类型(内层在前,
   3D+ 自然嵌套)+ `FIELD_ARRAY`;`char[N]` 默认生成 `FIELD_ARRAY`
   (字节精确);文本缓冲可手工改为 `FIELD_STRING_BUFFER`(C 字符串语义);
-- 描述符命名约定 `<类型名>_reflect`(如 `shape_t_reflect`);
-- 跳过并告警:bit-field、联合体、函数指针;
-- 验证:`tools/reflect_gen_check.sh` 一键自测(生成 → 编译 → 运行 dump/equal/enum 冒烟),样例输入 `tools/reflect_gen_sample.h`;
+- 位域:词法后端快速失败,`--backend dwarf` 产出 `FIELD_BITS_UNIT`
+  (放置参数取自编译器真实布局);函数指针快速失败并报错;
+- 指纹防陈旧:生成头携带工具链记录 + `_Static_assert(sizeof/offsetof)`
+  漂移守卫,库升位/换 ABI 编译即暴露而非运行期错读。
+
+### 验证与下游示例
+
+- `tools/reflect_gen_check.sh` 一键自测(双后端生成 → 编译 → 运行
+  dump/equal/enum 冒烟 + 位域双向对账 + `--layout` 报告 + golden 全文比对,
+  `--update-golden` 刷新基准),样例输入 `tools/reflect_gen_sample*.h`;
+  已接 ctest(缺 `python3-pyelftools` 时响亮跳过并给安装命令);
+- 下游接入样板:`demo/consumer-cmake/`(CMake)与 `demo/consumer-make/`
+  (Make)两个最小工程,演示构建期生成、产物落构建目录、
+  应用代码直接使用生成描述符;
 - 基准:`tools/reflect_bench.sh` 输出关键路径的 ns/op 基线(find/resolve/path_get/field_get/equal/copy+destroy/dump),供优化工作对照。
 
 ## 11. 路线图

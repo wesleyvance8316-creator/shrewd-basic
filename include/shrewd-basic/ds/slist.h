@@ -76,7 +76,8 @@ bool shrewd_basic_slist_empty(const shrewd_basic_slist_t *list);
  * then returned.
  */
 int shrewd_basic_slist_foreach(const shrewd_basic_slist_t *list,
-                               shrewd_basic_slist_visit_fn visit, void *ctx);
+                               shrewd_basic_slist_visit_fn visit,
+                               void *ctx);
 
 /** Reverse the node order in place. */
 int shrewd_basic_slist_reverse(shrewd_basic_slist_t *list);

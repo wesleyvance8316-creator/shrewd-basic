@@ -1,13 +1,83 @@
 include(GNUInstallDirs)
 
-# Library sources: every .c below library/ - core code in src/,
-# data-structure components in ds/, the log module in log/, platform
-# wrappers in platform/. CONFIGURE_DEPENDS re-runs the glob when files
-# are added or removed, so no manual source list is needed.
-# Internal headers live in include/shrewd-basic-internal and are only visible
-# to this target; public headers are in include/shrewd-basic.
-file(GLOB_RECURSE SHREWD_BASIC_SOURCES CONFIGURE_DEPENDS
-        "${CMAKE_CURRENT_SOURCE_DIR}/*.c")
+# Library sources, one set per component (CONFIGURE_DEPENDS re-runs the
+# glob when files are added or removed):
+#   core components - ds, log, platform, reflect - always build;
+#   data-format applications - bin, json, ... - contribute their sources
+#   only while the matching SHREWD_BASIC_FORMAT_* option is on, an empty
+#   set otherwise (no glob runs for a disabled format).
+# Internal headers live in include/shrewd-basic-internal and are only
+# visible to this target; public headers are in include/shrewd-basic.
+file(GLOB_RECURSE SHREWD_BASIC_DS_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/ds/*.c")
+file(GLOB_RECURSE SHREWD_BASIC_LOG_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/log/*.c")
+file(GLOB_RECURSE SHREWD_BASIC_PLATFORM_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/platform/*.c")
+file(GLOB_RECURSE SHREWD_BASIC_REFLECT_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/reflect/*.c")
+
+set(SHREWD_BASIC_FORMAT_BIN_SOURCES "")
+if(SHREWD_BASIC_FORMAT_BIN)
+    file(GLOB_RECURSE SHREWD_BASIC_FORMAT_BIN_SOURCES CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/bin/*.c")
+endif()
+
+set(SHREWD_BASIC_FORMAT_JSON_SOURCES "")
+if(SHREWD_BASIC_FORMAT_JSON)
+    file(GLOB_RECURSE SHREWD_BASIC_FORMAT_JSON_SOURCES CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/json/*.c")
+endif()
+
+set(SHREWD_BASIC_FORMAT_INI_SOURCES "")
+if(SHREWD_BASIC_FORMAT_INI)
+    file(GLOB_RECURSE SHREWD_BASIC_FORMAT_INI_SOURCES CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/ini/*.c")
+endif()
+
+set(SHREWD_BASIC_FORMAT_ENV_SOURCES "")
+if(SHREWD_BASIC_FORMAT_ENV)
+    file(GLOB_RECURSE SHREWD_BASIC_FORMAT_ENV_SOURCES CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/env/*.c")
+endif()
+
+set(SHREWD_BASIC_FORMAT_CSV_SOURCES "")
+if(SHREWD_BASIC_FORMAT_CSV)
+    file(GLOB_RECURSE SHREWD_BASIC_FORMAT_CSV_SOURCES CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/csv/*.c")
+endif()
+
+set(SHREWD_BASIC_FORMAT_TOML_SOURCES "")
+if(SHREWD_BASIC_FORMAT_TOML)
+    file(GLOB_RECURSE SHREWD_BASIC_FORMAT_TOML_SOURCES CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/toml/*.c")
+endif()
+
+set(SHREWD_BASIC_FORMAT_MSGPACK_SOURCES "")
+if(SHREWD_BASIC_FORMAT_MSGPACK)
+    file(GLOB_RECURSE SHREWD_BASIC_FORMAT_MSGPACK_SOURCES CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/msgpack/*.c")
+endif()
+
+set(SHREWD_BASIC_FORMAT_CBOR_SOURCES "")
+if(SHREWD_BASIC_FORMAT_CBOR)
+    file(GLOB_RECURSE SHREWD_BASIC_FORMAT_CBOR_SOURCES CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/cbor/*.c")
+endif()
+
+set(SHREWD_BASIC_SOURCES
+        ${SHREWD_BASIC_DS_SOURCES}
+        ${SHREWD_BASIC_LOG_SOURCES}
+        ${SHREWD_BASIC_PLATFORM_SOURCES}
+        ${SHREWD_BASIC_REFLECT_SOURCES}
+        ${SHREWD_BASIC_FORMAT_BIN_SOURCES}
+        ${SHREWD_BASIC_FORMAT_JSON_SOURCES}
+        ${SHREWD_BASIC_FORMAT_INI_SOURCES}
+        ${SHREWD_BASIC_FORMAT_ENV_SOURCES}
+        ${SHREWD_BASIC_FORMAT_CSV_SOURCES}
+        ${SHREWD_BASIC_FORMAT_TOML_SOURCES}
+        ${SHREWD_BASIC_FORMAT_MSGPACK_SOURCES}
+        ${SHREWD_BASIC_FORMAT_CBOR_SOURCES})
 
 if(NOT SHREWD_BASIC_BUILD_STATIC AND NOT SHREWD_BASIC_BUILD_SHARED)
     message(FATAL_ERROR

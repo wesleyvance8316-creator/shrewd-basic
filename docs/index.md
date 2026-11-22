@@ -12,6 +12,21 @@ compile-time reflection module.
 - [reflect overview](reflect-overview.md) - a summary of everything the
   reflect module supports today: type system, field shapes, API list,
   semantics and tooling.
+- [reflect API reference](reflect-api.md) - every reflect interface with
+  its full name, exact prototype, parameters and return codes, grouped
+  by concern (metadata, values, paths, lookup lists, graph algorithms,
+  traversal).
+- [reflect applications](reflect-apps.md) - application layer on top of
+  reflect: the json mapping (implemented - DOM, struct mapping, policy
+  layer, ownership contract) and candidate external needs (binary
+  serialization, text scan/format, CSV/INI/YAML mappings).
+- [reflect roadmap](reflect-roadmap.md) - planned and candidate
+  features of the reflect core with design sketches: type-system
+  extensions, query/diff upgrades, toolchain work and explicit
+  non-goals.
+- [style guide](style.md) - C coding and formatting rules: initializer
+  completeness, mandatory braces, per-clause condition parentheses,
+  and the clang-format / clang-tidy gate.
 - [json reference](json.md) - the json module: layered architecture, the
   value model (DOM), the strict RFC 8259 parser/serializer and the wire
   format contract.
@@ -24,6 +39,7 @@ compile-time reflection module.
 | ds | `shrewd-basic/ds/*.h` | slist, dlist, queue, stack, btree, rbtree, trie, radix tree |
 | log | `shrewd-basic/log/log.h` | leveled logging with per-module masks and outputs |
 | reflect | `shrewd-basic/reflect/reflect.h` | compile-time type metadata for generic code |
-| json | `shrewd-basic/json/json.h` | JSON value model, parser and serializer |
+| json | `shrewd-basic/formats/json.h` | JSON value model, parser and serializer |
+| bin | `shrewd-basic/formats/bin.h` | binary struct serialization over reflect metadata |
 
 The API reference below is generated from the public headers.

@@ -74,12 +74,18 @@ void shrewd_basic_json_text_free(text);
 - `\uXXXX` 解码(代理对合成 UTF-8);串内原始字节原样保留(不做 UTF-8 合法性校验);
 - 可选宽松:`options.allow_comments`(`//` 与 `/* */`)、
   `options.allow_trailing_commas`;
-- `options.max_depth` 限制嵌套(默认 32;按**值的嵌套层级**计数)。
+- `options.max_depth` 限制嵌套(默认 32;按**值的嵌套层级**计数);
+- `options.skip_bom` 剥掉一个文档首 UTF-8 BOM(报错 offset 相对剥除后的文本);
+- `options.jsonl` 接受**连续多文档**(JSON Lines/NDJSON)。`parse` 始终保持
+  单文档契约(尾随文档报错);多文档消费走 pull 循环:`jsonl` 模式下
+  `pull_capture` 以 `(OK, NULL)` 哨兵报流末——
+  `while ((OK == pull_capture(pull, &doc)) && (NULL != doc))` 即文档循环。
 
 **序列化**:紧凑默认,`options.pretty` + `options.indent`(默认 2)缩进输出;
 `options.escape_unicode` 把非 ASCII 全部转义为 `\uXXXX`(BMP 外出代理对);
-嵌套超限报 `JSON_DEPTH`。`options.validate_utf8` 让解析拒绝串内非法 UTF-8
-(默认原样透传)。
+`options.sort_keys` 按键名**字节序升序**输出对象成员(重复键稳定保序;DOM
+不变;非 JCS 规范形);嵌套超限报 `JSON_DEPTH`。`options.validate_utf8`
+让解析拒绝串内非法 UTF-8(默认原样透传)。
 
 **拉取解析器(pull tokenizer)**:文法的唯一实现在 `shrewd_basic_json_pull_*`
 ——流式分词器(完整缓冲源与 reader 回调源),应用可直接驱动令牌流
@@ -123,6 +129,10 @@ int shrewd_basic_json_free(object, type);                              /* decode
 | `ENUM` | 常量名字符串(未知值 → number);decode 名称/数字都收 |
 | `STRING` | string(NULL → `null`) |
 | `STRINGBUF` | string(内容到 NUL 为止;decode 至多 count 字符,恰满可不带 NUL) |
+| `STRING16` / `STRING32`(宽字符串) | 字符串(UTF-8):encode 严格转出(代理对合成),decode 严格转入(代理对校验);非法码元序列报 `REFLECT_ENCODING`,绝不替换字符;free 路径已识别 |
+| `LONG_DOUBLE` | 数字:JSON 数字模型为 double,**超出 double 精度干净拒绝**(绝不静默取整);NaN/inf 走 `allow_nan` 策略 |
+| `COMPLEX` | `[re, im]` 数组(每个分量按 long double 规则) |
+| `BIT_INT` | **不支持**:encode/decode 报 `JSON_UNSUPPORTED`(JSON 无位精确整数语义,指路 ops);schema 仍描述为 "integer" |
 | `CHAR` | 单字符 string(decode 也接受数字) |
 | `FIELD_BITS` | number(提取值;decode 读改写单元) |
 | 数组族(定长/动态/哨兵/FAM/多维行) | array,多维逐层嵌套 |
@@ -203,7 +213,7 @@ encode/decode 的 `info` 参数携带策略(NULL = 纯元数据,行为不变)。
 |---|---|
 | `KEY(field, 规键, 别名...)` | encode 永远输出**规键**(第 1 个);decode 接受任意别名,**成员名本身始终可接受** |
 | `REQUIRED` | decode 时键必须出现(别名任一命中即可),缺失 → `KEY_NOTFOUND` 带路径;`use_defaults` 下**默认值物化也可满足** |
-| `DEFAULT(field, v)` / `DEFAULT_STR(field, "s")` | 缺失键的默认值(`use_defaults` 下由 decode 物化:数值含整数/枚举/bool/char/浮点,字符串为拷贝分配;一期不含 struct/数组/ops 字段) |
+| `DEFAULT(field, v)` / `DEFAULT_STR(field, "s")` / `DEFAULT_JSON(field, text)` | 缺失键的默认值(`use_defaults` 下由 decode 物化):数值含整数/枚举/bool/char/浮点,字符串为拷贝分配;`DEFAULT_JSON` 收一段 JSON 文本,**任意形状**(struct/数组/嵌套/ops 字段),内部走正常解码通路,产物与解码值同源同销(FAM 字段除外——根分配按现存 JSON 定尺寸) |
 | `BORROWED(field)` | 指针字段归应用:decode 不写、`json_free` 不碰(decode 后赋值,任意来源、任意生命周期) |
 | `HIDDEN` | 双向跳过 |
 | `OMIT_EMPTY` | encode 省略零值(false/0/""/NULL/空容器,按 **C 值**判断,不受 ops 变换影响) |
@@ -218,6 +228,13 @@ encode/decode 的 `info` 参数携带策略(NULL = 纯元数据,行为不变)。
 - `shrewd_basic_json_keys(type, info, cb, ctx)` 按字段序导出合并视图(键清单/别名/
   标志/范围)——JSON Schema、文档、前端类型的生成都从这里走;
 - 策略表是 const 数据(DEFINE/DECLARE 纪律,同 reflect 描述符)。
+
+**注解生成**(手册:[annotations.md](annotations.md) §6):上表的行可不手写——`json:` 命名空间注解经
+`tools/reflect_gen.py` 构建期生成 `<output>_json.{c,h}`(一指令一行,
+产出与手写完全一致的宏),见 [reflect.md §10](reflect.md) 的注解语法:
+
+    /* json: type=cfg_t;
+       json: member=cfg_t.name, keys={"full_name", "nameID"}, required; */
 
 ## 7. 所有权(值模型层)
 
@@ -251,7 +268,8 @@ encode/decode 的 `info` 参数携带策略(NULL = 纯元数据,行为不变)。
 | `json_schema(type, info, &text)` | 导出 draft-07 子集 Schema:属性/`required`/`minimum`/`maximum`/`enum`/`x-aliases`,嵌套结构体走 `$defs`+`$ref`(自引用安全),union 出 `oneOf` 并按
   `UNION_STYLE` 标注 `x-union-style`(UNWRAP 变体直出裸值) |
 | `json_value_size(value, type, &size)` | FAM 尺寸助手:返回 decode 目标所需字节(头 + JSON 尾长) |
-| `reflect_gen.py` 骨架 | 为每个 struct 产出注释形式的 `SHREWD_BASIC_JSON_DEFINE` 策略模板(解开注释即用) |
+| `reflect_gen.py` 策略桩 | `json:` 命名空间注解 → `<output>_json.{c,h}`(`SHREWD_BASIC_JSON_DEFINE` 真表,非模板),见 §6"注解生成" |
+| `reflect_gen.py --schema-dump` | 生成 `<output>_schema_dump.c`(可直接编译的 schema 导出程序:`dump TYPE [FILE]`,走运行时 `json_schema()`,单一事实源);构建期运行即固化 `schema.json` |
 
 ## 10. 并发说明
 

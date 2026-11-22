@@ -1,7 +1,6 @@
 #include "shrewd-basic/platform/error.h"
 
-const char *shrewd_basic_error_name(int status)
-{
+const char *shrewd_basic_error_name(int status) {
     switch (status) {
     case SHREWD_BASIC_ERR_OK:
         return "SHREWD_BASIC_ERR_OK";
@@ -19,6 +18,10 @@ const char *shrewd_basic_error_name(int status)
         return "SHREWD_BASIC_ERR_REFLECT_MISMATCH";
     case SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED:
         return "SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED";
+    case SHREWD_BASIC_ERR_REFLECT_ENCODING:
+        return "SHREWD_BASIC_ERR_REFLECT_ENCODING";
+    case SHREWD_BASIC_ERR_REFLECT_TEXT:
+        return "SHREWD_BASIC_ERR_REFLECT_TEXT";
     case SHREWD_BASIC_ERR_JSON_SYNTAX:
         return "SHREWD_BASIC_ERR_JSON_SYNTAX";
     case SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH:
@@ -27,6 +30,10 @@ const char *shrewd_basic_error_name(int status)
         return "SHREWD_BASIC_ERR_JSON_DEPTH";
     case SHREWD_BASIC_ERR_JSON_UNSUPPORTED:
         return "SHREWD_BASIC_ERR_JSON_UNSUPPORTED";
+    case SHREWD_BASIC_ERR_BIN_FORMAT:
+        return "SHREWD_BASIC_ERR_BIN_FORMAT";
+    case SHREWD_BASIC_ERR_BIN_UNSUPPORTED:
+        return "SHREWD_BASIC_ERR_BIN_UNSUPPORTED";
     default:
         return "SHREWD_BASIC_ERR_UNKNOWN";
     }
