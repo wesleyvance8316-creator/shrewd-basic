@@ -69,7 +69,11 @@ skip_bom、jsonl、sort_keys)、宽串 UTF-8 互转。——功能面完整。
 钩子九宫格/访问族/通知管道)、shm 数据面(ABI 指纹、robust 锁、
 跨进程唤醒、环容量可配)、批量/事务(set_many/txn,全有或全无)、
 coalesce(folded 计数)、make_guard、make_policy_ops(RANGE+HIDDEN)、
-json 持久化(save/load)、生成器挂载表桩、全接口 demo 与基准。
+json 持久化(save/load)、生成器挂载表桩、全接口 demo 与基准、
+**写入者标识回声抑制**(note.source + set_from/publish_from:订阅端
+比对自身 tag 跳过自写,一设多管场景"通知其他方"零成本)、
+**版本游标**(get_version:快照/增量对账,配合 note.version 区分
+变更环滞后)。
 
 **已知限制(v1,契约)**:OWNED set 为原始拷贝(平坦值类型);shm
 崩溃丢最后一次未完提交;变更环滞后跳中间变更(终值必达);set_many

@@ -36,6 +36,7 @@ shrewd_basic_dbus_dump
 shrewd_basic_dbus_export
 shrewd_basic_dbus_get
 shrewd_basic_dbus_get_many
+shrewd_basic_dbus_get_version
 shrewd_basic_dbus_import
 shrewd_basic_dbus_load
 shrewd_basic_dbus_make_guard
@@ -43,6 +44,7 @@ shrewd_basic_dbus_make_policy_ops
 shrewd_basic_dbus_mount
 shrewd_basic_dbus_peek
 shrewd_basic_dbus_publish
+shrewd_basic_dbus_publish_from
 shrewd_basic_dbus_req_deny
 shrewd_basic_dbus_req_field
 shrewd_basic_dbus_req_path
@@ -51,6 +53,7 @@ shrewd_basic_dbus_req_type
 shrewd_basic_dbus_req_version
 shrewd_basic_dbus_save
 shrewd_basic_dbus_set
+shrewd_basic_dbus_set_from
 shrewd_basic_dbus_set_many
 shrewd_basic_dbus_subscribe
 shrewd_basic_dbus_subscribe_batch
