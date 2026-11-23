@@ -564,7 +564,29 @@ decode **永远额外接受成员名**(库不变量,`key=`/`keys=` 添加接受�
   应用代码直接使用生成描述符;
 - 基准:`tools/reflect_bench.sh` 输出关键路径的 ns/op 基线(find/resolve/path_get/field_get/equal/copy+destroy/dump),供优化工作对照。
 
-## 11. 路线图
+## 11. 反应核心(ref/effect/computed/watch)
+
+"一个值变了,所有消费者自动跟上"的依赖图半边(GUI 无关;
+LVGL 绑定、协议适配、派生状态都是消费者)。机制:effect 运行期间
+`ref_get` 登记读过的 ref(track-during-run),`ref_set` 同步重跑订阅
+者;computed = ref + effect 派生值,watch = 变才触发(首跑只快照)。
+对象调用方内嵌、仅依赖边分配;重入有 RUNNING/DIRTY 卫,分支依赖
+每次重跑重收集。示例:
+
+    shrewd_basic_reflect_ref_t count;
+    int32_t storage = 0;
+    shrewd_basic_reflect_ref_init(&count, &storage, sizeof(storage));
+    shrewd_basic_reflect_effect_init(&fx, render, ctx);   (立即跑一次)
+    shrewd_basic_reflect_ref_set(&count, &next, sizeof(next));
+           (render() 自动重跑)
+
+与 sb_dbus 的语义边界:**事件**("谁变了",pub/sub、动态启停、
+多进程)走 bus;**状态依赖**("谁读过谁自动跟",computed 派生、
+零接线联动)走反应核心。线程模型:effect 在 `ref_set` 内同步执行,
+UI 工具先把 `ref_set` 编组到自身线程。API 细节见
+[reflect API 总览](reflect-api.md) §9。
+
+## 12. 路线图
 
 - 一、二期(已交付):核心地基、指针、路径、ops 回调集;
 - 三期(已交付):枚举、环形/共享图支持、泛型比较(`reflect_equal`)、代码生成器。

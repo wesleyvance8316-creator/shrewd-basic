@@ -131,10 +131,25 @@ int shrewd_basic_dbus_subscribe(bus, pattern, recv, ctx, &handle);
 int shrewd_basic_dbus_unsubscribe(bus, handle);
 int shrewd_basic_dbus_coalesce(bus, int on);   /* 未投递同 path 折叠为最新 */
 int shrewd_basic_dbus_drain(bus);
+
+int shrewd_basic_dbus_set_from(bus, path, in, size, stamp, source);
+int shrewd_basic_dbus_publish_from(bus, path, in, size, source);
+int shrewd_basic_dbus_get_version(bus, path, &out_version);
 ```
 
-`note = {path, value(快照,回调期间有效), size, version, kind(CHANGE|EVENT)}`。
-订阅模式含字段选择器 = 字段级订阅;不含 = 资源及其字段写。
+`note = {path, value(快照,回调期间有效), size, version, source,
+kind(CHANGE|EVENT)}`。订阅模式含字段选择器 = 字段级订阅;不含 =
+资源及其字段写。
+
+- **回声抑制(写入者标识)**:`set_from`/`publish_from` 携带
+  `source`(任意不透明指针,原样落进 `note.source`;普通
+  `set`/`publish` 等价 source=NULL)。订阅端比对 `note.source`
+  与自身 tag 即跳过自写回声——"一方设置,通知**其他**方"由此
+  零判断成本;
+- **版本游标**:`get_version` 读资源当前版本号(每次写单调递增,
+  同 `stamp.version`/`note.version` 的同一计数)。订阅者初始记下
+  版本,此后按 `note.version` 对账即可区分"恰好跟上"与"变更环
+  滞后跳过了中间变更"(终值必达、中间值可能缺,见 §10)。
 
 ## 6. 批量/事务/守卫/策略(三期)
 

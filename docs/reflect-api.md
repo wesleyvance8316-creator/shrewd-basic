@@ -722,7 +722,72 @@ shrewd_basic_reflect_dump()。
 - **返回**:`SHREWD_BASIC_ERR_OK`(走完或被 STOP);
   `SHREWD_BASIC_ERR_ARG_INVALID`。
 
-## 9. 全局特性
+## 9. 反应核心(ref/effect/computed/watch)
+
+依赖图半边:"一个值变了,所有消费者自动跟上"。GUI 无关——LVGL
+绑定、协议适配、派生模块状态都是消费者。机制:effect 运行期间经
+`ref_get` 登记它**读过**的 ref(track-during-run,模块级游标);
+`ref_set` 同步重跑全部订阅 effect。ref/effect/computed/watch 对象
+**调用方内嵌**(零分配),仅对象间的依赖边由平台分配(dispose 释放)。
+线程模型:effect 在 `ref_set` 调用内**同步**执行,更新归调用线程
+(UI 工具先把 `ref_set` 编组到自己线程,见 [reflect reference](reflect.md))。
+
+### shrewd_basic_reflect_ref_init(ref, slot, size) / ref_set(ref, value, size) / ref_get(ref)
+
+```c
+int shrewd_basic_reflect_ref_init(shrewd_basic_reflect_ref_t *ref, void *slot, size_t size);
+int shrewd_basic_reflect_ref_set(shrewd_basic_reflect_ref_t *ref, const void *value, size_t size);
+const void *shrewd_basic_reflect_ref_get(shrewd_basic_reflect_ref_t *ref);
+```
+
+值单元:调用方提供 `size` 字节存储(`slot`)。`ref_set` 写入并
+**同步**重跑订阅者(尺寸不符 = `REFLECT_MISMATCH`);`ref_get`
+读当前值,若在 effect 运行中则自动登记依赖边(不在运行中 = 纯读)。
+
+### shrewd_basic_reflect_effect_init(effect, fn, ctx) / effect_run / effect_dispose
+
+```c
+int shrewd_basic_reflect_effect_init(shrewd_basic_reflect_effect_t *effect,
+                                     shrewd_basic_reflect_effect_fn fn, void *ctx);
+int shrewd_basic_reflect_effect_run(shrewd_basic_reflect_effect_t *effect);
+void shrewd_basic_reflect_effect_dispose(shrewd_basic_reflect_effect_t *effect);
+```
+
+`fn(void *ctx)`:体内 `ref_get` 的每个 ref 即依赖。init **立即跑
+一次**(收集依赖);此后 `ref_set` 触发的每次重跑都先清空旧依赖再
+重收集——**分支跟随**(条件读的 ref 只在该分支活跃时订阅)。
+重入卫:effect 运行中被再次触发只标 DIRTY,本轮跑完再跑(收敛,
+不死循环)。`effect_dispose` 从全部 ref 退订。
+
+### shrewd_basic_reflect_computed_init(computed, fn, ctx, slot, size) / computed_dispose
+
+```c
+int shrewd_basic_reflect_computed_init(shrewd_basic_reflect_computed_t *computed,
+                                       shrewd_basic_reflect_computed_fn fn, void *ctx,
+                                       void *slot, size_t size);
+void shrewd_basic_reflect_computed_dispose(shrewd_basic_reflect_computed_t *computed);
+```
+
+派生值 = ref + effect 的内嵌包装:`fn(ctx, out, size)` 把结果写进
+`computed.ref` 的存储(`out` 即 slot),fn 内 `ref_get` 全被追踪;
+依赖一变先重算,值写入后**唤醒 computed.ref 的订阅者**。读结果 =
+`ref_get(&computed.ref)`;computed 链(c2=f(c1))自然成立。
+
+### shrewd_basic_reflect_watch_init(watch, ref, fn, ctx, memo, size) / watch_dispose
+
+```c
+int shrewd_basic_reflect_watch_init(shrewd_basic_reflect_watch_t *watch,
+                                    shrewd_basic_reflect_ref_t *ref,
+                                    shrewd_basic_reflect_watch_fn fn, void *ctx,
+                                    void *memo, size_t size);
+void shrewd_basic_reflect_watch_dispose(shrewd_basic_reflect_watch_t *watch);
+```
+
+**变更才触发**:init 时只快照(不回调),此后每次 ref 变化回调
+`fn(ctx, old, new, size)`;`memo` 是调用方 `size` 字节存储,模块
+用它保存上一值。尺寸须与 ref 一致(`REFLECT_MISMATCH`)。
+
+## 10. 全局特性
 
 - 所有接口收 `const` 描述符指针;描述符全 const、永不析构,索引/缓存永不过期;
 - 除 shrewd_basic_reflect_copy() 与字符串克隆外零堆分配;数据访问

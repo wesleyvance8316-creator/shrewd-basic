@@ -30,6 +30,14 @@ target_link_libraries(shrewd-basic-reflect-tests
             shrewd-basic
             shrewd-basic-warnings)
 
+# Reactive primitives tests (ref/effect/computed/watch dependency graph).
+add_executable(shrewd-basic-react-tests test_react.c)
+
+target_link_libraries(shrewd-basic-react-tests
+        PRIVATE
+            shrewd-basic
+            shrewd-basic-warnings)
+
 # --- Data-format tests: built only for the enabled formats. ---
 
 if(SHREWD_BASIC_FORMAT_JSON)
@@ -225,6 +233,7 @@ add_test(NAME shrewd-basic.unit COMMAND shrewd-basic-tests)
 add_test(NAME shrewd-basic.ds COMMAND shrewd-basic-ds-tests)
 add_test(NAME shrewd-basic.log COMMAND shrewd-basic-log-tests)
 add_test(NAME shrewd-basic.reflect COMMAND shrewd-basic-reflect-tests)
+add_test(NAME shrewd-basic.react COMMAND shrewd-basic-react-tests)
 
 if(SHREWD_BASIC_FORMAT_JSON)
 add_test(NAME shrewd-basic.json COMMAND shrewd-basic-json-tests)

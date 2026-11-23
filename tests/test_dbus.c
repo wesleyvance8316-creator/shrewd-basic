@@ -63,6 +63,17 @@ static int recv_batch_cb(void *ctx, const shrewd_basic_dbus_note_t *notes, size_
     return SHREWD_BASIC_ERR_OK;
 }
 
+static int g_echo_seen = 0;
+
+static int recv_echo_filter(void *ctx, const shrewd_basic_dbus_note_t *note) {
+    /* "notify the OTHERS": skip notes that came from my own tag. */
+    if (note->source == ctx) {
+        return SHREWD_BASIC_ERR_OK;
+    }
+    ++g_echo_seen;
+    return SHREWD_BASIC_ERR_OK;
+}
+
 static int g_pre_set_calls = 0;
 static int pre_set_ok(void *ctx, shrewd_basic_dbus_req_t *req) {
     (void)ctx;
@@ -526,6 +537,40 @@ int main(void) {
         }
         expect("txn grow sets", ok);
         expect("txn commit", SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_txn_commit(txn));
+    }
+
+    /* Writer identity: echo suppression ("notify the others"). */
+    {
+        shrewd_basic_dbus_handle_t *h_echo = NULL;
+        static int my_tag;
+        uint64_t ver0 = 0;
+        uint64_t ver1 = 0;
+        expect("subscribe echo",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_subscribe(
+                       bus, "/config/**", recv_echo_filter, &my_tag, &h_echo));
+        g_echo_seen = 0;
+        expect("set_from self",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_set_from(
+                       bus, "/config/log.level", &nine, sizeof(nine), NULL, &my_tag));
+        expect("echo suppressed", 0 == g_echo_seen);
+        expect("set_from other",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_set_from(
+                       bus, "/config/log.level", &one, sizeof(one), NULL, NULL));
+        expect("other seen", 1 == g_echo_seen);
+        /* Snapshot/incremental cursor: version advances per commit. */
+        expect("version read",
+               SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_get_version(bus, "/config/log", &ver0));
+        expect("set again",
+               SHREWD_BASIC_ERR_OK
+                   == shrewd_basic_dbus_set(bus, "/config/log.level", &three, sizeof(three), NULL));
+        expect("version bump",
+               SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_get_version(bus, "/config/log", &ver1));
+        expect("version moved", ver1 > ver0);
+        expect("unsubscribe echo",
+               SHREWD_BASIC_ERR_OK == shrewd_basic_dbus_unsubscribe(bus, h_echo));
     }
 
     /* Argument and routing refusals. */

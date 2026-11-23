@@ -84,8 +84,9 @@ typedef struct shrewd_basic_dbus_note {
     const void *value; /**< New value snapshot; valid during recv only. */
     size_t size;
     uint64_t version;
-    size_t folded; /**< Same-path changes folded into this note (coalesce). */
-    int kind;      /**< SHREWD_BASIC_DBUS_NOTE_*. */
+    size_t folded;      /**< Same-path changes folded into this note (coalesce). */
+    const void *source; /**< Writer identity (set_from/publish_from), else NULL. */
+    int kind;           /**< SHREWD_BASIC_DBUS_NOTE_*. */
 } shrewd_basic_dbus_note_t;
 
 /** Subscriber receive callback (the recv end of notify). */
@@ -187,6 +188,29 @@ int shrewd_basic_dbus_set(shrewd_basic_dbus_t *bus,
 int shrewd_basic_dbus_touch(shrewd_basic_dbus_t *bus,
                             const char *path,
                             shrewd_basic_dbus_stamp_t *stamp);
+
+/**
+ * set/publish carrying a writer identity: @p source lands in every
+ * resulting note so subscribers can suppress echoes ("notify the
+ * OTHERS") - compare note->source against their own tag. Any opaque
+ * pointer-sized token works (the bus never dereferences it).
+ */
+int shrewd_basic_dbus_set_from(shrewd_basic_dbus_t *bus,
+                               const char *path,
+                               const void *in,
+                               size_t size,
+                               shrewd_basic_dbus_stamp_t *stamp,
+                               const void *source);
+int shrewd_basic_dbus_publish_from(shrewd_basic_dbus_t *bus,
+                                   const char *path,
+                                   const void *payload,
+                                   size_t size,
+                                   const void *source);
+
+/** Read a resource's current version (snapshot/incremental cursor). */
+int shrewd_basic_dbus_get_version(shrewd_basic_dbus_t *bus,
+                                  const char *path,
+                                  uint64_t *out_version);
 int shrewd_basic_dbus_publish(shrewd_basic_dbus_t *bus,
                               const char *path,
                               const void *payload,

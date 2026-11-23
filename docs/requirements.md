@@ -13,7 +13,14 @@
 **已交付**:描述符/查找/读写/打印、路径访问、指针与 ops 回调集、
 枚举、环图安全(equal/hash/copy/destroy/visit/diff)、位域
 (FIELD_BITS_UNIT + dwarf)、宽字符串与宽标量(LONG_DOUBLE/COMPLEX/
-BIT_INT)、ABI 自检与指纹、四平台验证矩阵。——至此收尾,无功能债。
+BIT_INT)、ABI 自检与指纹、四平台验证矩阵、**反应核心**
+(ref/effect/computed/watch 依赖图,react.h)。——至此收尾,无功能债。
+
+**归属决策(2026-11-23)**:反应核心写入 **reflect 模块**(而非
+lvgl-vue)——消费项目(shrewd-lvgl-vue)开发更纯粹,无中间边界;
+接口 `shrewd_basic_reflect_*` 家法前缀。事件语义("谁变了",
+pub/sub/多进程)归 sb_dbus,状态依赖("谁读过谁自动跟")归反应
+核心,两不相扰。
 
 | 边界 | 决策 |
 |---|---|
@@ -69,7 +76,11 @@ skip_bom、jsonl、sort_keys)、宽串 UTF-8 互转。——功能面完整。
 钩子九宫格/访问族/通知管道)、shm 数据面(ABI 指纹、robust 锁、
 跨进程唤醒、环容量可配)、批量/事务(set_many/txn,全有或全无)、
 coalesce(folded 计数)、make_guard、make_policy_ops(RANGE+HIDDEN)、
-json 持久化(save/load)、生成器挂载表桩、全接口 demo 与基准。
+json 持久化(save/load)、生成器挂载表桩、全接口 demo 与基准、
+**写入者标识回声抑制**(note.source + set_from/publish_from:订阅端
+比对自身 tag 跳过自写,一设多管场景"通知其他方"零成本)、
+**版本游标**(get_version:快照/增量对账,配合 note.version 区分
+变更环滞后)。
 
 **已知限制(v1,契约)**:OWNED set 为原始拷贝(平坦值类型);shm
 崩溃丢最后一次未完提交;变更环滞后跳中间变更(终值必达);set_many

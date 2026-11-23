@@ -36,6 +36,7 @@ shrewd_basic_dbus_dump
 shrewd_basic_dbus_export
 shrewd_basic_dbus_get
 shrewd_basic_dbus_get_many
+shrewd_basic_dbus_get_version
 shrewd_basic_dbus_import
 shrewd_basic_dbus_load
 shrewd_basic_dbus_make_guard
@@ -43,6 +44,7 @@ shrewd_basic_dbus_make_policy_ops
 shrewd_basic_dbus_mount
 shrewd_basic_dbus_peek
 shrewd_basic_dbus_publish
+shrewd_basic_dbus_publish_from
 shrewd_basic_dbus_req_deny
 shrewd_basic_dbus_req_field
 shrewd_basic_dbus_req_path
@@ -51,6 +53,7 @@ shrewd_basic_dbus_req_type
 shrewd_basic_dbus_req_version
 shrewd_basic_dbus_save
 shrewd_basic_dbus_set
+shrewd_basic_dbus_set_from
 shrewd_basic_dbus_set_many
 shrewd_basic_dbus_subscribe
 shrewd_basic_dbus_subscribe_batch
@@ -183,6 +186,8 @@ shrewd_basic_rbtree_search
 shrewd_basic_rbtree_size
 shrewd_basic_reflect_check
 shrewd_basic_reflect_check_type
+shrewd_basic_reflect_computed_dispose
+shrewd_basic_reflect_computed_init
 shrewd_basic_reflect_copy
 shrewd_basic_reflect_copy_with
 shrewd_basic_reflect_describe
@@ -192,6 +197,9 @@ shrewd_basic_reflect_diff
 shrewd_basic_reflect_diff_all
 shrewd_basic_reflect_dump
 shrewd_basic_reflect_dump_write
+shrewd_basic_reflect_effect_dispose
+shrewd_basic_reflect_effect_init
+shrewd_basic_reflect_effect_run
 shrewd_basic_reflect_enum_at
 shrewd_basic_reflect_enum_count
 shrewd_basic_reflect_enum_find_name
@@ -210,6 +218,9 @@ shrewd_basic_reflect_path_get
 shrewd_basic_reflect_path_get_list
 shrewd_basic_reflect_path_set
 shrewd_basic_reflect_path_set_list
+shrewd_basic_reflect_ref_get
+shrewd_basic_reflect_ref_init
+shrewd_basic_reflect_ref_set
 shrewd_basic_reflect_registry_bind
 shrewd_basic_reflect_registry_ops
 shrewd_basic_reflect_render_text
@@ -224,6 +235,8 @@ shrewd_basic_reflect_type_resolve_list
 shrewd_basic_reflect_value_get
 shrewd_basic_reflect_value_set
 shrewd_basic_reflect_visit
+shrewd_basic_reflect_watch_dispose
+shrewd_basic_reflect_watch_init
 shrewd_basic_slist_create
 shrewd_basic_slist_destroy
 shrewd_basic_slist_empty
