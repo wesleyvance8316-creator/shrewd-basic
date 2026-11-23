@@ -195,6 +195,14 @@ DBUS_FLAGS_MAP = {"event": "SHREWD_BASIC_DBUS_MOUNT_EVENT",
 JSON_TYPE_FLAGS = set()
 JSON_TYPE_VALUES = {"name"}
 JSON_MEMBER_FLAGS = {"omit_empty", "required", "hidden", "borrowed"}
+XML_TYPE_FLAGS = set()
+XML_TYPE_VALUES = {"name"}
+XML_MEMBER_FLAGS = {"attr", "required", "hidden"}
+XML_MEMBER_VALUES = {"name"}
+# csv:/ini: are equivalence entrances onto the json policy tables -
+# their directive set is the json subset the csv/ini layers consume.
+CSVINI_MEMBER_FLAGS = {"required", "hidden"}
+CSVINI_MEMBER_VALUES = {"key", "keys"}
 JSON_MEMBER_VALUES = {"key", "keys", "default", "default_str", "default_json",
                       "range", "ops", "ops_elem", "format", "pattern",
                       "union_style"}
@@ -217,6 +225,35 @@ NAMESPACES = {
         "type_values": JSON_TYPE_VALUES,
         "member_flags": JSON_MEMBER_FLAGS,
         "member_values": JSON_MEMBER_VALUES,
+        "types_attr": "json_types",
+        "members_attr": "json_members",
+    },
+    "xml": {
+        "targets": ("type", "member"),
+        "type_flags": XML_TYPE_FLAGS,
+        "type_values": XML_TYPE_VALUES,
+        "member_flags": XML_MEMBER_FLAGS,
+        "member_values": XML_MEMBER_VALUES,
+        "types_attr": "xml_types",
+        "members_attr": "xml_members",
+    },
+    "csv": {
+        # Equivalence entrance onto the json policy tables (the csv
+        # layer consumes shrewd_basic_json_info_t KEY/REQUIRED/HIDDEN).
+        "targets": ("type", "member"),
+        "type_flags": set(),
+        "type_values": {"name"},
+        "member_flags": CSVINI_MEMBER_FLAGS,
+        "member_values": CSVINI_MEMBER_VALUES,
+        "types_attr": "json_types",
+        "members_attr": "json_members",
+    },
+    "ini": {
+        "targets": ("type", "member"),
+        "type_flags": set(),
+        "type_values": {"name"},
+        "member_flags": CSVINI_MEMBER_FLAGS,
+        "member_values": CSVINI_MEMBER_VALUES,
         "types_attr": "json_types",
         "members_attr": "json_members",
     },
@@ -245,6 +282,8 @@ class Annotations:
         self.members = {}
         self.json_types = {}
         self.json_members = {}
+        self.xml_types = {}
+        self.xml_members = {}
         self.dbus_mounts = []  # ordered mount entries (one per statement)
         self.dbus_name = None  # table name override (name=)
 
@@ -1352,7 +1391,7 @@ def union_variants(parser, name, members, ann, desc):
 
 def check_member_targets(parser, ann):
     """Every member= target must name a real member of a known type."""
-    for type_name, member in list(ann.members) + list(ann.json_members):
+    for type_name, member in list(ann.members) + list(ann.json_members) + list(ann.xml_members):
         body = parser.structs.get(type_name) or parser.unions.get(type_name)
         if body is None:
             raise ParseError("member=%s.%s names an unknown type" % (type_name, member))
@@ -1511,6 +1550,84 @@ def json_policy_stub(input_name, ann, plan, stub_base):
         lines_c.append("    " + ",\n    ".join(rows) + ");")
         lines_c.append("")
         lines_h.append("SHREWD_BASIC_JSON_DECLARE(%s);" % var)
+    return "\n".join(lines_c) + "\n", "\n".join(lines_h) + "\n"
+
+
+
+def check_xml_policy(parser, ann, selected, external):
+    """Validate xml policy anchors/members and their closure. Returns
+    [(type_name, var, [(member, row)])] in member-declaration order."""
+    plan = []
+    for type_name, tinfo in ann.xml_types.items():
+        if (type_name not in parser.structs) and (type_name not in parser.unions):
+            raise ParseError("xml: type=%s names an unknown type" % type_name)
+        if (type_name not in selected) and (type_name not in external) \
+                and (not ann.for_type(type_name).get("external")):
+            raise ParseError(
+                "xml: type=%s has no reflect descriptor\n"
+                "  - to generate it:  /* reflect: type=%s; */ or --type %s\n"
+                "  - to keep it external:  /* reflect: type=%s, external; */ or "
+                "--external %s" % (type_name, type_name, type_name, type_name, type_name))
+        var = tinfo.get("name") or (type_name + "_xml")
+        if not re.match(r"^[A-Za-z_]\w*$", var):
+            raise ParseError("xml: type=%s: name=%s is not an identifier" % (type_name, var))
+        body = parser.structs.get(type_name) or parser.unions.get(type_name)
+        rows = []
+        for member in body:
+            mname = member_parts(member)[2]
+            man = ann.xml_members.get((type_name, mname))
+            if man is None:
+                continue  # bare member= anchors an identity row
+            rows.append((mname, man))
+        if not rows:
+            raise ParseError(
+                "xml: type=%s would generate an empty policy table - add "
+                "member= directives or drop the type= annotation" % type_name)
+        plan.append((type_name, var, rows))
+    for (type_name, mname) in ann.xml_members:
+        if type_name not in ann.xml_types:
+            raise ParseError(
+                "xml: member=%s.%s has no policy table\n"
+                "  - to generate it:  /* xml: type=%s; */" % (type_name, mname, type_name))
+    return plan
+
+
+def xml_policy_stub(input_name, ann, plan, stub_base):
+    """(body_c, body_h) for the xml policy tables: the exact
+    shrewd_basic_xml_policy_t rows a human writes by hand."""
+    header = ["/* Generated by tools/reflect_gen.py from %s - do not edit." % input_name,
+              " */"]
+    lines_c = header + [
+        "",
+        '#include "%s_xml.h"' % stub_base,
+        "",
+        '#include "%s"' % input_name,
+        "",
+        "#include \"shrewd-basic/formats/xml.h\"",
+        "",
+    ]
+    lines_h = header + [
+        "",
+        "#include \"shrewd-basic/formats/xml.h\"",
+        "",
+    ]
+    for type_name, var, rows in plan:
+        lines_c.append("const shrewd_basic_xml_policy_t %s_policy[] = {" % var)
+        for mname, man in rows:
+            name = ('"%s"' % man["name"]) if "name" in man else "NULL"
+            attr = "1" if "attr" in man else "0"
+            flags = []
+            if "required" in man:
+                flags.append("SHREWD_BASIC_XML_REQUIRED")
+            if "hidden" in man:
+                flags.append("SHREWD_BASIC_XML_HIDDEN")
+            flag = (" | ".join(flags)) if flags else "0"
+            lines_c.append('    {"%s", %s, %s, %s},' % (mname, name, attr, flag))
+        lines_c.append("};")
+        lines_c.append("const size_t %s_policy_count = %d;" % (var, len(rows)))
+        lines_c.append("")
+        lines_h.append("extern const shrewd_basic_xml_policy_t %s_policy[];" % var)
+        lines_h.append("extern const size_t %s_policy_count;" % var)
     return "\n".join(lines_c) + "\n", "\n".join(lines_h) + "\n"
 
 
@@ -2002,6 +2119,15 @@ def main():
             json_c, json_h = json_policy_stub(
                 os.path.basename(args.input), ann, plan,
                 os.path.basename(args.output or (os.path.splitext(args.input)[0] + "_reflect")))
+        xml_plan = []
+        xml_c = xml_h = None
+        if ann.xml_types or ann.xml_members:
+            # Validate on EITHER side so orphan member= statements fail.
+            xml_plan = check_xml_policy(parser, ann, selected, external)
+        if ann.xml_types:
+            xml_c, xml_h = xml_policy_stub(
+                os.path.basename(args.input), ann, xml_plan,
+                os.path.basename(args.output or (os.path.splitext(args.input)[0] + "_reflect")))
         dbus_c = dbus_h = None
         if ann.dbus_mounts:
             check_dbus_mounts(parser, ann, selected, external)
@@ -2020,6 +2146,8 @@ def main():
     outputs = [stub + ".c", stub + ".h"]
     if plan:
         outputs += [stub + "_json.c", stub + "_json.h"]
+    if ann.xml_types:
+        outputs += [stub + "_xml.c", stub + "_xml.h"]
     if ann.dbus_mounts:
         outputs += [stub + "_dbus.c", stub + "_dbus.h"]
     if args.schema_dump:
@@ -2038,6 +2166,11 @@ def main():
             handle.write(json_c)
         with open(stub + "_json.h", "w", encoding="utf-8") as handle:
             handle.write(json_h)
+    if ann.xml_types:
+        with open(stub + "_xml.c", "w", encoding="utf-8") as handle:
+            handle.write(xml_c)
+        with open(stub + "_xml.h", "w", encoding="utf-8") as handle:
+            handle.write(xml_h)
     if ann.dbus_mounts:
         with open(stub + "_dbus.c", "w", encoding="utf-8") as handle:
             handle.write(dbus_c)

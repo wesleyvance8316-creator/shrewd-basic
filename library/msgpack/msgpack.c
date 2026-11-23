@@ -129,6 +129,31 @@ static int mp_w_str_head(mp_buf_t *b, size_t n) {
     return SHREWD_BASIC_ERR_BIN_UNSUPPORTED;
 }
 
+/* A plain (non-pointer) fixed array of uint8 with 1-byte stride. */
+static int mp_is_u8_array(const shrewd_basic_reflect_field_t *field) {
+    return ((0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_ARRAY))
+            && (0u == (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_PTR))
+            && (1 == field->sb_refl_stride)
+            && (SHREWD_BASIC_REFLECT_KIND_UINT8 == field->sb_refl_type->sb_refl_kind))
+               ? 1
+               : 0;
+}
+
+/* bin8/bin16/bin32 (0xC4..0xC6): uint8 arrays travel as bin payloads. */
+static int mp_w_bin_head(mp_buf_t *b, size_t n) {
+    int status = SHREWD_BASIC_ERR_OK;
+    if (n <= UINT8_MAX) {
+        status = mp_w_u8(b, 0xc4u);
+        return (SHREWD_BASIC_ERR_OK == status) ? mp_w_u8(b, (uint8_t)n) : status;
+    }
+    if (n <= UINT16_MAX) {
+        status = mp_w_u8(b, 0xc5u);
+        return (SHREWD_BASIC_ERR_OK == status) ? mp_w_be(b, (uint64_t)n, 2) : status;
+    }
+    status = mp_w_u8(b, 0xc6u);
+    return (SHREWD_BASIC_ERR_OK == status) ? mp_w_be(b, (uint64_t)n, 4) : status;
+}
+
 static int mp_w_str(mp_buf_t *b, const char *text, size_t n) {
     int status = mp_w_str_head(b, n);
     return (SHREWD_BASIC_ERR_OK == status) ? mp_w_bytes(b, text, n) : status;
@@ -435,6 +460,15 @@ static int mp_encode_fields(mp_buf_t *b,
             continue;
         }
         if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_ARRAY)) {
+            /* uint8 arrays travel as bin payloads (compact); decode
+               accepts both bin and the legacy array-of-int form. */
+            if (mp_is_u8_array(field)) {
+                status = mp_w_bin_head(b, field->sb_refl_count);
+                if (SHREWD_BASIC_ERR_OK == status) {
+                    status = mp_w_bytes(b, at, field->sb_refl_count);
+                }
+                continue;
+            }
             status = mp_w_head(b, 0x90u, 0xdcu, 0xddu, field->sb_refl_count);
             for (size_t j = 0; (SHREWD_BASIC_ERR_OK == status) && (j < field->sb_refl_count); ++j) {
                 const unsigned char *elem = at + (j * field->sb_refl_stride);
@@ -737,6 +771,18 @@ static int mp_decode_field(mp_rd_t *r,
         uint64_t aux = 0;
         int status = mp_probe(r, &kind, &aux);
         if (SHREWD_BASIC_ERR_OK != status) {
+            return status;
+        }
+        if ((MP_W_BIN == kind) && (0 != mp_is_u8_array(field))) {
+            /* bin payload into a uint8 array (the compact wire form). */
+            const unsigned char *payload = NULL;
+            if (aux > (uint64_t)field->sb_refl_count) {
+                return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
+            }
+            status = mp_r_bytes(r, (size_t)aux, &payload);
+            if ((SHREWD_BASIC_ERR_OK == status) && (0 < aux)) {
+                memcpy(at, payload, (size_t)aux);
+            }
             return status;
         }
         if (MP_W_ARRAY != kind) {

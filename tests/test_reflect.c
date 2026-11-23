@@ -3607,6 +3607,121 @@ static unsigned char *text_slot(text_leaf_t *obj, const char *name) {
     return (NULL != field) ? ((unsigned char *)obj + field->sb_refl_offset) : NULL;
 }
 
+/* Wide strings in the text layer: owned pointers and buffers convert
+   through the strict UTF converters; borrowed wide stays refused. */
+typedef struct {
+    const char16_t *owned;
+    const char16_t *borrowed;
+    char16_t buf[8];
+} text_wide_t;
+
+SHREWD_BASIC_REFLECT_TYPE_DEFINE(g_text_wide_reflect,
+                                 text_wide_t,
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING16_OWNED(text_wide_t, owned),
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING16(text_wide_t, borrowed),
+                                 SHREWD_BASIC_REFLECT_FIELD_STRING16_BUFFER(text_wide_t, buf));
+
+static void test_text_wide(void) {
+    /* caf + U+00E9 + U+1F600: 9 UTF-8 bytes, exercises surrogate pairs. */
+    static const char16_t content[] = {'c', 'a', 'f', 0x00e9, 0xd83d, 0xde00, 0};
+    static const char utf8[] = {'c', 'a', 'f', '\xc3', '\xa9', '\xf0', '\x9f', '\x98', '\x80'};
+    text_wide_t obj;
+    text_wide_t back;
+    const shrewd_basic_reflect_field_t *field = NULL;
+    char buf[32];
+    size_t len = 0;
+    int status = 0;
+    memset(&obj, 0, sizeof(obj));
+    memset(&back, 0, sizeof(back));
+    obj.owned = content;
+    obj.buf[0] = 'o';
+    obj.buf[1] = 0x3042; /* U+3042 */
+    obj.buf[2] = 0;
+
+    field = find_or_fail("wtext", &g_text_wide_reflect, "owned");
+    if (NULL == field) {
+        return;
+    }
+    expect_eq_int("wtext render owned",
+                  shrewd_basic_reflect_render_text(field, &obj.owned, buf, sizeof(buf), &len),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wtext render owned utf8",
+                (len == sizeof(utf8)) && (0 == memcmp(buf, utf8, sizeof(utf8))));
+    len = 0;
+    expect_eq_int("wtext render measure",
+                  shrewd_basic_reflect_render_text(field, &obj.owned, NULL, 0, &len),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wtext render measure len", len == sizeof(utf8));
+
+    /* Round trip: scan the UTF-8 back into an owned wide string. */
+    status = shrewd_basic_reflect_scan_text(field, &back.owned, utf8, sizeof(utf8));
+    expect_eq_int("wtext scan owned", status, SHREWD_BASIC_ERR_OK);
+    expect_true("wtext scan owned copy",
+                (NULL != back.owned) && (back.owned != obj.owned)
+                    && (0 == memcmp(back.owned, content, sizeof(content))));
+    {
+        char again[32];
+        size_t n2 = 0;
+        expect_eq_int(
+            "wtext rerender",
+            shrewd_basic_reflect_render_text(field, &back.owned, again, sizeof(again), &n2),
+            SHREWD_BASIC_ERR_OK);
+        expect_true("wtext round trip text",
+                    (n2 == sizeof(utf8)) && (0 == memcmp(again, utf8, n2)));
+    }
+    {
+        void *old = NULL;
+        memcpy(&old, &back.owned, sizeof(old));
+        (void)shrewd_basic_platform_free(&old);
+        back.owned = NULL;
+    }
+    expect_eq_int("wtext scan NULL writes NULL",
+                  shrewd_basic_reflect_scan_text(field, &back.owned, NULL, 0),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wtext scan NULL pointer", NULL == back.owned);
+
+    /* Wide buffer: content to the NUL unit, capacity enforced. */
+    field = find_or_fail("wtext", &g_text_wide_reflect, "buf");
+    expect_eq_int("wtext render buf",
+                  shrewd_basic_reflect_render_text(field, obj.buf, buf, sizeof(buf), &len),
+                  SHREWD_BASIC_ERR_OK);
+    /* o + U+3042 (e3 81 82): 4 bytes */
+    expect_true("wtext render buf utf8", (4 == len) && (0 == memcmp(buf, "o\xe3\x81\x82", 4)));
+    memset(back.buf, 0, sizeof(back.buf));
+    expect_eq_int("wtext scan buf",
+                  shrewd_basic_reflect_scan_text(field, back.buf, utf8, sizeof(utf8)),
+                  SHREWD_BASIC_ERR_OK);
+    expect_true("wtext scan buf units",
+                (back.buf[0] == 'c') && (back.buf[3] == 0x00e9) && (back.buf[4] == 0xd83d)
+                    && (back.buf[5] == 0xde00) && (0 == back.buf[6]));
+    expect_true("wtext scan buf overflow",
+                SHREWD_BASIC_ERR_REFLECT_MISMATCH
+                    == shrewd_basic_reflect_scan_text(field, back.buf, "0123456789", 10));
+
+    /* Bad content: lone surrogate render / invalid UTF-8 scan. */
+    {
+        static const char16_t bad[] = {0xd800, 0};
+        const char16_t *badp = bad;
+        field = find_or_fail("wtext", &g_text_wide_reflect, "owned");
+        expect_true("wtext render lone surrogate",
+                    SHREWD_BASIC_ERR_REFLECT_ENCODING
+                        == shrewd_basic_reflect_render_text(field, &badp, buf, sizeof(buf), &len));
+        expect_true("wtext scan bad utf8",
+                    SHREWD_BASIC_ERR_REFLECT_ENCODING
+                        == shrewd_basic_reflect_scan_text(field, &back.owned, "\xff", 1));
+    }
+
+    /* Borrowed wide pointers stay refused in both directions. */
+    field = find_or_fail("wtext", &g_text_wide_reflect, "borrowed");
+    expect_true(
+        "wtext render borrowed refused",
+        SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED
+            == shrewd_basic_reflect_render_text(field, &obj.borrowed, buf, sizeof(buf), &len));
+    expect_true("wtext scan borrowed refused",
+                SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED
+                    == shrewd_basic_reflect_scan_text(field, &back.borrowed, utf8, sizeof(utf8)));
+}
+
 static void test_text_layer(void) {
     text_leaf_t obj;
     text_leaf_t back;
@@ -5051,6 +5166,7 @@ int main(void) {
     test_wide_ops();
     test_wscalar();
     test_text_layer();
+    test_text_wide();
     test_multidim();
     test_union();
     test_graph_ops();

@@ -7,9 +7,11 @@
  * truncates silently (SHREWD_BASIC_ERR_REFLECT_TEXT / _MISMATCH),
  * render is round-trip safe (floats at decimal-digit precision, enums
  * by constant name). The layer covers leaf kinds with text semantics -
- * scalars, ENUM and char strings (buffer or owned); borrowed/wide
- * strings, bit groups and aggregates are REFLECT_NOT_SUPPORTED (the
- * structure layer of each format handles those shapes).
+ * scalars, ENUM, char strings (buffer or owned) and wide strings
+ * (STRING16/STRING32 owned pointers and buffers, converted through the
+ * strict UTF converters); borrowed strings, bit groups and aggregates
+ * are REFLECT_NOT_SUPPORTED (the structure layer of each format
+ * handles those shapes).
  */
 
 #include <errno.h>
@@ -175,6 +177,33 @@ static int text_copy_out(
     return SHREWD_BASIC_ERR_OK;
 }
 
+/*
+ * Wide content -> UTF-8 text with the copy_out semantics. The UTF
+ * converters are strict and need exact buffers, so measure first and
+ * stage through a temporary.
+ */
+static int text_wide_out(
+    const void *src, size_t unit, size_t max_units, char *buf, size_t buf_size, size_t *out_len) {
+    size_t len = 0;
+    void *tmp = NULL;
+    int status = reflect_utf8_from_units(src, unit, max_units, NULL, 0, &len);
+    if (SHREWD_BASIC_ERR_OK != status) {
+        return status;
+    }
+    if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_alloc(&tmp, len + 1)) {
+        return SHREWD_BASIC_ERR_MEM_NOMEM;
+    }
+    status = reflect_utf8_from_units(src, unit, max_units, (char *)tmp, len + 1, &len);
+    if (SHREWD_BASIC_ERR_OK == status) {
+        status = text_copy_out((const char *)tmp, len, buf, buf_size, out_len);
+    }
+    {
+        void *old = tmp;
+        (void)shrewd_basic_platform_free(&old);
+    }
+    return status;
+}
+
 int shrewd_basic_reflect_render_text(const shrewd_basic_reflect_field_t *field,
                                      const void *value,
                                      char *buf,
@@ -206,13 +235,16 @@ int shrewd_basic_reflect_render_text(const shrewd_basic_reflect_field_t *field,
             & (SHREWD_BASIC_REFLECT_FIELD_F_BITS | SHREWD_BASIC_REFLECT_FIELD_F_PTR))) {
         return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
     }
-    if ((0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF))
-        && (1 == field->sb_refl_stride)) {
-        /* Char text buffer: content to the NUL byte (the kind may read
-           as CHAR via the _Generic decay - the flag carries the shape). */
-        const char *text = (const char *)value;
-        size_t len = reflect_strn_len(text, field->sb_refl_count);
-        return text_copy_out(text, len, buf, buf_size, out_len);
+    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
+        /* Text buffer: content to the NUL unit (char buffers may read
+           as CHAR via _Generic decay - the flag carries the shape). */
+        size_t unit = field->sb_refl_stride;
+        if (1 == unit) {
+            const char *text = (const char *)value;
+            size_t len = reflect_strn_len(text, field->sb_refl_count);
+            return text_copy_out(text, len, buf, buf_size, out_len);
+        }
+        return text_wide_out(value, unit, field->sb_refl_count, buf, buf_size, out_len);
     }
     switch (type->sb_refl_kind) {
     case SHREWD_BASIC_REFLECT_KIND_BOOL:
@@ -267,6 +299,20 @@ int shrewd_basic_reflect_render_text(const shrewd_basic_reflect_field_t *field,
         size_t len = (NULL != text) ? strlen(text) : 0;
         return text_copy_out((NULL != text) ? text : "", len, buf, buf_size, out_len);
     }
+    case SHREWD_BASIC_REFLECT_KIND_STRING16:
+    case SHREWD_BASIC_REFLECT_KIND_STRING32: {
+        /* Owned wide strings only: borrowed wide pointers stay
+           REFLECT_NOT_SUPPORTED (the render/scan contract). */
+        const void *text = reflect_load_ptr(value);
+        size_t unit = reflect_string_unit(type->sb_refl_kind);
+        if (0u == (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED)) {
+            return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
+        }
+        if (NULL == text) {
+            return text_copy_out("", 0, buf, buf_size, out_len);
+        }
+        return text_wide_out(text, unit, SIZE_MAX, buf, buf_size, out_len);
+    }
     default:
         break;
     }
@@ -296,17 +342,36 @@ int shrewd_basic_reflect_scan_text(const shrewd_basic_reflect_field_t *field,
             & (SHREWD_BASIC_REFLECT_FIELD_F_BITS | SHREWD_BASIC_REFLECT_FIELD_F_PTR))) {
         return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
     }
-    if ((0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF))
-        && (1 == field->sb_refl_stride)) {
-        /* Char text buffer (flag carries the shape - see render_text). */
-        if (length > field->sb_refl_count) {
-            return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
+    if (0u != (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRINGBUF)) {
+        /* Text buffer (flag carries the shape - see render_text). */
+        size_t unit = field->sb_refl_stride;
+        if (1 == unit) {
+            if (length > field->sb_refl_count) {
+                return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
+            }
+            memcpy(value, text, length);
+            if (length < field->sb_refl_count) {
+                ((char *)value)[length] = '\0';
+            }
+            return SHREWD_BASIC_ERR_OK;
         }
-        memcpy(value, text, length);
-        if (length < field->sb_refl_count) {
-            ((char *)value)[length] = '\0';
+        {
+            /* Wide buffer: strict UTF-8 -> units, NUL unit when room. */
+            size_t needed = 0;
+            int status = reflect_units_from_utf8(text, length, unit, NULL, 0, &needed);
+            if (SHREWD_BASIC_ERR_OK != status) {
+                return status;
+            }
+            if (needed > field->sb_refl_count) {
+                return SHREWD_BASIC_ERR_REFLECT_MISMATCH;
+            }
+            status
+                = reflect_units_from_utf8(text, length, unit, value, field->sb_refl_count, &needed);
+            if ((SHREWD_BASIC_ERR_OK == status) && (needed < field->sb_refl_count)) {
+                memset((unsigned char *)value + (needed * unit), 0, unit);
+            }
+            return status;
         }
-        return SHREWD_BASIC_ERR_OK;
     }
     switch (type->sb_refl_kind) {
     case SHREWD_BASIC_REFLECT_KIND_BOOL: {
@@ -415,6 +480,39 @@ int shrewd_basic_reflect_scan_text(const shrewd_basic_reflect_field_t *field,
             memcpy(value, &block, sizeof(block));
             return SHREWD_BASIC_ERR_OK;
         }
+    }
+    if ((SHREWD_BASIC_REFLECT_KIND_STRING16 == type->sb_refl_kind)
+        || (SHREWD_BASIC_REFLECT_KIND_STRING32 == type->sb_refl_kind)) {
+        /* Owned wide strings only (borrowed wide stays refused); a NULL
+           text writes a NULL pointer, anything else allocates an owned
+           NUL-unit-terminated copy the reflect free path releases. */
+        size_t unit = reflect_string_unit(type->sb_refl_kind);
+        size_t needed = 0;
+        void *block = NULL;
+        int status = 0;
+        if (0u == (field->sb_refl_flags & SHREWD_BASIC_REFLECT_FIELD_F_STRING_OWNED)) {
+            return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
+        }
+        if (NULL == text) {
+            memset(value, 0, sizeof(void *));
+            return SHREWD_BASIC_ERR_OK;
+        }
+        status = reflect_units_from_utf8(text, length, unit, NULL, 0, &needed);
+        if (SHREWD_BASIC_ERR_OK != status) {
+            return status;
+        }
+        if (SHREWD_BASIC_ERR_OK != shrewd_basic_platform_alloc(&block, (needed + 1) * unit)) {
+            return SHREWD_BASIC_ERR_MEM_NOMEM;
+        }
+        memset(block, 0, (needed + 1) * unit);
+        status = reflect_units_from_utf8(text, length, unit, block, needed + 1, &needed);
+        if (SHREWD_BASIC_ERR_OK != status) {
+            void *old = block;
+            (void)shrewd_basic_platform_free(&old);
+            return status;
+        }
+        memcpy(value, &block, sizeof(block));
+        return SHREWD_BASIC_ERR_OK;
     }
     return SHREWD_BASIC_ERR_REFLECT_NOT_SUPPORTED;
 }

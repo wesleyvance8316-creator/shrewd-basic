@@ -16,6 +16,7 @@
 #include <uchar.h>
 
 #include "shrewd-basic/formats/csv.h"
+#include "shrewd-basic/formats/json.h"
 #include "shrewd-basic/platform/memory.h"
 #include "shrewd-basic/reflect/reflect.h"
 
@@ -156,7 +157,7 @@ static void test_roundtrip(void) {
     rows[1].owned = "second";
 
     expect_eq_int("rt encode",
-                  shrewd_basic_csv_encode(rows, 2, &g_csv_row_reflect, &text, NULL),
+                  shrewd_basic_csv_encode(rows, 2, &g_csv_row_reflect, NULL, &text, NULL),
                   SHREWD_BASIC_ERR_OK);
     expect_true("rt header",
                 (NULL != text)
@@ -164,7 +165,7 @@ static void test_roundtrip(void) {
     expect_true("rt enum name", (NULL != text) && (NULL != strstr(text, "CSV_COLOR_GREEN")));
     expect_eq_int("rt decode",
                   shrewd_basic_csv_decode(
-                      text, strlen(text), (void **)&back, &count, &g_csv_row_reflect, NULL),
+                      text, strlen(text), (void **)&back, &count, &g_csv_row_reflect, NULL, NULL),
                   SHREWD_BASIC_ERR_OK);
     shrewd_basic_csv_text_free(text);
     expect_true("rt count", (NULL != back) && (2 == count));
@@ -192,14 +193,14 @@ static void test_quoting(void) {
     rows[2].owned = "a\rb";
 
     expect_eq_int("quote encode",
-                  shrewd_basic_csv_encode(rows, 3, &g_csv_row_reflect, &text, NULL),
+                  shrewd_basic_csv_encode(rows, 3, &g_csv_row_reflect, NULL, &text, NULL),
                   SHREWD_BASIC_ERR_OK);
     expect_true("quote comma form", (NULL != text) && (NULL != strstr(text, "\"has,comma\"")));
     expect_true("quote doubled", (NULL != text) && (NULL != strstr(text, "\"quote\"\"inside\"")));
     expect_true("quote newline form", (NULL != text) && (NULL != strstr(text, "\"line1\nline2\"")));
     expect_eq_int("quote decode",
                   shrewd_basic_csv_decode(
-                      text, strlen(text), (void **)&back, &count, &g_csv_row_reflect, NULL),
+                      text, strlen(text), (void **)&back, &count, &g_csv_row_reflect, NULL, NULL),
                   SHREWD_BASIC_ERR_OK);
     shrewd_basic_csv_text_free(text);
     expect_true("quote count", (NULL != back) && (3 == count));
@@ -222,7 +223,7 @@ static void test_header_matching(void) {
 
     expect_eq_int("hdr decode",
                   shrewd_basic_csv_decode(
-                      wire, strlen(wire), (void **)&back, &count, &g_csv_row_reflect, NULL),
+                      wire, strlen(wire), (void **)&back, &count, &g_csv_row_reflect, NULL, NULL),
                   SHREWD_BASIC_ERR_OK);
     expect_true("hdr count", (NULL != back) && (1 == count));
     if (NULL != back) {
@@ -242,38 +243,41 @@ static void test_header_errors(void) {
     shrewd_basic_csv_error_t error = {0};
 
     memset(&error, 0, sizeof(error));
-    expect_eq_int("hdr unknown col",
-                  shrewd_basic_csv_decode(
-                      "num,zzz\n1,2\n", 12, (void **)&back, &count, &g_csv_row_reflect, &error),
-                  SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH);
+    expect_eq_int(
+        "hdr unknown col",
+        shrewd_basic_csv_decode(
+            "num,zzz\n1,2\n", 12, (void **)&back, &count, &g_csv_row_reflect, NULL, &error),
+        SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH);
     expect_true("hdr unknown col msg", (1 == error.line) && (NULL != strstr(error.message, "zzz")));
     expect_true("hdr unknown col out", (NULL == back) && (0 == count));
 
     memset(&error, 0, sizeof(error));
-    expect_eq_int("hdr dup col",
-                  shrewd_basic_csv_decode(
-                      "num,num\n1,2\n", 12, (void **)&back, &count, &g_csv_row_reflect, &error),
-                  SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH);
+    expect_eq_int(
+        "hdr dup col",
+        shrewd_basic_csv_decode(
+            "num,num\n1,2\n", 12, (void **)&back, &count, &g_csv_row_reflect, NULL, &error),
+        SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH);
     expect_true("hdr dup col msg", NULL != strstr(error.message, "duplicate"));
 
     memset(&error, 0, sizeof(error));
-    expect_eq_int("hdr ragged",
-                  shrewd_basic_csv_decode(
-                      "num,real\n1\n", 11, (void **)&back, &count, &g_csv_row_reflect, &error),
-                  SHREWD_BASIC_ERR_JSON_SYNTAX);
+    expect_eq_int(
+        "hdr ragged",
+        shrewd_basic_csv_decode(
+            "num,real\n1\n", 11, (void **)&back, &count, &g_csv_row_reflect, NULL, &error),
+        SHREWD_BASIC_ERR_JSON_SYNTAX);
     expect_true("hdr ragged line", 2 == error.line);
 
     memset(&error, 0, sizeof(error));
-    expect_eq_int(
-        "hdr bad value",
-        shrewd_basic_csv_decode("num\nzz\n", 7, (void **)&back, &count, &g_csv_row_reflect, &error),
-        SHREWD_BASIC_ERR_REFLECT_TEXT);
+    expect_eq_int("hdr bad value",
+                  shrewd_basic_csv_decode(
+                      "num\nzz\n", 7, (void **)&back, &count, &g_csv_row_reflect, NULL, &error),
+                  SHREWD_BASIC_ERR_REFLECT_TEXT);
     expect_true("hdr bad value msg", NULL != strstr(error.message, "num"));
 
     memset(&error, 0, sizeof(error));
     expect_eq_int(
         "hdr missing",
-        shrewd_basic_csv_decode("", 0, (void **)&back, &count, &g_csv_row_reflect, &error),
+        shrewd_basic_csv_decode("", 0, (void **)&back, &count, &g_csv_row_reflect, NULL, &error),
         SHREWD_BASIC_ERR_JSON_SYNTAX);
 }
 
@@ -286,13 +290,14 @@ static void test_single_column(void) {
     rows[0].name[0] = '\0'; /* empty cell must round-trip */
     memcpy(rows[1].name, "ok", 3);
     expect_eq_int("single encode",
-                  shrewd_basic_csv_encode(rows, 2, &g_csv_single_reflect, &text, NULL),
+                  shrewd_basic_csv_encode(rows, 2, &g_csv_single_reflect, NULL, &text, NULL),
                   SHREWD_BASIC_ERR_OK);
     expect_true("single quoted empty", (NULL != text) && (NULL != strstr(text, "\"\"")));
-    expect_eq_int("single decode",
-                  shrewd_basic_csv_decode(
-                      text, strlen(text), (void **)&back, &count, &g_csv_single_reflect, NULL),
-                  SHREWD_BASIC_ERR_OK);
+    expect_eq_int(
+        "single decode",
+        shrewd_basic_csv_decode(
+            text, strlen(text), (void **)&back, &count, &g_csv_single_reflect, NULL, NULL),
+        SHREWD_BASIC_ERR_OK);
     shrewd_basic_csv_text_free(text);
     expect_true("single roundtrip",
                 (NULL != back) && (2 == count) && ('\0' == back[0].name[0])
@@ -317,24 +322,120 @@ static void test_rejected_shapes(void) {
     memset(&wide_row, 0, sizeof(wide_row));
     memset(&bits_row, 0, sizeof(bits_row));
 
-    expect_eq_int("reject array",
-                  shrewd_basic_csv_encode(&array_row, 1, &g_csv_bad_array_reflect, &text, NULL),
-                  SHREWD_BASIC_ERR_JSON_UNSUPPORTED);
+    expect_eq_int(
+        "reject array",
+        shrewd_basic_csv_encode(&array_row, 1, &g_csv_bad_array_reflect, NULL, &text, NULL),
+        SHREWD_BASIC_ERR_JSON_UNSUPPORTED);
     expect_true("reject array out", NULL == text);
     expect_eq_int(
         "reject borrowed",
-        shrewd_basic_csv_encode(&borrowed_row, 1, &g_csv_bad_borrowed_reflect, &text, NULL),
+        shrewd_basic_csv_encode(&borrowed_row, 1, &g_csv_bad_borrowed_reflect, NULL, &text, NULL),
         SHREWD_BASIC_ERR_JSON_UNSUPPORTED);
     expect_eq_int("reject wide",
-                  shrewd_basic_csv_encode(&wide_row, 1, &g_csv_bad_wide_reflect, &text, NULL),
+                  shrewd_basic_csv_encode(&wide_row, 1, &g_csv_bad_wide_reflect, NULL, &text, NULL),
                   SHREWD_BASIC_ERR_JSON_UNSUPPORTED);
     expect_eq_int("reject bits",
-                  shrewd_basic_csv_encode(&bits_row, 1, &g_csv_bad_bits_reflect, &text, NULL),
+                  shrewd_basic_csv_encode(&bits_row, 1, &g_csv_bad_bits_reflect, NULL, &text, NULL),
                   SHREWD_BASIC_ERR_JSON_UNSUPPORTED);
     expect_eq_int("reject decode side",
                   shrewd_basic_csv_decode(
-                      "a\n1\n", 4, (void **)&back, &count, &g_csv_bad_array_reflect, NULL),
+                      "a\n1\n", 4, (void **)&back, &count, &g_csv_bad_array_reflect, NULL, NULL),
                   SHREWD_BASIC_ERR_JSON_UNSUPPORTED);
+}
+
+/* Policy rows: KEY rename + aliases, REQUIRED, HIDDEN (merged). */
+static const shrewd_basic_json_field_policy_t g_csv_policy_rows[] = {
+    SHREWD_BASIC_JSON_KEY(num, "n", "number"),
+    SHREWD_BASIC_JSON_REQUIRED(num),
+    SHREWD_BASIC_JSON_KEY(name, "label"),
+    SHREWD_BASIC_JSON_HIDDEN(flag),
+};
+static const shrewd_basic_json_info_t g_csv_policy
+    = {.type = &g_csv_row_reflect, .fields = g_csv_policy_rows, .field_count = 4};
+
+static void test_policy(void) {
+    csv_row_t rows[2];
+    csv_row_t *back = NULL;
+    size_t count = 0;
+    char *text = NULL;
+    shrewd_basic_csv_error_t error;
+    memset(&error, 0, sizeof(error));
+    memset(rows, 0, sizeof(rows));
+    rows[0].num = 1;
+    rows[0].flag = true;
+    rows[0].real = 1.5;
+    memcpy(rows[0].name, "a", 2);
+    rows[0].color = CSV_COLOR_GREEN;
+    rows[1].num = 2;
+    memcpy(rows[1].name, "b", 2);
+    rows[1].color = CSV_COLOR_RED;
+
+    /* Encode: canonical names (n/label), HIDDEN column absent. */
+    expect_eq_int(
+        "policy encode",
+        shrewd_basic_csv_encode(rows, 2, &g_csv_row_reflect, &g_csv_policy, &text, &error),
+        SHREWD_BASIC_ERR_OK);
+    expect_true("policy canonical",
+                (NULL != strstr(text, "n,")) && (NULL != strstr(text, "label")));
+    expect_true("policy hidden out", NULL == strstr(text, "flag"));
+
+    /* Decode: aliases land. */
+    expect_eq_int(
+        "policy decode alias",
+        shrewd_basic_csv_decode(
+            text, strlen(text), (void **)&back, &count, &g_csv_row_reflect, &g_csv_policy, &error),
+        SHREWD_BASIC_ERR_OK);
+    expect_true("policy alias value", (2 == count) && (1 == back[0].num) && (0 == back[0].flag));
+    (void)shrewd_basic_csv_rows_free(back, count, &g_csv_row_reflect);
+    back = NULL;
+
+    /* Member name in the header is accepted too. */
+    {
+        const char *doc = "num,label,real,owned,color,origin.x,origin.y\n9,x,0,,1,0,0\n";
+        expect_eq_int("policy decode member",
+                      shrewd_basic_csv_decode(doc,
+                                              strlen(doc),
+                                              (void **)&back,
+                                              &count,
+                                              &g_csv_row_reflect,
+                                              &g_csv_policy,
+                                              &error),
+                      SHREWD_BASIC_ERR_OK);
+    }
+    expect_true("policy member value", (1 == count) && (9 == back[0].num));
+    (void)shrewd_basic_csv_rows_free(back, count, &g_csv_row_reflect);
+    back = NULL;
+
+    /* REQUIRED column missing -> TYPE_MISMATCH. */
+    {
+        const char *doc = "label,real,owned,color,origin.x,origin.y\nx,0,,1,0,0\n";
+        expect_eq_int("policy required",
+                      shrewd_basic_csv_decode(doc,
+                                              strlen(doc),
+                                              (void **)&back,
+                                              &count,
+                                              &g_csv_row_reflect,
+                                              &g_csv_policy,
+                                              &error),
+                      SHREWD_BASIC_ERR_JSON_TYPE_MISMATCH);
+    }
+
+    /* HIDDEN column in the header is skipped, never decoded. */
+    {
+        const char *doc = "n,flag,label,real,owned,color,origin.x,origin.y\n5,1,x,0,,1,0,0\n";
+        expect_eq_int("policy hidden in",
+                      shrewd_basic_csv_decode(doc,
+                                              strlen(doc),
+                                              (void **)&back,
+                                              &count,
+                                              &g_csv_row_reflect,
+                                              &g_csv_policy,
+                                              &error),
+                      SHREWD_BASIC_ERR_OK);
+    }
+    expect_true("policy hidden value", (1 == count) && (0 == back[0].flag));
+    (void)shrewd_basic_csv_rows_free(back, count, &g_csv_row_reflect);
+    shrewd_basic_csv_text_free(text);
 }
 
 int main(void) {
@@ -344,6 +445,7 @@ int main(void) {
     test_header_errors();
     test_single_column();
     test_rejected_shapes();
+    test_policy();
     if (0 != g_failures) {
         fprintf(stderr, "test_csv: %d failure(s)\n", g_failures);
         return 1;

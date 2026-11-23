@@ -61,7 +61,7 @@ skip_bom、jsonl、sort_keys)、宽串 UTF-8 互转。——功能面完整。
 | **BSON** | **✅ 已实现**:BSON 规范全线小端(int32 全长回填、cstring 键、数组=document);映射同 msgpack;特有类型(ObjectId/datetime/binary…)响亮拒绝 |
 | **YAML** | **不自研**:缩进文法/隐式类型/锚点与"绝不静默出错"冲突,子集必半兼容;真需求 → 引第三方库 + ops/叶子适配 |
 | **protobuf/FlatBuffers/Cap'n Proto** | **不适配**:线格式按字段编号寻址、需 IDL 编译器,与按名映射是两个物种 |
-| TOML 超集余项 | datetime/多行串/内联表/数组表等 22 项拒绝构造——需求触发再逐项放开 |
+| TOML 余项 | **✅ 已全开**:datetime/多行串/内联表/点分键/数组表/引号键/内联 AoT;保持拒 = 错误校验类 + 异类型数组(结构限制) |
 
 ## 6. sb_dbus(数据总线)
 
@@ -75,8 +75,10 @@ json 持久化(save/load)、生成器挂载表桩、全接口 demo 与基准。
 崩溃丢最后一次未完提交;变更环滞后跳中间变更(终值必达);set_many
 仅存储型节点原子;shm 各进程须本进程 mount(值槽按路径共享)。
 
-**剩余候选(需求触发)**:策略行 KEY/DEFAULT 映射、事务集扩容、
-recv 批量投递形态;C1(XML)/C2(BSON)/C3(bin ops)按需求触发。
+**剩余候选(需求触发)**:策略行 KEY/DEFAULT 映射(语义硬造,长期
+搁置)、C3(bin ops/opaque 线格式)。csv/ini policy、INI 数组、text
+宽串、msgpack bin、TOML 余项、生成器 xml:/csv:/ini: 命名空间、
+CI ILP32、bench 补齐——均已于 2026-11-22 清盘。
 
 ## 7. 工程配套(持续义务)
 

@@ -84,12 +84,12 @@ static void demo_ini(void) {
     memset(&twin, 0, sizeof(twin));
     memset(&error, 0, sizeof(error));
     if (SHREWD_BASIC_ERR_OK
-        != shrewd_basic_ini_decode(doc, strlen(doc), &cfg, &demo_cfg_reflect, NULL, &error)) {
+        != shrewd_basic_ini_decode(doc, strlen(doc), &cfg, &demo_cfg_reflect, NULL, NULL, &error)) {
         printf("ini: decode FAILED (line %zu: %s)\n", error.line, error.message);
         return;
     }
-    shrewd_basic_ini_encode(&cfg, &demo_cfg_reflect, &text, NULL, &error);
-    shrewd_basic_ini_decode(text, strlen(text), &twin, &demo_cfg_reflect, NULL, &error);
+    shrewd_basic_ini_encode(&cfg, &demo_cfg_reflect, NULL, &text, NULL, &error);
+    shrewd_basic_ini_decode(text, strlen(text), &twin, &demo_cfg_reflect, NULL, NULL, &error);
     printf("ini: decode/encode round trip -> %s\n",
            ((NULL != twin.name) && (0 == strcmp(twin.name, "alice"))) ? "ok" : "FAILED");
     shrewd_basic_ini_text_free(text);
@@ -126,9 +126,10 @@ static void demo_csv(void) {
     rows[0].y = 2.5;
     rows[1].x = -3;
     rows[1].y = 4.25;
-    shrewd_basic_csv_encode(rows, 2, &demo_point_reflect, &text, NULL);
+    shrewd_basic_csv_encode(rows, 2, &demo_point_reflect, NULL, &text, NULL);
     printf("csv: encode ->\n%s", text);
-    shrewd_basic_csv_decode(text, strlen(text), (void **)&back, &count, &demo_point_reflect, NULL);
+    shrewd_basic_csv_decode(
+        text, strlen(text), (void **)&back, &count, &demo_point_reflect, NULL, NULL);
     printf("csv: decode -> %zu rows, first x=%d\n", count, (int)((NULL != back) ? back[0].x : 0));
     shrewd_basic_csv_text_free(text);
     shrewd_basic_csv_rows_free(back, count, &demo_point_reflect);
