@@ -13,7 +13,14 @@
 **已交付**:描述符/查找/读写/打印、路径访问、指针与 ops 回调集、
 枚举、环图安全(equal/hash/copy/destroy/visit/diff)、位域
 (FIELD_BITS_UNIT + dwarf)、宽字符串与宽标量(LONG_DOUBLE/COMPLEX/
-BIT_INT)、ABI 自检与指纹、四平台验证矩阵。——至此收尾,无功能债。
+BIT_INT)、ABI 自检与指纹、四平台验证矩阵、**反应核心**
+(ref/effect/computed/watch 依赖图,react.h)。——至此收尾,无功能债。
+
+**归属决策(2026-11-23)**:反应核心写入 **reflect 模块**(而非
+lvgl-vue)——消费项目(shrewd-lvgl-vue)开发更纯粹,无中间边界;
+接口 `shrewd_basic_reflect_*` 家法前缀。事件语义("谁变了",
+pub/sub/多进程)归 sb_dbus,状态依赖("谁读过谁自动跟")归反应
+核心,两不相扰。
 
 | 边界 | 决策 |
 |---|---|
