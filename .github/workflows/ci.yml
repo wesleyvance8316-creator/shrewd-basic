@@ -55,6 +55,9 @@ jobs:
         env:
           BUILD: build
 
+      - name: api symbols guard
+        run: tools/check-api-symbols.sh
+
       - name: demos
         run: |
           ./build/programs/shrewd-basic-formats-demo

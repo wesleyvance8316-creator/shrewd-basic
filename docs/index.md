@@ -33,6 +33,9 @@ data bus.
 - [style guide](style.md) - C coding and formatting rules: initializer
   completeness, mandatory braces, per-clause condition parentheses,
   and the clang-format / clang-tidy gate.
+- [API stability](api-stability.md) - the 1.0 source-level stability
+  contract: SemVer rules, frozen surface, append-only enums/error
+  ranges, deprecation flow, and the public symbol guard.
 - [json reference](json.md) - the json module: layered architecture, the
   value model (DOM), the strict RFC 8259 parser/serializer and the wire
   format contract.

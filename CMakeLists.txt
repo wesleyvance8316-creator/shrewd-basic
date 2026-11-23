@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(shrewd-basic
-        VERSION 0.1.0
+        VERSION 1.0.0
         DESCRIPTION "shrewd-basic C library"
         HOMEPAGE_URL "https://example.invalid/shrewd-basic"
         LANGUAGES C)
